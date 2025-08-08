@@ -1,4 +1,8 @@
-import { callAzureOpenAI, ChatMessage } from "./azureOpenAI";
+import {
+  callAzureOpenAI,
+  ChatMessage,
+  generateNotesFromContent as generateNotesFromContentAI,
+} from "./azureOpenAI";
 import { PerformanceTimer } from "../utils/performance";
 
 export interface FileProcessingResult {
@@ -132,9 +136,47 @@ async function extractPDFContent(file: File): Promise<string> {
         const page = await pdf.getPage(pageNum);
         const textContent = await page.getTextContent();
 
-        // Combine text items into readable text
-        const pageText = textContent.items
-          .map((item: any) => (item.str ? item.str : ""))
+        // Safely process text content items
+        let textItems = [];
+        if (
+          textContent &&
+          textContent.items &&
+          Array.isArray(textContent.items)
+        ) {
+          textItems = textContent.items;
+        }
+
+        // Combine text items into readable text with better structure preservation
+        const pageText = textItems
+          .map((item: any) => {
+            try {
+              if (!item || !item.str || typeof item.str !== "string")
+                return null;
+              // Check if this item starts a new line/paragraph based on position
+              const transform = item.transform;
+              const y = transform ? transform[5] : 0;
+              return {
+                text: item.str,
+                y: y,
+                x: transform ? transform[4] : 0,
+              };
+            } catch (itemError) {
+              console.warn(
+                `Error processing text item on page ${pageNum}:`,
+                itemError
+              );
+              return null;
+            }
+          })
+          .filter(
+            (item) =>
+              item &&
+              item.text &&
+              typeof item.text === "string" &&
+              item.text.trim()
+          )
+          .sort((a, b) => b.y - a.y || a.x - b.x) // Sort by position (top-to-bottom, left-to-right)
+          .map((item) => item.text)
           .join(" ")
           .replace(/\s+/g, " ")
           .trim();
@@ -152,12 +194,16 @@ async function extractPDFContent(file: File): Promise<string> {
       }
     }
 
-    // Clean up the extracted text
+    // Clean up the extracted text while preserving structure
     fullText = fullText
-      .replace(/\n\s*\n\s*\n/g, "\n\n")
-      .replace(/^\s+|\s+$/g, "")
-      .replace(/\s+/g, " ")
-      .replace(/[^\x20-\x7E\s]/g, "");
+      .replace(/Page \d+:\s*/g, "") // Remove page markers for cleaner flow
+      .replace(/\n{3,}/g, "\n\n") // Max 2 newlines
+      .replace(/^\s+|\s+$/g, "") // Trim start/end
+      .replace(/([.!?])\s+([A-Z])/g, "$1\n\n$2") // Add paragraph breaks after sentences that start new topics
+      .replace(/(\d+\.)\s+([A-Z])/g, "\n\n$1 $2") // Add breaks before numbered points
+      .replace(/([a-z])([A-Z][a-z])/g, "$1 $2") // Add space between camelCase words
+      .replace(/\s+/g, " ") // Normalize spaces
+      .replace(/[^\x20-\x7E\s\n]/g, ""); // Remove non-printable chars but keep newlines
 
     timer.end();
 
@@ -450,7 +496,7 @@ RETURN ONLY THE JSON ARRAY, no other text or explanations.`,
   }
 }
 
-// Generate notes from content using AI
+// Generate notes from content using high-quality AI function
 export async function generateNotesFromContent(
   content: string,
   source: string
@@ -462,103 +508,8 @@ export async function generateNotesFromContent(
     tags: string[];
   }>
 > {
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content: `You are an expert educational content organizer. Create comprehensive, well-structured study notes from the provided content.
-
-IMPORTANT FORMATTING RULES:
-- Clean up any unwanted symbols, encoding artifacts, or metadata
-- Remove PDF artifacts like "Page X:", metadata, headers/footers
-- Focus only on meaningful educational content
-- Use proper markdown formatting for structure
-- Create clear headings and bullet points
-
-CATEGORIZATION RULES:
-- Analyze the content and determine the main subject/topic
-- Use specific, clear category names like: "DevOps", "Programming", "Mathematics", "Science", "History", etc.
-- If content covers multiple topics, choose the primary focus
-- Use consistent naming (e.g., always "DevOps" not "Dev Ops" or "Development Operations")
-
-RETURN ONLY A VALID JSON ARRAY with this exact structure:
-[
-  {
-    "title": "Clear, descriptive note title (max 60 chars)",
-    "content": "Well-formatted, clean content in markdown",
-    "category": "Single, specific subject category",
-    "tags": ["relevant", "educational", "keywords"]
-  }
-]
-
-CONTENT STRUCTURE:
-- Start with main concepts and key points
-- Include important definitions
-- Add examples and practical applications
-- End with summary or takeaways
-- Use bullet points, numbered lists, and headers for clarity
-
-Make the notes comprehensive but well-organized, perfect for studying.
-
-If the content appears to be corrupted, binary, or lacks educational value, return an empty array [].
-RETURN ONLY THE JSON ARRAY, no other text or explanations.`,
-    },
-    {
-      role: "user",
-      content: `Create study notes from this content. Source: ${source}\n\nContent:\n${content.substring(
-        0,
-        4000
-      )}`,
-    },
-  ];
-
-  try {
-    const response = await callAzureOpenAI(messages);
-    const cleanResponse = response.trim().replace(/```json\n?|\n?```/g, "");
-
-    const notes = JSON.parse(cleanResponse);
-
-    // Validate that we have meaningful notes
-    if (!Array.isArray(notes) || notes.length === 0) {
-      throw new Error(
-        "No educational content found suitable for note generation"
-      );
-    }
-
-    // Process and clean each note
-    const processedNotes = notes.map((note) => ({
-      title: note.title || "Study Note",
-      content: cleanNoteContent(note.content || ""),
-      category: detectCategory(content, source, note.category),
-      tags: Array.isArray(note.tags)
-        ? note.tags.slice(0, 5)
-        : extractTags(content, source),
-    }));
-
-    return processedNotes;
-  } catch (error) {
-    console.error("Error generating notes:", error);
-
-    // Fallback: create a single comprehensive note
-    const autoCategory = detectCategory(content, source);
-    const cleanContent = cleanNoteContent(content);
-
-    if (cleanContent.length < 50) {
-      throw new Error(
-        "Content too short or corrupted to generate meaningful notes"
-      );
-    }
-
-    return [
-      {
-        title: `${autoCategory} Notes`,
-        content:
-          cleanContent.substring(0, 2000) +
-          (cleanContent.length > 2000 ? "..." : ""),
-        category: autoCategory,
-        tags: extractTags(content, source),
-      },
-    ];
-  }
+  // Use the high-quality notes generation from azureOpenAI.ts
+  return generateNotesFromContentAI(content, source);
 }
 
 // Clean note content from unwanted symbols and artifacts
@@ -851,7 +802,110 @@ function extractTags(content: string, source: string): string[] {
   return foundTags.slice(0, 5); // Limit to 5 tags
 }
 
-// Generate schedule items from content using AI
+// Manual fallback schedule extraction using regex patterns
+function extractScheduleFallback(
+  content: string,
+  source: string
+): Array<{
+  title: string;
+  time: string;
+  date: string;
+  type: "assignment" | "study" | "exam" | "note";
+}> {
+  console.log("🗓️ [SCHEDULE] Running fallback extraction...");
+  const items: Array<{
+    title: string;
+    time: string;
+    date: string;
+    type: "assignment" | "study" | "exam" | "note";
+  }> = [];
+
+  // Enhanced patterns for better extraction
+  const patterns = [
+    // Assignment patterns
+    {
+      regex:
+        /(assignment|homework|project|essay|paper)\s+(?:due\s+)?(?:on\s+)?([^\n]*(?:(?:january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})[^\n]*)?)/gi,
+      type: "assignment" as const,
+      defaultTime: "23:59",
+    },
+    // Exam patterns
+    {
+      regex:
+        /(exam|test|quiz|midterm|final)\s*:?\s*([^\n]*(?:(?:january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})[^\n]*)?)/gi,
+      type: "exam" as const,
+      defaultTime: "09:00",
+    },
+    // Class/lecture patterns
+    {
+      regex:
+        /(class|lecture|session)\s*:?\s*([^\n]*(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}:\d{2})[^\n]*)?)/gi,
+      type: "study" as const,
+      defaultTime: "10:00",
+    },
+    // Due date patterns
+    {
+      regex:
+        /due\s*:?\s*([^\n]*(?:(?:january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})[^\n]*)?)/gi,
+      type: "assignment" as const,
+      defaultTime: "23:59",
+    },
+  ];
+
+  // Process each pattern
+  patterns.forEach((pattern) => {
+    let match;
+    while ((match = pattern.regex.exec(content)) && items.length < 10) {
+      const title = match[1] + (match[2] ? `: ${match[2].trim()}` : "");
+      const dateText = match[2] || "";
+
+      // Try to extract a date
+      const dateMatch = dateText.match(
+        /(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2}/i
+      );
+
+      let date = new Date().toISOString().split("T")[0]; // Default to today
+      if (dateMatch) {
+        const parsedDate = new Date(dateMatch[0]);
+        if (!isNaN(parsedDate.getTime())) {
+          date = parsedDate.toISOString().split("T")[0];
+        }
+      } else {
+        // Default to next week if no date found
+        const nextWeek = new Date();
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        date = nextWeek.toISOString().split("T")[0];
+      }
+
+      items.push({
+        title: title.substring(0, 100), // Limit title length
+        time: pattern.defaultTime,
+        date: date,
+        type: pattern.type,
+      });
+    }
+  });
+
+  // If no items found, create a general study session
+  if (items.length === 0) {
+    const today = new Date();
+    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    items.push({
+      title: `Study session from ${source}`,
+      time: "14:00",
+      date: nextWeek.toISOString().split("T")[0],
+      type: "study",
+    });
+  }
+
+  console.log(`🗓️ [SCHEDULE] Fallback extracted ${items.length} items`);
+  return items.slice(0, 5); // Limit to 5 items
+
+  return items;
+}
+
+// Generate schedule items from content using AI - ENHANCED to only extract important events
 export async function generateScheduleFromContent(
   content: string,
   source: string
@@ -863,47 +917,347 @@ export async function generateScheduleFromContent(
     type: "assignment" | "study" | "exam" | "note";
   }>
 > {
+  console.log("🗓️ [SCHEDULE] Generating schedule from content:", source);
+  console.log("🗓️ [SCHEDULE] Content preview:", content.substring(0, 200));
+
+  // First, check if content actually contains schedule-worthy information
+  const hasScheduleContent = detectScheduleWorthyContent(content);
+  if (!hasScheduleContent) {
+    console.log(
+      "🗓️ [SCHEDULE] No schedule-worthy content detected, skipping..."
+    );
+    return [];
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `You are an AI schedule generator. Extract and create schedule items from the provided content.
+      content: `You are an ADVANCED AI schedule generator that ONLY extracts IMPORTANT, TIME-SENSITIVE events from educational content.
 
-RETURN ONLY A VALID JSON ARRAY with this exact structure:
+⚠️ CRITICAL SELECTION CRITERIA:
+ONLY CREATE schedule items for:
+✅ Assignment deadlines with specific due dates
+✅ Exam dates and times  
+✅ Project submission deadlines
+✅ Class/lecture schedules with specific times
+✅ Important deadline dates (midterm, final, presentation)
+✅ Lab sessions with scheduled times
+✅ Quiz dates and times
+
+❌ DO NOT CREATE schedule items for:
+❌ General study topics without dates
+❌ Chapter readings without deadlines  
+❌ Course content descriptions
+❌ Learning objectives
+❌ Syllabus information without specific dates
+❌ General notes or theoretical content
+❌ Concepts, definitions, or explanations
+❌ Unit/chapter overviews
+❌ Historical information or background
+
+🎯 EXTRACTION RULES:
+- MUST have a specific date (day/month/year or relative date like "next Monday")
+- MUST be time-sensitive (deadline, appointment, scheduled event)
+- MUST require action or attendance by the student
+- If content is purely educational/informational, return []
+- If no specific dates or deadlines found, return []
+
+RETURN ONLY A VALID JSON ARRAY:
 [
   {
-    "title": "Task/Event title",
-    "time": "HH:MM format (24-hour)",
-    "date": "YYYY-MM-DD format", 
-    "type": "assignment" | "study" | "exam" | "note"
+    "title": "Specific Assignment/Exam Name",
+    "time": "HH:MM", 
+    "date": "YYYY-MM-DD",
+    "type": "assignment|exam|study"
   }
 ]
 
-Guidelines:
-- Only create schedule items if there are clear dates, deadlines, or time-sensitive tasks
-- Use current year if year is not specified
-- Set reasonable default times if not specified (e.g., 09:00 for morning, 14:00 for afternoon)
-- Types: "assignment" for homework/projects, "study" for study sessions, "exam" for tests, "note" for reminders
-- If no schedule items are found, return an empty array []
-- RETURN ONLY THE JSON ARRAY, no other text`,
+Examples of VALID schedule items:
+- "Assignment 1 due September 15" → assignment
+- "Midterm exam on October 3 at 2 PM" → exam  
+- "Project presentation Monday 9 AM" → assignment
+- "Lab session every Wednesday 3 PM" → study
+
+Examples of INVALID (do not extract):
+- Course overview content
+- Chapter summaries  
+- Theoretical explanations
+- General study materials
+- Unit descriptions without deadlines
+
+IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
     },
     {
       role: "user",
-      content: `Extract schedule items from this content (source: ${source}):\n\n${content.substring(
+      content: `ONLY extract time-sensitive events with specific dates from this content:\n\nSource: ${source}\n\nContent:\n${content.substring(
         0,
-        2000
+        4000
       )}`,
     },
   ];
 
   try {
+    console.log("🗓️ [SCHEDULE] Calling AI for schedule generation...");
     const response = await callAzureOpenAI(messages);
+    console.log("🗓️ [SCHEDULE] AI Response:", response);
+
+    if (!response || response.trim().length === 0) {
+      throw new Error("Empty AI response");
+    }
+
     const cleanResponse = response.trim().replace(/```json\n?|\n?```/g, "");
+    console.log("🗓️ [SCHEDULE] Cleaned response:", cleanResponse);
+
+    if (!cleanResponse || cleanResponse.trim().length === 0) {
+      throw new Error("Empty cleaned response");
+    }
 
     const scheduleItems = JSON.parse(cleanResponse);
-    return Array.isArray(scheduleItems) ? scheduleItems : [];
+    console.log("🗓️ [SCHEDULE] Parsed items:", scheduleItems);
+
+    // Additional validation to ensure only important events
+    const validItems = Array.isArray(scheduleItems)
+      ? scheduleItems.filter((item) => validateScheduleItem(item))
+      : [];
+
+    console.log("🗓️ [SCHEDULE] Valid important events:", validItems.length);
+
+    return validItems;
   } catch (error) {
-    console.error("Error generating schedule items:", error);
-    return [];
+    console.error("🗓️ [SCHEDULE] Error generating schedule items:", error);
+    console.log("🗓️ [SCHEDULE] Falling back to manual extraction...");
+
+    // Enhanced fallback: Only extract dates with clear time-sensitive context
+    const fallbackItems = extractScheduleFallbackEnhanced(content, source);
+    console.log("🗓️ [SCHEDULE] Enhanced fallback items:", fallbackItems);
+    return fallbackItems;
+  }
+}
+
+// Detect if content contains schedule-worthy information
+function detectScheduleWorthyContent(content: string): boolean {
+  const scheduleIndicators = [
+    // Assignment patterns
+    /\b(?:assignment|homework|project)\s+(?:due|deadline|submit)/i,
+    /\bdue\s+(?:date|on|by)\b/i,
+    /\bdeadline\s*:?\s*\d/i,
+
+    // Exam patterns
+    /\b(?:exam|test|quiz|midterm|final)\s+(?:on|date|scheduled)/i,
+    /\bexam\s*:?\s*\w+\s+\d/i,
+
+    // Class schedule patterns
+    /\b(?:class|lecture|lab|session)\s+(?:schedule|time|meets)/i,
+    /\bmeets?\s+(?:every|on|at)\s+\w+/i,
+
+    // Date patterns with context
+    /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/i,
+    /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/,
+    /\b\d{1,2}-\d{1,2}-\d{2,4}\b/,
+
+    // Time patterns with academic context
+    /\b\d{1,2}:\d{2}\s*(?:am|pm)\b/i,
+    /\bweekly\s+(?:on|at)\b/i,
+  ];
+
+  const hasDateContext = scheduleIndicators.some((pattern) =>
+    pattern.test(content)
+  );
+
+  // Additional check: content should not be purely theoretical
+  const theoreticalIndicators = [
+    /\b(?:overview|introduction|definition|concept|theory|principle)\b/i,
+    /\b(?:understand|learn|study|review|covered|topics)\b/i,
+  ];
+
+  const contentWords = content.toLowerCase().split(/\s+/);
+  const theoreticalRatio =
+    theoreticalIndicators.reduce((count, pattern) => {
+      return count + (content.match(pattern) || []).length;
+    }, 0) / Math.max(contentWords.length / 100, 1);
+
+  // If content is mostly theoretical and has no clear schedule indicators, skip
+  return hasDateContext && theoreticalRatio < 5;
+}
+
+// Validate that a schedule item is actually important
+function validateScheduleItem(item: any): boolean {
+  if (!item || !item.title || !item.date || !item.type) {
+    return false;
+  }
+
+  const title = item.title.toLowerCase();
+
+  // Check for important keywords
+  const importantKeywords = [
+    "assignment",
+    "homework",
+    "project",
+    "exam",
+    "test",
+    "quiz",
+    "midterm",
+    "final",
+    "presentation",
+    "deadline",
+    "due",
+    "lab",
+    "class",
+    "lecture",
+    "meeting",
+    "interview",
+    "submission",
+  ];
+
+  const hasImportantKeyword = importantKeywords.some((keyword) =>
+    title.includes(keyword)
+  );
+
+  // Reject generic or vague titles
+  const genericTitles = [
+    "study",
+    "review",
+    "read",
+    "chapter",
+    "unit",
+    "topic",
+    "overview",
+    "introduction",
+    "concepts",
+    "notes",
+  ];
+
+  const isGeneric = genericTitles.some(
+    (generic) => title === generic || title.startsWith(generic + " ")
+  );
+
+  // Must have important keyword and not be generic
+  return hasImportantKeyword && !isGeneric && item.title.length > 5;
+}
+
+// Enhanced fallback schedule extraction - only important events
+function extractScheduleFallbackEnhanced(
+  content: string,
+  source: string
+): Array<{
+  title: string;
+  time: string;
+  date: string;
+  type: "assignment" | "study" | "exam" | "note";
+}> {
+  const items: Array<{
+    title: string;
+    time: string;
+    date: string;
+    type: "assignment" | "study" | "exam" | "note";
+  }> = [];
+
+  console.log("🗓️ [SCHEDULE] Running enhanced fallback extraction...");
+
+  // Enhanced patterns for important events only
+  const importantPatterns = [
+    // Assignment deadlines
+    {
+      pattern:
+        /(?:assignment|homework|project)\s+.*?(?:due|deadline).*?(\w+\s+\d{1,2}(?:st|nd|rd|th)?)/gi,
+      type: "assignment" as const,
+      time: "23:59",
+    },
+
+    // Exam dates
+    {
+      pattern:
+        /(?:exam|test|quiz|midterm|final).*?(?:on|scheduled).*?(\w+\s+\d{1,2}(?:st|nd|rd|th)?)/gi,
+      type: "exam" as const,
+      time: "09:00",
+    },
+
+    // Class schedules with specific times
+    {
+      pattern:
+        /(?:class|lecture|lab).*?(?:meets?|scheduled).*?(\w+).*?(\d{1,2}:\d{2})/gi,
+      type: "study" as const,
+      time: "10:00",
+    },
+  ];
+
+  // Only extract if patterns match important academic events
+  importantPatterns.forEach(({ pattern, type, time }) => {
+    let match;
+    while ((match = pattern.exec(content)) !== null && items.length < 5) {
+      const dateStr = match[1];
+      if (dateStr && dateStr.length > 3) {
+        const title = match[0].replace(/\s+/g, " ").trim();
+
+        // Only add if title contains important academic keywords
+        if (validateScheduleItem({ title, date: "2025-08-15", type, time })) {
+          items.push({
+            title: title.substring(0, 50),
+            time: match[2] || time,
+            date: parseDate(dateStr),
+            type,
+          });
+        }
+      }
+    }
+  });
+
+  console.log(
+    `🗓️ [SCHEDULE] Enhanced fallback extracted ${items.length} important items`
+  );
+  return items;
+}
+
+// Helper function to parse dates
+function parseDate(dateStr: string): string {
+  try {
+    // Handle common date formats
+    const currentYear = new Date().getFullYear();
+    const months = {
+      january: "01",
+      february: "02",
+      march: "03",
+      april: "04",
+      may: "05",
+      june: "06",
+      july: "07",
+      august: "08",
+      september: "09",
+      october: "10",
+      november: "11",
+      december: "12",
+      jan: "01",
+      feb: "02",
+      mar: "03",
+      apr: "04",
+      jun: "06",
+      jul: "07",
+      aug: "08",
+      sep: "09",
+      oct: "10",
+      nov: "11",
+      dec: "12",
+    };
+
+    // Match "Month Day" format
+    const monthDayMatch = dateStr.toLowerCase().match(/(\w+)\s+(\d{1,2})/);
+    if (monthDayMatch) {
+      const month = months[monthDayMatch[1] as keyof typeof months];
+      if (month) {
+        const day = monthDayMatch[2].padStart(2, "0");
+        return `${currentYear}-${month}-${day}`;
+      }
+    }
+
+    // Fallback to tomorrow's date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  } catch {
+    // Default fallback
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
   }
 }
 

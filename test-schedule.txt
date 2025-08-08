@@ -1,0 +1,21 @@
+# Test Schedule Document
+
+## Course Schedule - Fall 2025
+
+### Important Dates:
+- **Assignment 1 Due**: August 15, 2025 at 11:59 PM
+- **Midterm Exam**: September 10, 2025 at 9:00 AM  
+- **Project Presentation**: October 5, 2025 at 2:00 PM
+- **Final Exam**: December 15, 2025 at 10:00 AM
+
+### Weekly Schedule:
+- **Monday**: Lecture 10:00 AM - 11:30 AM
+- **Wednesday**: Lab Session 2:00 PM - 4:00 PM  
+- **Friday**: Discussion 1:00 PM - 2:00 PM
+
+### Assignments:
+1. **Research Paper** - Due: August 20, 2025
+2. **Code Review** - Due: September 1, 2025  
+3. **Final Project** - Due: November 30, 2025
+
+This document contains multiple schedule items that should be extracted automatically.

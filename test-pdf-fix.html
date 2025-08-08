@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>🔧 PDF Processing Bug Fixes Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .success {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+      }
+      .error {
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+      }
+      .info {
+        background: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+      }
+      pre {
+        background: #f8f9fa;
+        padding: 10px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔧 PDF Processing Bug Fixes - Test Results</h1>
+
+    <div class="info">
+      <h3>✅ Fixes Applied:</h3>
+      <ul>
+        <li>
+          <strong>PDF Text Extraction</strong>: Added null checks for undefined
+          text items
+        </li>
+        <li>
+          <strong>API Connection</strong>: Started Azure OpenAI proxy server on
+          port 5174
+        </li>
+        <li>
+          <strong>Error Handling</strong>: Improved robustness for problematic
+          PDF pages
+        </li>
+        <li>
+          <strong>Server Setup</strong>: Both development server (8082) and
+          proxy server (5174) running
+        </li>
+      </ul>
+    </div>
+
+    <div class="success">
+      <h3>🎯 Test Status:</h3>
+      <p><strong>✅ Server Status:</strong></p>
+      <ul>
+        <li>
+          Azure OpenAI Proxy: <code>http://localhost:5174</code> ✅ Running
+        </li>
+        <li>
+          Development Server: <code>http://localhost:8082</code> ✅ Running
+        </li>
+      </ul>
+    </div>
+
+    <div class="info">
+      <h3>🧪 How to Test:</h3>
+      <ol>
+        <li>Go to <strong>http://localhost:8082</strong></li>
+        <li>Unlock Skippy (password: anything works)</li>
+        <li>Go to <strong>AI Chat</strong> tab</li>
+        <li>Upload your PDF file again</li>
+        <li>Check browser console - should see no more "trim" errors</li>
+        <li>Verify notes generation works properly</li>
+      </ol>
+    </div>
+
+    <div class="success">
+      <h3>🎯 Expected Results:</h3>
+      <ul>
+        <li>
+          ✅ No more "Cannot read properties of undefined (reading 'trim')"
+          errors
+        </li>
+        <li>✅ Successful API calls to Azure OpenAI</li>
+        <li>
+          ✅ Proper academic notes generation following your specifications
+        </li>
+        <li>✅ Clean PDF text extraction without crashes</li>
+      </ul>
+    </div>
+
+    <div class="info">
+      <h3>📋 Debug Information:</h3>
+      <pre id="debugInfo">Loading debug information...</pre>
+    </div>
+
+    <script>
+      // Display current system status
+      const debugInfo = document.getElementById("debugInfo");
+
+      const info = `
+Current Time: ${new Date().toLocaleString()}
+Page URL: ${window.location.href}
+User Agent: ${navigator.userAgent}
+
+Expected Servers:
+- Development: http://localhost:8082 (Vite React App)
+- Proxy Server: http://localhost:5174 (Azure OpenAI Proxy)
+
+Browser Console Check:
+- Open F12 Developer Tools
+- Go to Console tab
+- Upload a PDF file
+- Should see successful processing messages instead of errors
+
+Environment Variables Expected:
+- VITE_OPENAI_API_BASE: Azure endpoint URL
+- VITE_AZURE_OPENAI_KEY: Your API key
+- VITE_AZURE_OPENAI_DEPLOYMENT: gpt-4o
+- VITE_AZURE_OPENAI_API_VERSION: 2025-01-01-preview
+        `;
+
+      debugInfo.textContent = info;
+
+      // Test API connectivity
+      fetch("http://localhost:5174/api/azure-openai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "Test connection" }],
+          options: { max_tokens: 10 },
+        }),
+      })
+        .then((response) => {
+          const status = document.createElement("div");
+          status.className = response.ok ? "success" : "error";
+          status.innerHTML = `<strong>API Test:</strong> ${
+            response.ok ? "✅ Connected" : "❌ Failed"
+          } (Status: ${response.status})`;
+          document.body.appendChild(status);
+        })
+        .catch((error) => {
+          const status = document.createElement("div");
+          status.className = "error";
+          status.innerHTML = `<strong>API Test:</strong> ❌ Connection Failed - ${error.message}`;
+          document.body.appendChild(status);
+        });
+    </script>
+  </body>
+</html>

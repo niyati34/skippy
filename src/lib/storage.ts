@@ -116,11 +116,25 @@ export const NotesStorage = {
 
   addBatch: (notes: Omit<StoredNote, "id" | "createdAt">[]): StoredNote[] => {
     const existing = NotesStorage.load();
-    const newNotes = notes.map((note) => ({
+
+    // Check for duplicates by comparing title and source
+    const existingSet = new Set(
+      existing.map((note) => `${note.title}-${note.source}`)
+    );
+    const uniqueNotes = notes.filter(
+      (note) => !existingSet.has(`${note.title}-${note.source}`)
+    );
+
+    if (uniqueNotes.length === 0) {
+      return []; // No new notes to add
+    }
+
+    const newNotes = uniqueNotes.map((note) => ({
       ...note,
       id: (Date.now() + Math.random()).toString(),
       createdAt: new Date().toISOString(),
     }));
+
     existing.push(...newNotes);
     NotesStorage.save(existing);
     return newNotes;
@@ -130,6 +144,26 @@ export const NotesStorage = {
     const existing = NotesStorage.load();
     const filtered = existing.filter((note) => note.id !== id);
     NotesStorage.save(filtered);
+  },
+
+  // Remove duplicate notes based on title and source
+  removeDuplicates: () => {
+    const existing = NotesStorage.load();
+    const seen = new Set<string>();
+    const unique = existing.filter((note) => {
+      const key = `${note.title}-${note.source}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+
+    if (unique.length !== existing.length) {
+      NotesStorage.save(unique);
+      console.log(`Removed ${existing.length - unique.length} duplicate notes`);
+    }
+    return unique;
   },
 };
 

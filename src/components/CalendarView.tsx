@@ -1,18 +1,37 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Bell, AlertTriangle } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Bell,
+  AlertTriangle,
+  BookOpen,
+  GraduationCap,
+  FileText,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { ScheduleStorage } from "@/lib/storage";
 
 interface CalendarItem {
   id: string;
   title: string;
   date: string;
   time?: string;
-  type: 'assignment' | 'exam' | 'study' | 'reminder';
-  priority: 'high' | 'medium' | 'low';
+  type:
+    | "assignment"
+    | "exam"
+    | "study"
+    | "reminder"
+    | "class"
+    | "project"
+    | "note";
+  priority: "high" | "medium" | "low";
   description?: string;
+  source?: string; // Track if it came from file upload
 }
 
 interface CalendarViewProps {
@@ -23,12 +42,39 @@ interface CalendarViewProps {
 const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [calendarItems, setCalendarItems] = useState<CalendarItem[]>(items);
+  const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const { toast } = useToast();
 
+  // Load items from storage and merge with external items
   useEffect(() => {
-    setCalendarItems(items);
+    const storedItems = ScheduleStorage.load();
+    const formattedStoredItems: CalendarItem[] = storedItems.map((item) => ({
+      id: item.id,
+      title: item.title,
+      date: item.time.split("T")[0], // Extract date from datetime
+      time: item.time.split("T")[1]?.substring(0, 5), // Extract time (HH:MM)
+      type: "study", // Default type for stored items
+      priority: "medium",
+      description: `Scheduled item`,
+      source: "storage",
+    }));
+
+    // Merge external items with stored items
+    const externalItems: CalendarItem[] = items.map((item) => ({
+      ...item,
+      source: item.source || "external",
+    }));
+
+    const allItems = [...formattedStoredItems, ...externalItems];
+    setCalendarItems(allItems);
   }, [items]);
+
+  // Save to storage when items update
+  useEffect(() => {
+    if (onItemsUpdate) {
+      onItemsUpdate(calendarItems);
+    }
+  }, [calendarItems, onItemsUpdate]);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -39,48 +85,86 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
     const startingDayOfWeek = firstDay.getDay();
 
     const days = [];
-    
+
     // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null);
     }
-    
+
     // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(day);
     }
-    
+
     return days;
   };
 
   const getItemsForDate = (day: number) => {
-    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return calendarItems.filter(item => item.date === dateStr);
+    const dateStr = `${currentDate.getFullYear()}-${String(
+      currentDate.getMonth() + 1
+    ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return calendarItems.filter((item) => item.date === dateStr);
   };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'assignment': return 'bg-red-500/20 text-red-700 border-red-500/30';
-      case 'exam': return 'bg-orange-500/20 text-orange-700 border-orange-500/30';
-      case 'study': return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
-      case 'reminder': return 'bg-green-500/20 text-green-700 border-green-500/30';
-      default: return 'bg-gray-500/20 text-gray-700 border-gray-500/30';
+      case "assignment":
+        return "bg-red-500/20 text-red-300 border-red-500/50 shadow-red-500/20";
+      case "exam":
+        return "bg-orange-500/20 text-orange-300 border-orange-500/50 shadow-orange-500/20";
+      case "study":
+        return "bg-blue-500/20 text-blue-300 border-blue-500/50 shadow-blue-500/20";
+      case "class":
+        return "bg-green-500/20 text-green-300 border-green-500/50 shadow-green-500/20";
+      case "project":
+        return "bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-purple-500/20";
+      case "note":
+        return "bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-yellow-500/20";
+      case "reminder":
+        return "bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-cyan-500/20";
+      default:
+        return "bg-gray-500/20 text-gray-300 border-gray-500/50 shadow-gray-500/20";
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case "assignment":
+        return <FileText className="w-3 h-3" />;
+      case "exam":
+        return <GraduationCap className="w-3 h-3" />;
+      case "study":
+        return <BookOpen className="w-3 h-3" />;
+      case "class":
+        return <Clock className="w-3 h-3" />;
+      case "project":
+        return <AlertTriangle className="w-3 h-3" />;
+      case "note":
+        return <FileText className="w-3 h-3" />;
+      case "reminder":
+        return <Bell className="w-3 h-3" />;
+      default:
+        return <Calendar className="w-3 h-3" />;
     }
   };
 
   const getPriorityIcon = (priority: string) => {
     switch (priority) {
-      case 'high': return <AlertTriangle className="w-3 h-3 text-red-500" />;
-      case 'medium': return <Clock className="w-3 h-3 text-yellow-500" />;
-      case 'low': return <Bell className="w-3 h-3 text-green-500" />;
-      default: return null;
+      case "high":
+        return <AlertTriangle className="w-3 h-3 text-red-500" />;
+      case "medium":
+        return <Clock className="w-3 h-3 text-yellow-500" />;
+      case "low":
+        return <Bell className="w-3 h-3 text-green-500" />;
+      default:
+        return null;
     }
   };
 
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
+  const navigateMonth = (direction: "prev" | "next") => {
+    setCurrentDate((prev) => {
       const newDate = new Date(prev);
-      if (direction === 'prev') {
+      if (direction === "prev") {
         newDate.setMonth(prev.getMonth() - 1);
       } else {
         newDate.setMonth(prev.getMonth() + 1);
@@ -99,7 +183,7 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
   };
 
   const isDueToday = (item: CalendarItem) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
     return item.date === today;
   };
 
@@ -113,22 +197,22 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
   };
 
   const days = getDaysInMonth(currentDate);
-  const monthYear = currentDate.toLocaleDateString('en-US', { 
-    month: 'long', 
-    year: 'numeric' 
+  const monthYear = currentDate.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
   });
 
   // Get upcoming items for sidebar
   const upcomingItems = calendarItems
-    .filter(item => new Date(item.date) >= new Date())
+    .filter((item) => new Date(item.date) >= new Date())
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 5);
 
@@ -144,17 +228,17 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
                 {monthYear}
               </CardTitle>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
-                  onClick={() => navigateMonth('prev')}
+                  onClick={() => navigateMonth("prev")}
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
-                  onClick={() => navigateMonth('next')}
+                  onClick={() => navigateMonth("next")}
                 >
                   <ChevronRight className="w-4 h-4" />
                 </Button>
@@ -164,39 +248,60 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
           <CardContent>
             {/* Calendar Header */}
             <div className="grid grid-cols-7 gap-1 mb-4">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="p-2 text-center text-sm font-medium text-muted-foreground">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div
+                  key={day}
+                  className="p-2 text-center text-sm font-medium text-muted-foreground"
+                >
                   {day}
                 </div>
               ))}
             </div>
-            
+
             {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-1">
               {days.map((day, index) => {
                 if (!day) {
-                  return <div key={index} className="p-2 h-20"></div>;
+                  return (
+                    <div key={`empty-${index}`} className="p-2 h-20"></div>
+                  );
                 }
-                
+
                 const dayItems = getItemsForDate(day);
-                const isSelectedDate = selectedDate === `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                
+                const isSelectedDate =
+                  selectedDate ===
+                  `${currentDate.getFullYear()}-${String(
+                    currentDate.getMonth() + 1
+                  ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
                 return (
                   <div
-                    key={day}
+                    key={`day-${currentDate.getFullYear()}-${currentDate.getMonth()}-${day}`}
                     className={`
                       p-1 h-20 border rounded-lg cursor-pointer transition-all
-                      ${isToday(day) ? 'bg-primary/20 border-primary' : 'hover:bg-muted/50'}
-                      ${isSelectedDate ? 'ring-2 ring-primary' : ''}
+                      ${
+                        isToday(day)
+                          ? "bg-primary/20 border-primary"
+                          : "hover:bg-muted/50"
+                      }
+                      ${isSelectedDate ? "ring-2 ring-primary" : ""}
                     `}
-                    onClick={() => setSelectedDate(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)}
+                    onClick={() =>
+                      setSelectedDate(
+                        `${currentDate.getFullYear()}-${String(
+                          currentDate.getMonth() + 1
+                        ).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+                      )
+                    }
                   >
                     <div className="text-sm font-medium mb-1">{day}</div>
                     <div className="space-y-1">
-                      {dayItems.slice(0, 2).map(item => (
+                      {dayItems.slice(0, 2).map((item) => (
                         <div
                           key={item.id}
-                          className={`text-xs p-1 rounded truncate ${getTypeColor(item.type)}`}
+                          className={`text-xs p-1 rounded truncate ${getTypeColor(
+                            item.type
+                          )}`}
                           title={item.title}
                         >
                           {item.title}
@@ -228,15 +333,22 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
           </CardHeader>
           <CardContent className="space-y-2">
             {calendarItems.filter(isDueToday).length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing due today! 🎉</p>
+              <p className="text-sm text-muted-foreground">
+                Nothing due today! 🎉
+              </p>
             ) : (
-              calendarItems.filter(isDueToday).map(item => (
-                <div key={item.id} className="flex items-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              calendarItems.filter(isDueToday).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20"
+                >
                   {getPriorityIcon(item.priority)}
                   <div className="flex-1">
                     <div className="text-sm font-medium">{item.title}</div>
                     {item.time && (
-                      <div className="text-xs text-muted-foreground">{item.time}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.time}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -257,8 +369,11 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
             {upcomingItems.length === 0 ? (
               <p className="text-sm text-muted-foreground">No upcoming items</p>
             ) : (
-              upcomingItems.map(item => (
-                <div key={item.id} className="flex items-center gap-2 p-2 rounded-lg bg-secondary/20">
+              upcomingItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-secondary/20"
+                >
                   {getPriorityIcon(item.priority)}
                   <div className="flex-1">
                     <div className="text-sm font-medium">{item.title}</div>
@@ -293,7 +408,10 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
               <div className="flex justify-between text-sm">
                 <span>High Priority:</span>
                 <span className="font-medium text-red-600">
-                  {calendarItems.filter(item => item.priority === 'high').length}
+                  {
+                    calendarItems.filter((item) => item.priority === "high")
+                      .length
+                  }
                 </span>
               </div>
             </div>
