@@ -1111,7 +1111,8 @@ async function condenseContentIfLarge(
 }
 
 // Chunk large content for token limit management
-function chunkContent(content: string, maxChunkSize: number = 8000): string[] { // Increased from 6000 to 8000
+function chunkContent(content: string, maxChunkSize: number = 8000): string[] {
+  // Increased from 6000 to 8000
   if (content.length <= maxChunkSize) {
     return [content];
   }

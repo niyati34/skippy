@@ -111,65 +111,77 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
   // Initialize speech synthesis with better error handling
   useEffect(() => {
     const initializeSpeech = () => {
-      console.log('Initializing speech synthesis...');
-      
+      console.log("Initializing speech synthesis...");
+
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         speechSynthesisRef.current = window.speechSynthesis;
         setAudioSupported(true);
-        console.log('Speech synthesis available');
-        
+        console.log("Speech synthesis available");
+
         // Load voices
         const loadVoices = () => {
           if (!speechSynthesisRef.current) return;
-          
+
           const voices = speechSynthesisRef.current.getVoices();
-          console.log('Loading voices, found:', voices.length);
-          
+          console.log("Loading voices, found:", voices.length);
+
           if (voices.length > 0) {
             setVoicesLoaded(true);
-            console.log('Voices loaded successfully:', voices.map(v => v.name));
-            
+            console.log(
+              "Voices loaded successfully:",
+              voices.map((v) => v.name)
+            );
+
             // Set default voice if not already set
             if (!audioVoice && voices.length > 0) {
-              const englishVoice = voices.find(voice => 
-                voice.lang.startsWith('en') && voice.localService
-              ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0];
-              
+              const englishVoice =
+                voices.find(
+                  (voice) => voice.lang.startsWith("en") && voice.localService
+                ) ||
+                voices.find((voice) => voice.lang.startsWith("en")) ||
+                voices[0];
+
               if (englishVoice) {
                 setAudioVoice(englishVoice.name);
-                console.log('Default voice set to:', englishVoice.name);
+                console.log("Default voice set to:", englishVoice.name);
               }
             }
           } else {
-            console.log('No voices available yet');
+            console.log("No voices available yet");
           }
         };
 
         // Load voices immediately
         loadVoices();
-        
+
         // Listen for voice changes (some browsers load voices asynchronously)
         if (speechSynthesisRef.current) {
-          speechSynthesisRef.current.addEventListener('voiceschanged', loadVoices);
+          speechSynthesisRef.current.addEventListener(
+            "voiceschanged",
+            loadVoices
+          );
         }
-        
+
         // Fallback: try loading voices after delays
         setTimeout(loadVoices, 500);
         setTimeout(loadVoices, 1500);
         setTimeout(loadVoices, 3000);
-        
+
         // Prime the speech synthesis with a silent utterance (some browsers need this)
-        const primeUtterance = new SpeechSynthesisUtterance('');
+        const primeUtterance = new SpeechSynthesisUtterance("");
         primeUtterance.volume = 0;
         speechSynthesisRef.current.speak(primeUtterance);
-        
+
         return () => {
           if (speechSynthesisRef.current) {
-            speechSynthesisRef.current.removeEventListener('voiceschanged', loadVoices);
+            speechSynthesisRef.current.removeEventListener(
+              "voiceschanged",
+              loadVoices
+            );
           }
         };
       } else {
-        console.warn('Speech synthesis not supported in this browser');
+        console.warn("Speech synthesis not supported in this browser");
         setAudioSupported(false);
       }
     };
@@ -180,34 +192,38 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
   // Handle user interaction for audio permissions
   useEffect(() => {
     const handleFirstUserInteraction = () => {
-      console.log('User interaction detected, enabling audio...');
-      
+      console.log("User interaction detected, enabling audio...");
+
       if (speechSynthesisRef.current && !audioPermissionGranted) {
         // Create a silent utterance to enable audio
-        const silentUtterance = new SpeechSynthesisUtterance('');
+        const silentUtterance = new SpeechSynthesisUtterance("");
         silentUtterance.volume = 0;
         silentUtterance.rate = 10; // Very fast
-        
+
         silentUtterance.onend = () => {
-          console.log('Audio permission granted through user interaction');
+          console.log("Audio permission granted through user interaction");
           setAudioPermissionGranted(true);
         };
-        
+
         silentUtterance.onerror = (error) => {
-          console.error('Error granting audio permission:', error);
+          console.error("Error granting audio permission:", error);
         };
-        
+
         speechSynthesisRef.current.speak(silentUtterance);
       }
     };
 
     if (!audioPermissionGranted) {
-      document.addEventListener('click', handleFirstUserInteraction, { once: true });
-      document.addEventListener('touchstart', handleFirstUserInteraction, { once: true });
-      
+      document.addEventListener("click", handleFirstUserInteraction, {
+        once: true,
+      });
+      document.addEventListener("touchstart", handleFirstUserInteraction, {
+        once: true,
+      });
+
       return () => {
-        document.removeEventListener('click', handleFirstUserInteraction);
-        document.removeEventListener('touchstart', handleFirstUserInteraction);
+        document.removeEventListener("click", handleFirstUserInteraction);
+        document.removeEventListener("touchstart", handleFirstUserInteraction);
       };
     }
   }, [audioPermissionGranted]);
@@ -322,19 +338,28 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
   };
 
   const playNote = (note: Note) => {
-    console.log('playNote called for:', note.title);
-    console.log('Note content preview:', note.content?.substring(0, 100) + '...');
-    console.log('Note content length:', note.content?.length || 0);
-    
+    console.log("playNote called for:", note.title);
+    console.log(
+      "Note content preview:",
+      note.content?.substring(0, 100) + "..."
+    );
+    console.log("Note content length:", note.content?.length || 0);
+
     if (!speechSynthesisRef.current || !audioEnabled || !audioSupported) {
-      console.warn('Speech synthesis not available');
-      alert('Audio is not available. Please ensure your browser supports speech synthesis and try refreshing the page.');
+      console.warn("Speech synthesis not available");
+      alert(
+        "Audio is not available. Please ensure your browser supports speech synthesis and try refreshing the page."
+      );
       return;
     }
 
     if (!audioPermissionGranted) {
-      console.log('Audio permission not granted yet, requesting user interaction...');
-      alert('Click anywhere on the page first to enable audio, then try again.');
+      console.log(
+        "Audio permission not granted yet, requesting user interaction..."
+      );
+      alert(
+        "Click anywhere on the page first to enable audio, then try again."
+      );
       return;
     }
 
@@ -343,23 +368,23 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
       setIsPlaying(true);
       setIsPaused(false);
       setCurrentAudioNote(note.id);
-      console.log('Audio state set - playing:', note.id);
+      console.log("Audio state set - playing:", note.id);
 
       // Stop any current speech
       speechSynthesisRef.current.cancel();
 
       const textToSpeak = cleanTextForSpeech(`${note.title}. ${note.content}`);
-      
+
       if (!textToSpeak || textToSpeak.trim().length === 0) {
-        console.warn('No text to speak');
+        console.warn("No text to speak");
         // Reset state if no text
         setIsPlaying(false);
         setCurrentAudioNote(null);
         return;
       }
 
-      console.log('Creating utterance with text length:', textToSpeak.length);
-      
+      console.log("Creating utterance with text length:", textToSpeak.length);
+
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
 
       // Configure speech settings
@@ -369,81 +394,86 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
 
       // Set voice if available
       const voices = speechSynthesisRef.current.getVoices();
-      console.log('Available voices:', voices.length);
-      
+      console.log("Available voices:", voices.length);
+
       if (voices.length > 0) {
         if (audioVoice) {
-          const selectedVoice = voices.find((voice) => voice.name === audioVoice);
+          const selectedVoice = voices.find(
+            (voice) => voice.name === audioVoice
+          );
           if (selectedVoice) {
             utterance.voice = selectedVoice;
-            console.log('Using selected voice:', selectedVoice.name);
+            console.log("Using selected voice:", selectedVoice.name);
           }
         }
-        
+
         // Fallback to first English voice or first available voice
         if (!utterance.voice) {
-          const fallbackVoice = voices.find(voice => voice.lang.startsWith('en')) || voices[0];
+          const fallbackVoice =
+            voices.find((voice) => voice.lang.startsWith("en")) || voices[0];
           if (fallbackVoice) {
             utterance.voice = fallbackVoice;
-            console.log('Using fallback voice:', fallbackVoice.name);
+            console.log("Using fallback voice:", fallbackVoice.name);
           }
         }
       }
 
       utterance.onstart = () => {
-        console.log('Speech actually started for note:', note.title);
+        console.log("Speech actually started for note:", note.title);
         // State already set above, just log
       };
 
       utterance.onend = () => {
-        console.log('Speech ended for note:', note.title);
+        console.log("Speech ended for note:", note.title);
         setIsPlaying(false);
         setIsPaused(false);
         setCurrentAudioNote(null);
       };
 
       utterance.onerror = (event) => {
-        console.error('Speech synthesis error:', event);
+        console.error("Speech synthesis error:", event);
         setIsPlaying(false);
         setIsPaused(false);
         setCurrentAudioNote(null);
       };
 
       utterance.onpause = () => {
-        console.log('Speech paused');
+        console.log("Speech paused");
         setIsPaused(true);
       };
 
       utterance.onresume = () => {
-        console.log('Speech resumed');
+        console.log("Speech resumed");
         setIsPaused(false);
       };
 
       currentUtteranceRef.current = utterance;
-      
+
       // Try speaking immediately and with fallback
-      console.log('Attempting to speak...');
-      
+      console.log("Attempting to speak...");
+
       const attemptSpeak = () => {
         if (speechSynthesisRef.current && utterance) {
           speechSynthesisRef.current.speak(utterance);
-          console.log('Speech synthesis speak() called');
+          console.log("Speech synthesis speak() called");
         }
       };
 
       // Try immediately
       attemptSpeak();
-      
+
       // Fallback: try again after a short delay
       setTimeout(() => {
-        if (speechSynthesisRef.current && currentUtteranceRef.current === utterance) {
-          console.log('Fallback speak attempt...');
+        if (
+          speechSynthesisRef.current &&
+          currentUtteranceRef.current === utterance
+        ) {
+          console.log("Fallback speak attempt...");
           attemptSpeak();
         }
       }, 300);
-      
     } catch (error) {
-      console.error('Error in playNote:', error);
+      console.error("Error in playNote:", error);
       setIsPlaying(false);
       setIsPaused(false);
       setCurrentAudioNote(null);
@@ -455,10 +485,10 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
       if (speechSynthesisRef.current && isPlaying && !isPaused) {
         speechSynthesisRef.current.pause();
         setIsPaused(true);
-        console.log('Audio paused');
+        console.log("Audio paused");
       }
     } catch (error) {
-      console.error('Error pausing audio:', error);
+      console.error("Error pausing audio:", error);
     }
   };
 
@@ -467,10 +497,10 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
       if (speechSynthesisRef.current && isPaused) {
         speechSynthesisRef.current.resume();
         setIsPaused(false);
-        console.log('Audio resumed');
+        console.log("Audio resumed");
       }
     } catch (error) {
-      console.error('Error resuming audio:', error);
+      console.error("Error resuming audio:", error);
     }
   };
 
@@ -481,17 +511,17 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
         setIsPlaying(false);
         setIsPaused(false);
         setCurrentAudioNote(null);
-        console.log('Audio stopped');
+        console.log("Audio stopped");
       }
     } catch (error) {
-      console.error('Error stopping audio:', error);
+      console.error("Error stopping audio:", error);
     }
   };
 
   const changeAudioSpeed = (speed: number) => {
     const clampedSpeed = Math.max(0.25, Math.min(2, speed)); // Clamp between 0.25x and 2x
     setAudioSpeed(clampedSpeed);
-    
+
     if (isPlaying && currentUtteranceRef.current) {
       // Restart with new speed
       const currentNote = notes.find((note) => note.id === currentAudioNote);
@@ -562,18 +592,18 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
 
   const playQuickSummary = (note: Note) => {
     if (!speechSynthesisRef.current || !audioEnabled || !audioSupported) {
-      console.warn('Speech synthesis not available for summary');
+      console.warn("Speech synthesis not available for summary");
       return;
     }
 
     try {
       // Stop any current speech
       speechSynthesisRef.current.cancel();
-      
+
       const summary = generateAudioSummary(note);
-      
+
       if (!summary || summary.trim().length === 0) {
-        console.warn('No summary to speak');
+        console.warn("No summary to speak");
         return;
       }
 
@@ -592,15 +622,15 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
       }
 
       utterance.onstart = () => {
-        console.log('Summary playback started');
+        console.log("Summary playback started");
       };
 
       utterance.onend = () => {
-        console.log('Summary playback ended');
+        console.log("Summary playback ended");
       };
 
       utterance.onerror = (event) => {
-        console.error('Summary playback error:', event);
+        console.error("Summary playback error:", event);
       };
 
       setTimeout(() => {
@@ -608,9 +638,8 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
           speechSynthesisRef.current.speak(utterance);
         }
       }, 100);
-      
     } catch (error) {
-      console.error('Error in playQuickSummary:', error);
+      console.error("Error in playQuickSummary:", error);
     }
   };
 
@@ -1075,24 +1104,42 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log('Listen button clicked for note:', note.title, 'note.id:', note.id);
-                          console.log('Current audio state - currentAudioNote:', currentAudioNote, 'isPlaying:', isPlaying, 'isPaused:', isPaused);
-                          
+                          console.log(
+                            "Listen button clicked for note:",
+                            note.title,
+                            "note.id:",
+                            note.id
+                          );
+                          console.log(
+                            "Current audio state - currentAudioNote:",
+                            currentAudioNote,
+                            "isPlaying:",
+                            isPlaying,
+                            "isPaused:",
+                            isPaused
+                          );
+
                           if (currentAudioNote === note.id && isPlaying) {
                             // If this note is playing, pause/resume
-                            console.log('Note is currently playing, toggling pause/resume');
+                            console.log(
+                              "Note is currently playing, toggling pause/resume"
+                            );
                             isPaused ? resumeAudio() : pauseAudio();
                           } else {
                             // Start playing this note
-                            console.log('Starting to play note:', note.title);
+                            console.log("Starting to play note:", note.title);
                             playNote(note);
                           }
                         }}
                         className="h-8 w-8 p-0"
-                        disabled={!audioEnabled || !audioSupported || !voicesLoaded}
+                        disabled={
+                          !audioEnabled || !audioSupported || !voicesLoaded
+                        }
                         title={
                           currentAudioNote === note.id && isPlaying
-                            ? (isPaused ? "Resume Audio" : "Pause Audio")
+                            ? isPaused
+                              ? "Resume Audio"
+                              : "Pause Audio"
                             : "Play Note Audio"
                         }
                       >
@@ -1108,20 +1155,21 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                       </Button>
 
                       {/* Stop button - only show when this note is playing */}
-                      {currentAudioNote === note.id && (isPlaying || isPaused) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            stopAudio();
-                          }}
-                          className="h-8 w-8 p-0"
-                          title="Stop Audio"
-                        >
-                          <Square className="w-4 h-4" />
-                        </Button>
-                      )}
+                      {currentAudioNote === note.id &&
+                        (isPlaying || isPaused) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              stopAudio();
+                            }}
+                            className="h-8 w-8 p-0"
+                            title="Stop Audio"
+                          >
+                            <Square className="w-4 h-4" />
+                          </Button>
+                        )}
 
                       <Button
                         variant="ghost"
@@ -1131,7 +1179,9 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                           playQuickSummary(note);
                         }}
                         className="h-8 w-8 p-0"
-                        disabled={!audioEnabled || !audioSupported || !voicesLoaded}
+                        disabled={
+                          !audioEnabled || !audioSupported || !voicesLoaded
+                        }
                         title="Play Quick Summary"
                       >
                         <Sparkles className="w-4 h-4" />
@@ -1260,30 +1310,46 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                 <BookOpen className="w-5 h-5" />
                 Enhanced Study Notes
               </div>
-              
+
               {/* Listen button for the currently opened note */}
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    console.log('Listen button clicked in detailed view for selectedNote:', selectedNote?.title);
-                    console.log('Selected note content preview:', selectedNote?.content?.substring(0, 100));
+                    console.log(
+                      "Listen button clicked in detailed view for selectedNote:",
+                      selectedNote?.title
+                    );
+                    console.log(
+                      "Selected note content preview:",
+                      selectedNote?.content?.substring(0, 100)
+                    );
                     if (selectedNote) {
                       if (currentAudioNote === selectedNote.id && isPlaying) {
                         // If this note is playing, pause/resume
-                        console.log('Note is currently playing in detailed view, toggling pause/resume');
+                        console.log(
+                          "Note is currently playing in detailed view, toggling pause/resume"
+                        );
                         isPaused ? resumeAudio() : pauseAudio();
                       } else {
-                        console.log('Starting to play selectedNote from detailed view:', selectedNote.title);
+                        console.log(
+                          "Starting to play selectedNote from detailed view:",
+                          selectedNote.title
+                        );
                         playNote(selectedNote);
                       }
                     } else {
-                      console.warn('No selectedNote available to play');
+                      console.warn("No selectedNote available to play");
                     }
                   }}
                   className="h-8 w-8 p-0"
-                  disabled={!audioEnabled || !audioSupported || !voicesLoaded || !selectedNote}
+                  disabled={
+                    !audioEnabled ||
+                    !audioSupported ||
+                    !voicesLoaded ||
+                    !selectedNote
+                  }
                   title="Listen to this note"
                 >
                   {currentAudioNote === selectedNote?.id && isPlaying ? (
@@ -1296,14 +1362,14 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                     <Volume2 className="w-4 h-4" />
                   )}
                 </Button>
-                
+
                 {/* Stop button */}
                 {currentAudioNote === selectedNote?.id && isPlaying && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      console.log('Stop button clicked in detailed view');
+                      console.log("Stop button clicked in detailed view");
                       stopAudio();
                     }}
                     className="h-8 w-8 p-0"
@@ -1466,32 +1532,39 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      console.log('Test audio button clicked');
+                      console.log("Test audio button clicked");
                       if (speechSynthesisRef.current) {
                         // Clear any existing speech
                         speechSynthesisRef.current.cancel();
-                        
-                        const testUtterance = new SpeechSynthesisUtterance("Audio test successful. Your text-to-speech is working properly.");
+
+                        const testUtterance = new SpeechSynthesisUtterance(
+                          "Audio test successful. Your text-to-speech is working properly."
+                        );
                         testUtterance.rate = audioSpeed;
                         testUtterance.volume = 1;
                         testUtterance.pitch = 1;
-                        
+
                         // Use default voice
                         const voices = speechSynthesisRef.current.getVoices();
                         if (voices.length > 0) {
-                          const englishVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+                          const englishVoice =
+                            voices.find((v) => v.lang.startsWith("en")) ||
+                            voices[0];
                           testUtterance.voice = englishVoice;
-                          console.log('Test using voice:', englishVoice.name);
+                          console.log("Test using voice:", englishVoice.name);
                         }
-                        
-                        testUtterance.onstart = () => console.log('Test audio started');
-                        testUtterance.onend = () => console.log('Test audio ended');
-                        testUtterance.onerror = (e) => console.error('Test audio error:', e);
-                        
-                        console.log('Speaking test audio...');
+
+                        testUtterance.onstart = () =>
+                          console.log("Test audio started");
+                        testUtterance.onend = () =>
+                          console.log("Test audio ended");
+                        testUtterance.onerror = (e) =>
+                          console.error("Test audio error:", e);
+
+                        console.log("Speaking test audio...");
                         speechSynthesisRef.current.speak(testUtterance);
                       } else {
-                        console.error('speechSynthesisRef.current is null');
+                        console.error("speechSynthesisRef.current is null");
                       }
                     }}
                     className="text-xs px-2 h-6"
@@ -1499,30 +1572,45 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                     Test Audio
                   </Button>
                 )}
-                
+
                 {/* Debug Info */}
                 {audioSupported && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      console.log('=== AUDIO DEBUG INFO ===');
-                      console.log('audioSupported:', audioSupported);
-                      console.log('voicesLoaded:', voicesLoaded);
-                      console.log('audioEnabled:', audioEnabled);
-                      console.log('speechSynthesisRef.current:', !!speechSynthesisRef.current);
+                      console.log("=== AUDIO DEBUG INFO ===");
+                      console.log("audioSupported:", audioSupported);
+                      console.log("voicesLoaded:", voicesLoaded);
+                      console.log("audioEnabled:", audioEnabled);
+                      console.log(
+                        "speechSynthesisRef.current:",
+                        !!speechSynthesisRef.current
+                      );
                       if (speechSynthesisRef.current) {
                         const voices = speechSynthesisRef.current.getVoices();
-                        console.log('Available voices:', voices.length);
-                        console.log('Voices:', voices.map(v => v.name));
-                        console.log('Speaking:', speechSynthesisRef.current.speaking);
-                        console.log('Pending:', speechSynthesisRef.current.pending);
-                        console.log('Paused:', speechSynthesisRef.current.paused);
+                        console.log("Available voices:", voices.length);
+                        console.log(
+                          "Voices:",
+                          voices.map((v) => v.name)
+                        );
+                        console.log(
+                          "Speaking:",
+                          speechSynthesisRef.current.speaking
+                        );
+                        console.log(
+                          "Pending:",
+                          speechSynthesisRef.current.pending
+                        );
+                        console.log(
+                          "Paused:",
+                          speechSynthesisRef.current.paused
+                        );
                       }
-                      console.log('isPlaying:', isPlaying);
-                      console.log('isPaused:', isPaused);
-                      console.log('currentAudioNote:', currentAudioNote);
-                      console.log('========================');
+                      console.log("isPlaying:", isPlaying);
+                      console.log("isPaused:", isPaused);
+                      console.log("currentAudioNote:", currentAudioNote);
+                      console.log("========================");
                     }}
                     className="text-xs px-2 h-6"
                   >
@@ -1535,7 +1623,13 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
                   onClick={() => setAudioEnabled(!audioEnabled)}
                   className="h-8 w-8 p-0"
                   disabled={!audioSupported}
-                  title={audioSupported ? (audioEnabled ? "Disable Audio" : "Enable Audio") : "Audio not supported in this browser"}
+                  title={
+                    audioSupported
+                      ? audioEnabled
+                        ? "Disable Audio"
+                        : "Enable Audio"
+                      : "Audio not supported in this browser"
+                  }
                 >
                   {audioEnabled ? (
                     <Volume2 className="w-4 h-4" />
