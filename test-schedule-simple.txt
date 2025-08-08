@@ -1,0 +1,26 @@
+# Test Schedule for Weekly Timetable
+
+## Monday Classes
+- Mathematics: 09:00 AM - Room 101
+- Physics Lab: 14:00 PM - Lab A
+
+## Tuesday Classes  
+- Computer Science: 10:00 AM - Room 205
+- Chemistry: 13:00 PM - Room 301
+
+## Wednesday Classes
+- Mathematics: 09:00 AM - Room 101
+- English Literature: 15:00 PM - Room 102
+
+## Thursday Classes
+- Physics Lecture: 11:00 AM - Hall B
+- Computer Science Lab: 14:00 PM - Lab C
+
+## Friday Classes
+- Chemistry Lab: 09:00 AM - Lab D
+- Mathematics Tutorial: 13:00 PM - Room 101
+
+## Important Dates
+- Assignment 1 Due: August 25, 2025 at 11:59 PM
+- Midterm Exam: September 15, 2025 at 9:00 AM
+- Final Project Due: December 10, 2025

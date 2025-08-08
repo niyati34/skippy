@@ -1,0 +1,73 @@
+# Weekly Class Timetable - Fall 2025
+
+## Time Table Structure
+
+**Monday Schedule:**
+07:30-08:30 UI/UX – PS – MA201
+08:30-09:30 BT – SKS – MA206  
+09:00-10:30 PS – SKS – MA213-A
+09:30-10:30 BT – SKS – MA206
+10:30-11:00 ☕ Tea Break
+11:00-12:00 CD – JS – MA205
+12:00-12:30 Library – MC316
+12:00-01:00 AI – PT – MC316
+12:30-01:30 MP1 – MA210
+
+**Tuesday Schedule:**
+07:30-08:30 BT – SKS – MA206
+08:30-09:30 NLP – AC – MA206
+09:00-10:30 UI/UX – PS – MA205
+09:30-10:30 MP1 – MA211
+10:30-11:00 ☕ Tea Break
+11:00-12:00 DWDM – RP – MA206
+12:00-12:30 Library – MC315
+12:00-01:00 AI – PT – MC315
+12:30-01:30 MP1 – MA210
+
+**Wednesday Schedule:**
+07:30-08:30 NLP – AC – MA206
+09:00-10:30 CD – JS – MB302
+09:30-10:30 NLP – AC – MA206
+10:30-11:00 ☕ Tea Break
+11:00-12:00 DWDM – RP – MA206
+12:00-12:30 Library – MC222
+12:00-01:00 DWDM – RP – MC222
+12:30-01:30 MP1 – MA210
+
+**Thursday Schedule:**
+07:30-08:30 DEV – WS – MA210
+08:30-09:30 DEV – WS – MA210
+09:00-10:30 DWDM – RP – MC221
+09:30-10:30 NLP – AC – MA206
+10:30-11:00 ☕ Tea Break
+11:00-12:00 AI – PT – MC222
+12:00-12:30 Library – MC223
+12:00-01:00 DWDM – RP – MC223
+12:30-01:30 MP1 – MA210
+
+**Friday Schedule:**
+07:30-08:30 AI – PT – MC316
+09:00-10:30 MP1 – MC316
+09:30-10:30 DWDM – RP – MC316
+10:30-11:00 ☕ Tea Break
+11:00-12:00 PT – MA223
+12:00-12:30 MP1 – MA210
+12:00-01:00 MP1 – MA210
+12:30-01:30 MP1 – MA210
+
+## Important Academic Dates
+- Assignment 1 Due: August 20, 2025
+- Midterm Exams: September 10-15, 2025
+- Project Presentation: October 25, 2025
+- Final Exams: December 5-15, 2025
+
+## Subject Codes
+- UI/UX: User Interface/User Experience Design
+- BT: Biotechnology 
+- PS: Problem Solving
+- NLP: Natural Language Processing
+- CD: Compiler Design
+- DWDM: Data Warehousing and Data Mining
+- AI: Artificial Intelligence
+- MP1: Major Project 1
+- DEV: Development Practices

@@ -932,58 +932,90 @@ export async function generateScheduleFromContent(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `You are an ADVANCED AI schedule generator that ONLY extracts IMPORTANT, TIME-SENSITIVE events from educational content.
+      content: `You are an ADVANCED AI schedule generator that extracts ALL IMPORTANT schedule items from educational content.
 
-⚠️ CRITICAL SELECTION CRITERIA:
-ONLY CREATE schedule items for:
-✅ Assignment deadlines with specific due dates
-✅ Exam dates and times  
-✅ Project submission deadlines
-✅ Class/lecture schedules with specific times
-✅ Important deadline dates (midterm, final, presentation)
-✅ Lab sessions with scheduled times
-✅ Quiz dates and times
+⚠️ EXTRACTION CRITERIA:
+✅ ALWAYS CREATE schedule items for:
+• Assignment deadlines with specific due dates
+• Exam dates and times  
+• Project submission deadlines
+• Class/lecture schedules with specific times
+• Lab sessions with scheduled times
+• Tutorial/seminar sessions
+• Important deadline dates (midterm, final, presentation)
+• Quiz dates and times
+• TIMETABLE entries (regular class schedules)
+• Weekly recurring classes
+• Office hours
+• Study sessions with specific times
+
+✅ ALSO EXTRACT from TIMETABLES/CLASS SCHEDULES:
+• Regular weekly classes (e.g., "Math Mon 9:00 AM")
+• Lab periods with days/times
+• Lecture halls and timings
+• Recurring academic activities
+• Course schedules by day
 
 ❌ DO NOT CREATE schedule items for:
-❌ General study topics without dates
-❌ Chapter readings without deadlines  
-❌ Course content descriptions
-❌ Learning objectives
-❌ Syllabus information without specific dates
-❌ General notes or theoretical content
-❌ Concepts, definitions, or explanations
-❌ Unit/chapter overviews
-❌ Historical information or background
+• Pure study topics without dates/times
+• General course descriptions
+• Learning objectives without schedules
+• Historical information
+• Theoretical explanations only
 
-🎯 EXTRACTION RULES:
-- MUST have a specific date (day/month/year or relative date like "next Monday")
-- MUST be time-sensitive (deadline, appointment, scheduled event)
-- MUST require action or attendance by the student
-- If content is purely educational/informational, return []
-- If no specific dates or deadlines found, return []
+🎯 SPECIAL HANDLING FOR TIMETABLES:
+- Extract ALL class sessions with days and times
+- Convert weekly patterns to schedule items
+- Include course names, times, and days
+- If time range given, use start time
+- Mark recurring classes as "class" type
+
+🎯 DATE HANDLING:
+- For recurring weekly items, use next occurrence of that day
+- Convert relative dates (e.g., "next Monday") to actual dates
+- If no year specified, assume current academic year (2025)
+- For weekly classes, create entries for the next few weeks
 
 RETURN ONLY A VALID JSON ARRAY:
 [
   {
-    "title": "Specific Assignment/Exam Name",
+    "title": "Course Name/Assignment Name",
     "time": "HH:MM", 
     "date": "YYYY-MM-DD",
-    "type": "assignment|exam|study"
+    "type": "assignment|exam|study|class"
   }
 ]
+
+SPECIAL TIMETABLE PROCESSING INSTRUCTIONS:
+- For class schedules like "Math 9:00 AM - 10:30 AM Room 101":
+  Extract as: {"title": "Math", "time": "09:00", "endTime": "10:30", "type": "class", "room": "Room 101"}
+- For instructor info like "Prof. Smith teaches Physics":
+  Include instructor in title: {"title": "Physics - Prof. Smith", "type": "class"}
+- For multiple days like "Mon/Wed/Fri 10:00 AM":
+  Create separate entries for each day
+- For break times like "Tea Break 10:30-11:00":
+  Extract as: {"title": "Tea Break", "time": "10:30", "endTime": "11:00", "type": "study"}
 
 Examples of VALID schedule items:
 - "Assignment 1 due September 15" → assignment
 - "Midterm exam on October 3 at 2 PM" → exam  
 - "Project presentation Monday 9 AM" → assignment
-- "Lab session every Wednesday 3 PM" → study
+- "Lab session every Wednesday 3 PM" → class
+- "Math class Monday 9:00 AM" → class
+- "Physics lecture Tue/Thu 10:30 AM" → class
+- "CS101 Mon/Wed/Fri 2:00 PM Room 101" → class
+- "Office hours Tuesday 1-3 PM" → study
 
-Examples of INVALID (do not extract):
-- Course overview content
-- Chapter summaries  
-- Theoretical explanations
-- General study materials
-- Unit descriptions without deadlines
+Examples for TIMETABLES:
+- Extract "Math Mon 9AM" as class on next Monday
+- Extract "Lab Wed 2PM" as class on next Wednesday  
+- Extract "Lecture MTWTh 10AM" as multiple class entries
+
+TIMETABLE PROCESSING:
+- For "Mon/Wed/Fri", create separate entries for each day
+- Use reasonable dates (next occurrence of each day)
+- Include room numbers in title if provided
+- Mark all regular classes as type "class"
 
 IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
     },
@@ -1046,9 +1078,13 @@ function detectScheduleWorthyContent(content: string): boolean {
     /\b(?:exam|test|quiz|midterm|final)\s+(?:on|date|scheduled)/i,
     /\bexam\s*:?\s*\w+\s+\d/i,
 
-    // Class schedule patterns
+    // Class schedule patterns - ENHANCED
     /\b(?:class|lecture|lab|session)\s+(?:schedule|time|meets)/i,
     /\bmeets?\s+(?:every|on|at)\s+\w+/i,
+    /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+    /\btimetable\b/i,
+    /\bschedule\b/i,
+    /\b(?:room|hall|venue)\s*:?\s*\w+/i,
 
     // Date patterns with context
     /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/i,
@@ -1058,13 +1094,23 @@ function detectScheduleWorthyContent(content: string): boolean {
     // Time patterns with academic context
     /\b\d{1,2}:\d{2}\s*(?:am|pm)\b/i,
     /\bweekly\s+(?:on|at)\b/i,
+    /\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/i, // Time ranges
+
+    // Timetable specific patterns
+    /\b(?:period|slot|timing|duration)\b/i,
+    /\b(?:semester|term|academic)\s+(?:schedule|calendar)/i,
   ];
 
   const hasDateContext = scheduleIndicators.some((pattern) =>
     pattern.test(content)
   );
 
-  // Additional check: content should not be purely theoretical
+  // For timetables, be more lenient - if filename or content suggests schedule, accept it
+  const filename = content.toLowerCase();
+  const isScheduleFile =
+    /\b(?:timetable|schedule|calendar|exam|class|syllabus)\b/i.test(filename);
+
+  // Additional check: content should not be purely theoretical (but be more lenient for schedules)
   const theoreticalIndicators = [
     /\b(?:overview|introduction|definition|concept|theory|principle)\b/i,
     /\b(?:understand|learn|study|review|covered|topics)\b/i,
@@ -1075,6 +1121,11 @@ function detectScheduleWorthyContent(content: string): boolean {
     theoreticalIndicators.reduce((count, pattern) => {
       return count + (content.match(pattern) || []).length;
     }, 0) / Math.max(contentWords.length / 100, 1);
+
+  // If it's a schedule file or has schedule indicators, be more accepting
+  if (isScheduleFile || hasDateContext) {
+    return true;
+  }
 
   // If content is mostly theoretical and has no clear schedule indicators, skip
   return hasDateContext && theoreticalRatio < 5;
@@ -1088,7 +1139,7 @@ function validateScheduleItem(item: any): boolean {
 
   const title = item.title.toLowerCase();
 
-  // Check for important keywords
+  // Check for important keywords - ENHANCED for timetables
   const importantKeywords = [
     "assignment",
     "homework",
@@ -1107,32 +1158,44 @@ function validateScheduleItem(item: any): boolean {
     "meeting",
     "interview",
     "submission",
+    "tutorial",
+    "seminar",
+    "workshop",
+    "period",
+    "session",
+    "practical",
+    "theory",
   ];
 
   const hasImportantKeyword = importantKeywords.some((keyword) =>
     title.includes(keyword)
   );
 
-  // Reject generic or vague titles
+  // For timetable items, also accept day-based patterns
+  const dayPattern =
+    /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+  const timePattern = /\d{1,2}:\d{2}/;
+  const hasTimeInfo =
+    dayPattern.test(title) ||
+    timePattern.test(title) ||
+    timePattern.test(item.time || "");
+
+  // Reject only very generic or vague titles
   const genericTitles = [
-    "study",
-    "review",
-    "read",
-    "chapter",
-    "unit",
-    "topic",
     "overview",
     "introduction",
     "concepts",
-    "notes",
+    "general notes",
+    "summary",
+    "background",
   ];
 
   const isGeneric = genericTitles.some(
     (generic) => title === generic || title.startsWith(generic + " ")
   );
 
-  // Must have important keyword and not be generic
-  return hasImportantKeyword && !isGeneric && item.title.length > 5;
+  // Accept if has important keyword, time info, or is not generic
+  return (hasImportantKeyword || hasTimeInfo) && !isGeneric;
 }
 
 // Enhanced fallback schedule extraction - only important events
@@ -1154,7 +1217,7 @@ function extractScheduleFallbackEnhanced(
 
   console.log("🗓️ [SCHEDULE] Running enhanced fallback extraction...");
 
-  // Enhanced patterns for important events only
+  // Enhanced patterns for important events AND timetables
   const importantPatterns = [
     // Assignment deadlines
     {
@@ -1178,6 +1241,53 @@ function extractScheduleFallbackEnhanced(
         /(?:class|lecture|lab).*?(?:meets?|scheduled).*?(\w+).*?(\d{1,2}:\d{2})/gi,
       type: "study" as const,
       time: "10:00",
+    },
+
+    // Timetable patterns - day and time combinations
+    {
+      pattern:
+        /(monday|tuesday|wednesday|thursday|friday|saturday|sunday).*?(\d{1,2}:\d{2}(?:\s*(?:am|pm))?)/gi,
+      type: "study" as const,
+      time: "10:00",
+    },
+
+    // Course codes with days and times
+    {
+      pattern:
+        /([A-Z]{2,4}\d{3}[A-Z]?).*?(monday|tuesday|wednesday|thursday|friday).*?(\d{1,2}:\d{2})/gi,
+      type: "study" as const,
+      time: "10:00",
+    },
+
+    // Time ranges in timetables
+    {
+      pattern:
+        /(\d{1,2}:\d{2})\s*-\s*\d{1,2}:\d{2}.*?(monday|tuesday|wednesday|thursday|friday)/gi,
+      type: "study" as const,
+      time: "10:00",
+    },
+
+    // Enhanced timetable patterns - Subject codes with instructors and rooms
+    {
+      pattern:
+        /([A-Z]{2,4}(?:\/[A-Z]{2,4})*)\s*[-–]\s*([A-Z]{2,3})\s*[-–]\s*(M[ABC]\d+)/gi,
+      type: "study" as const,
+      time: "10:00",
+    },
+
+    // Subject with time range and room
+    {
+      pattern:
+        /(\w+(?:\s+\w+)*)\s*[-–]\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})\s*\(?(Room\s*\w+|M[ABC]\d+)\)?/gi,
+      type: "study" as const,
+      time: "10:00",
+    },
+
+    // Tea/Coffee breaks
+    {
+      pattern: /(☕|coffee|tea)\s*break.*?(\d{1,2}:\d{2})/gi,
+      type: "study" as const,
+      time: "10:30",
     },
   ];
 
@@ -1213,6 +1323,8 @@ function parseDate(dateStr: string): string {
   try {
     // Handle common date formats
     const currentYear = new Date().getFullYear();
+    const currentDate = new Date();
+
     const months = {
       january: "01",
       february: "02",
@@ -1238,6 +1350,45 @@ function parseDate(dateStr: string): string {
       nov: "11",
       dec: "12",
     };
+
+    const days = {
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+      sunday: 0,
+      mon: 1,
+      tue: 2,
+      wed: 3,
+      thu: 4,
+      fri: 5,
+      sat: 6,
+      sun: 0,
+    };
+
+    // Handle day of week (for timetables)
+    const dayMatch = dateStr
+      .toLowerCase()
+      .match(
+        /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/
+      );
+    if (dayMatch) {
+      const targetDay = days[dayMatch[1] as keyof typeof days];
+      const today = currentDate.getDay();
+
+      // Calculate days until next occurrence of this day
+      let daysUntil = targetDay - today;
+      if (daysUntil <= 0) daysUntil += 7; // Next week if day has passed
+
+      const targetDate = new Date(currentDate);
+      targetDate.setDate(currentDate.getDate() + daysUntil);
+
+      const month = (targetDate.getMonth() + 1).toString().padStart(2, "0");
+      const day = targetDate.getDate().toString().padStart(2, "0");
+      return `${targetDate.getFullYear()}-${month}-${day}`;
+    }
 
     // Match "Month Day" format
     const monthDayMatch = dateStr.toLowerCase().match(/(\w+)\s+(\d{1,2})/);

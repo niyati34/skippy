@@ -1,0 +1,26 @@
+# Class Timetable - Fall 2025
+
+## Monday
+- Mathematics: 9:00 AM - 10:30 AM (Room 101)
+- Physics Lab: 2:00 PM - 4:00 PM (Lab A)
+
+## Tuesday  
+- Computer Science: 10:00 AM - 11:30 AM (Room 205)
+- Chemistry: 1:00 PM - 2:30 PM (Room 301)
+
+## Wednesday
+- Mathematics: 9:00 AM - 10:30 AM (Room 101)
+- English Literature: 3:00 PM - 4:30 PM (Room 102)
+
+## Thursday
+- Physics Lecture: 11:00 AM - 12:30 PM (Hall B)
+- Computer Science Lab: 2:00 PM - 4:00 PM (Lab C)
+
+## Friday
+- Chemistry Lab: 9:00 AM - 11:00 AM (Lab D)
+- Mathematics Tutorial: 1:00 PM - 2:00 PM (Room 101)
+
+## Important Dates
+- Assignment 1 Due: August 25, 2025
+- Midterm Exam: September 15, 2025 at 9:00 AM
+- Final Project Due: December 10, 2025

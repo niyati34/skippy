@@ -1,0 +1,21 @@
+# Simple Weekly Timetable
+
+## Monday Schedule
+- Math Class: 09:00 AM - Prof. Smith
+- Physics Lab: 14:00 PM - Dr. Johnson
+
+## Tuesday Schedule  
+- Computer Science: 10:00 AM - Prof. Davis
+- Chemistry: 13:00 PM - Dr. Wilson
+
+## Wednesday Schedule
+- Math Class: 09:00 AM - Prof. Smith
+- English: 15:00 PM - Prof. Brown
+
+## Thursday Schedule
+- Physics: 11:00 AM - Dr. Johnson  
+- Computer Lab: 14:00 PM - Prof. Davis
+
+## Friday Schedule
+- Chemistry Lab: 09:00 AM - Dr. Wilson
+- Math Tutorial: 13:00 PM - Prof. Smith
