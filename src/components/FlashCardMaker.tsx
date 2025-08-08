@@ -1,11 +1,20 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Brain, Plus, RotateCcw, Shuffle, Check, X } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Brain,
+  Plus,
+  RotateCcw,
+  Shuffle,
+  Check,
+  X,
+  Trash2,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { FlashcardStorage, StoredFlashcard } from "@/lib/storage";
 
 interface FlashCard {
   id: string;
@@ -18,30 +27,55 @@ interface FlashCardMakerProps {
   flashcards?: any[];
 }
 
-const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps) => {
-  const [flashCards, setFlashCards] = useState<FlashCard[]>([
-    { id: '1', question: 'What is the capital of France?', answer: 'Paris', category: 'Geography' },
-    { id: '2', question: 'What is 2 + 2?', answer: '4', category: 'Math' },
-  ]);
-  const [newCard, setNewCard] = useState({ question: '', answer: '', category: '' });
+const FlashCardMaker = ({
+  flashcards: externalCards = [],
+}: FlashCardMakerProps) => {
+  const [flashCards, setFlashCards] = useState<FlashCard[]>([]);
+  const [newCard, setNewCard] = useState({
+    question: "",
+    answer: "",
+    category: "",
+  });
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [studyMode, setStudyMode] = useState(false);
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const { toast } = useToast();
 
+  // Load flashcards from localStorage on component mount
+  useEffect(() => {
+    const loadedFlashcards = FlashcardStorage.load();
+    const formattedCards = loadedFlashcards.map((card) => ({
+      id: card.id,
+      question: card.question,
+      answer: card.answer,
+      category: card.category,
+    }));
+    setFlashCards(formattedCards);
+  }, []);
+
   useEffect(() => {
     if (externalCards.length > 0) {
       const newCards = externalCards.map((card, index) => ({
         id: (Date.now() + index).toString(),
-        question: card.question || card.front || 'Question',
-        answer: card.answer || card.back || 'Answer',
-        category: card.category || 'General'
+        question: card.question || card.front || "Question",
+        answer: card.answer || card.back || "Answer",
+        category: card.category || "General",
       }));
-      setFlashCards(prev => [...prev, ...newCards]);
+      setFlashCards((prev) => [...prev, ...newCards]);
+
+      // Save new cards to localStorage
+      const flashcardsToSave = newCards.map((card) => ({
+        question: card.question,
+        answer: card.answer,
+        category: card.category,
+        source: "uploaded_file",
+      }));
+      FlashcardStorage.addBatch(flashcardsToSave);
+
       toast({
         title: "New flashcards added! 🎯",
-        description: `Added ${newCards.length} flashcards from your content.`
+        description: `Added ${newCards.length} flashcards from your content.`,
       });
     }
   }, [externalCards, toast]);
@@ -50,13 +84,22 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
     if (newCard.question && newCard.answer && newCard.category) {
       const card: FlashCard = {
         id: Date.now().toString(),
-        ...newCard
+        ...newCard,
       };
       setFlashCards([...flashCards, card]);
-      setNewCard({ question: '', answer: '', category: '' });
+
+      // Save to localStorage
+      FlashcardStorage.add({
+        question: newCard.question,
+        answer: newCard.answer,
+        category: newCard.category,
+        source: "manual_entry",
+      });
+
+      setNewCard({ question: "", answer: "", category: "" });
       toast({
         title: "Flash card created! 🎯",
-        description: `Added "${newCard.question}" to ${newCard.category}`
+        description: `Added "${newCard.question}" to ${newCard.category}`,
       });
     }
   };
@@ -68,7 +111,7 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
     setShowAnswer(false);
     toast({
       title: "Cards shuffled! 🔀",
-      description: "Ready for a new challenge!"
+      description: "Ready for a new challenge!",
     });
   };
 
@@ -78,9 +121,9 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
   };
 
   const markAnswer = (correct: boolean) => {
-    setScore(prev => ({
+    setScore((prev) => ({
       correct: prev.correct + (correct ? 1 : 0),
-      total: prev.total + 1
+      total: prev.total + 1,
     }));
     setTimeout(nextCard, 1000);
   };
@@ -108,20 +151,24 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
             <Input
               placeholder="Category (e.g., Math, Science)"
               value={newCard.category}
-              onChange={(e) => setNewCard({...newCard, category: e.target.value})}
+              onChange={(e) =>
+                setNewCard({ ...newCard, category: e.target.value })
+              }
             />
             <div className="md:col-span-2">
               <Input
                 placeholder="Question..."
                 value={newCard.question}
-                onChange={(e) => setNewCard({...newCard, question: e.target.value})}
+                onChange={(e) =>
+                  setNewCard({ ...newCard, question: e.target.value })
+                }
               />
             </div>
           </div>
           <Textarea
             placeholder="Answer..."
             value={newCard.answer}
-            onChange={(e) => setNewCard({...newCard, answer: e.target.value})}
+            onChange={(e) => setNewCard({ ...newCard, answer: e.target.value })}
             rows={3}
           />
           <Button onClick={addFlashCard} className="w-full">
@@ -153,7 +200,8 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
             </div>
             {score.total > 0 && (
               <div className="text-sm text-muted-foreground">
-                Score: {score.correct}/{score.total} ({Math.round((score.correct/score.total)*100)}%)
+                Score: {score.correct}/{score.total} (
+                {Math.round((score.correct / score.total) * 100)}%)
               </div>
             )}
           </CardHeader>
@@ -165,11 +213,11 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
                     {currentCard.category}
                   </Badge>
                 </div>
-                
+
                 <div className="min-h-32 flex items-center justify-center p-6 rounded-lg bg-secondary/20 border-2 border-dashed">
                   <div className="text-center">
                     <h3 className="text-lg font-medium mb-4">
-                      {showAnswer ? 'Answer:' : 'Question:'}
+                      {showAnswer ? "Answer:" : "Question:"}
                     </h3>
                     <p className="text-xl">
                       {showAnswer ? currentCard.answer : currentCard.question}
@@ -179,20 +227,23 @@ const FlashCardMaker = ({ flashcards: externalCards = [] }: FlashCardMakerProps)
 
                 <div className="flex justify-center gap-3">
                   {!showAnswer ? (
-                    <Button onClick={() => setShowAnswer(true)} className="flex-1 max-w-48">
+                    <Button
+                      onClick={() => setShowAnswer(true)}
+                      className="flex-1 max-w-48"
+                    >
                       Show Answer
                     </Button>
                   ) : (
                     <>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => markAnswer(false)}
                         className="flex-1 max-w-32 text-red-600 border-red-200 hover:bg-red-50"
                       >
                         <X className="w-4 h-4 mr-2" />
                         Incorrect
                       </Button>
-                      <Button 
+                      <Button
                         onClick={() => markAnswer(true)}
                         className="flex-1 max-w-32 bg-green-600 hover:bg-green-700"
                       >

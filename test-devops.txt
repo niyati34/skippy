@@ -1,0 +1,25 @@
+This is a test document about DevOps practices.
+
+# DevOps Overview
+
+DevOps is a combination of software development (Dev) and IT operations (Ops).
+
+## Key Principles
+- Continuous Integration
+- Continuous Deployment  
+- Infrastructure as Code
+- Monitoring and Logging
+
+## Benefits
+- Faster deployment cycles
+- Improved collaboration
+- Better quality software
+- Reduced manual errors
+
+## Tools
+- Docker for containerization
+- Jenkins for CI/CD
+- Kubernetes for orchestration
+- Ansible for configuration management
+
+This document covers the fundamentals of DevOps that every developer should know.

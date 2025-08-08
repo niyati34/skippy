@@ -1,42 +1,67 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock, Plus, X, BookOpen } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Calendar, Clock, Plus, X, BookOpen } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface ScheduleItem {
   id: string;
   title: string;
   time: string;
   date: string;
-  type: 'assignment' | 'study' | 'exam' | 'note';
+  type: "assignment" | "study" | "exam" | "note";
 }
 
 interface ScheduleChartProps {
   scheduleItems?: any[];
 }
 
-const ScheduleChart = ({ scheduleItems: externalItems = [] }: ScheduleChartProps) => {
+const ScheduleChart = ({
+  scheduleItems: externalItems = [],
+}: ScheduleChartProps) => {
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([
-    { id: '1', title: 'Math Assignment', time: '14:00', date: '2024-07-21', type: 'assignment' },
-    { id: '2', title: 'Science Review', time: '16:00', date: '2024-07-21', type: 'study' },
-    { id: '3', title: 'History Essay', time: '10:00', date: '2024-07-22', type: 'assignment' },
+    {
+      id: "1",
+      title: "Math Assignment",
+      time: "14:00",
+      date: "2024-07-21",
+      type: "assignment",
+    },
+    {
+      id: "2",
+      title: "Science Review",
+      time: "16:00",
+      date: "2024-07-21",
+      type: "study",
+    },
+    {
+      id: "3",
+      title: "History Essay",
+      time: "10:00",
+      date: "2024-07-22",
+      type: "assignment",
+    },
   ]);
-  const [newItem, setNewItem] = useState({ title: '', time: '', date: '', type: 'study' as const });
+  const [newItem, setNewItem] = useState({
+    title: "",
+    time: "",
+    date: "",
+    type: "study" as const,
+  });
   const { toast } = useToast();
 
   useEffect(() => {
     if (externalItems.length > 0) {
       const newItems = externalItems.map((item, index) => ({
         id: (Date.now() + index).toString(),
-        title: item.title || 'New Task',
-        time: item.time || '12:00',
-        date: item.dueDate || new Date().toISOString().split('T')[0],
-        type: (item.category as any) || 'study'
+        title: item.title || "New Task",
+        time: item.time || "12:00",
+        date: item.dueDate || new Date().toISOString().split("T")[0],
+        type: (item.category as any) || "study",
       }));
-      setScheduleItems(prev => [...prev, ...newItems]);
+      setScheduleItems((prev) => [...prev, ...newItems]);
     }
   }, [externalItems]);
 
@@ -44,42 +69,52 @@ const ScheduleChart = ({ scheduleItems: externalItems = [] }: ScheduleChartProps
     if (newItem.title && newItem.time && newItem.date) {
       const item: ScheduleItem = {
         id: Date.now().toString(),
-        ...newItem
+        ...newItem,
       };
       setScheduleItems([...scheduleItems, item]);
-      setNewItem({ title: '', time: '', date: '', type: 'study' });
+      setNewItem({ title: "", time: "", date: "", type: "study" });
       toast({
         title: "Added to schedule! 📅",
-        description: `"${item.title}" scheduled for ${item.date} at ${item.time}`
+        description: `"${item.title}" scheduled for ${item.date} at ${item.time}`,
       });
     }
   };
 
   const removeItem = (id: string) => {
-    setScheduleItems(scheduleItems.filter(item => item.id !== id));
+    setScheduleItems(scheduleItems.filter((item) => item.id !== id));
     toast({
       title: "Removed from schedule",
-      description: "Item deleted successfully"
+      description: "Item deleted successfully",
     });
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'assignment': return '📝';
-      case 'study': return '📚';
-      case 'exam': return '🎯';
-      case 'note': return '📋';
-      default: return '📚';
+      case "assignment":
+        return "📝";
+      case "study":
+        return "📚";
+      case "exam":
+        return "🎯";
+      case "note":
+        return "📋";
+      default:
+        return "📚";
     }
   };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'assignment': return 'bg-red-500/20 text-red-700 border-red-500/30';
-      case 'study': return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
-      case 'exam': return 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30';
-      case 'note': return 'bg-green-500/20 text-green-700 border-green-500/30';
-      default: return 'bg-gray-500/20 text-gray-700 border-gray-500/30';
+      case "assignment":
+        return "bg-red-500/20 text-red-700 border-red-500/30";
+      case "study":
+        return "bg-blue-500/20 text-blue-700 border-blue-500/30";
+      case "exam":
+        return "bg-yellow-500/20 text-yellow-700 border-yellow-500/30";
+      case "note":
+        return "bg-green-500/20 text-green-700 border-green-500/30";
+      default:
+        return "bg-gray-500/20 text-gray-700 border-gray-500/30";
     }
   };
 
@@ -104,22 +139,26 @@ const ScheduleChart = ({ scheduleItems: externalItems = [] }: ScheduleChartProps
             <Input
               placeholder="Task title..."
               value={newItem.title}
-              onChange={(e) => setNewItem({...newItem, title: e.target.value})}
+              onChange={(e) =>
+                setNewItem({ ...newItem, title: e.target.value })
+              }
             />
             <Input
               type="date"
               value={newItem.date}
-              onChange={(e) => setNewItem({...newItem, date: e.target.value})}
+              onChange={(e) => setNewItem({ ...newItem, date: e.target.value })}
             />
             <Input
               type="time"
               value={newItem.time}
-              onChange={(e) => setNewItem({...newItem, time: e.target.value})}
+              onChange={(e) => setNewItem({ ...newItem, time: e.target.value })}
             />
-            <select 
+            <select
               className="px-3 py-2 rounded-md border border-input bg-background"
               value={newItem.type}
-              onChange={(e) => setNewItem({...newItem, type: e.target.value as any})}
+              onChange={(e) =>
+                setNewItem({ ...newItem, type: e.target.value as any })
+              }
             >
               <option value="study">Study</option>
               <option value="assignment">Assignment</option>
@@ -142,7 +181,10 @@ const ScheduleChart = ({ scheduleItems: externalItems = [] }: ScheduleChartProps
             </div>
           ) : (
             sortedItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/10 border">
+              <div
+                key={item.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-secondary/10 border"
+              >
                 <div className="flex items-center gap-3">
                   <span className="text-xl">{getTypeIcon(item.type)}</span>
                   <div>
@@ -156,9 +198,7 @@ const ScheduleChart = ({ scheduleItems: externalItems = [] }: ScheduleChartProps
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge className={getTypeColor(item.type)}>
-                    {item.type}
-                  </Badge>
+                  <Badge className={getTypeColor(item.type)}>{item.type}</Badge>
                   <Button
                     variant="ghost"
                     size="sm"

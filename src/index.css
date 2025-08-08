@@ -43,11 +43,19 @@ All colors MUST be HSL.
     --cyber-grid: 195 80% 80%;
     --cyber-grid-glow: 195 90% 85%;
     --cyber-bg: 215 50% 3%;
-    
+
     /* Gradients */
-    --gradient-cyber: linear-gradient(135deg, hsl(195 100% 50%) 0%, hsl(185 100% 60%) 100%);
-    --gradient-glow: linear-gradient(45deg, hsl(195 100% 50%), hsl(185 100% 60%));
-    
+    --gradient-cyber: linear-gradient(
+      135deg,
+      hsl(195 100% 50%) 0%,
+      hsl(185 100% 60%) 100%
+    );
+    --gradient-glow: linear-gradient(
+      45deg,
+      hsl(195 100% 50%),
+      hsl(185 100% 60%)
+    );
+
     /* Animations */
     --transition-cyber: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --glow-shadow: 0 0 20px hsl(195 100% 50% / 0.3);
@@ -123,8 +131,10 @@ All colors MUST be HSL.
     left: 0;
     width: 100%;
     height: 100%;
-    background-image: 
-      linear-gradient(hsl(195 80% 80% / 0.12) 0.3px, transparent 0.3px),
+    background-image: linear-gradient(
+        hsl(195 80% 80% / 0.12) 0.3px,
+        transparent 0.3px
+      ),
       linear-gradient(90deg, hsl(195 80% 80% / 0.12) 0.3px, transparent 0.3px);
     background-size: 50px 50px;
     animation: grid-pulse 3s ease-in-out infinite alternate;
@@ -179,7 +189,7 @@ All colors MUST be HSL.
   }
 
   .speech-bubble::after {
-    content: '';
+    content: "";
     position: absolute;
     bottom: -8px;
     left: 50%;
@@ -204,49 +214,60 @@ All colors MUST be HSL.
   .spline-container {
     position: relative;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 70%, transparent 100%);
-    box-shadow: 
-      0 0 60px rgba(0,0,0,0.9),
-      inset 0 0 80px rgba(0,0,0,0.6),
+    background: radial-gradient(
+      circle,
+      rgba(0, 0, 0, 0.8) 0%,
+      rgba(0, 0, 0, 0.4) 70%,
+      transparent 100%
+    );
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.9), inset 0 0 80px rgba(0, 0, 0, 0.6),
       0 0 120px hsl(var(--primary) / 0.2);
     animation: spline-glow 3s ease-in-out infinite alternate;
   }
 
   .spline-container::before {
-    content: '';
+    content: "";
     position: absolute;
     top: -10px;
     left: -10px;
     right: -10px;
     bottom: -10px;
     border-radius: 50%;
-    background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.3) 100%);
+    background: radial-gradient(
+      circle,
+      transparent 60%,
+      rgba(0, 0, 0, 0.3) 100%
+    );
     z-index: -1;
   }
 }
 
 @keyframes grid-pulse {
-  0% { opacity: 0.6; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 @keyframes cyber-glow {
-  0% { 
+  0% {
     box-shadow: 0 0 10px hsl(var(--cyber-grid) / 0.3);
     background: hsl(var(--cyber-grid) / 0.15);
   }
-  100% { 
+  100% {
     box-shadow: 0 0 20px hsl(var(--cyber-grid) / 0.6);
     background: hsl(var(--cyber-grid) / 0.25);
   }
 }
 
 @keyframes path-glow {
-  0% { 
+  0% {
     opacity: 0.5;
     box-shadow: 0 0 8px hsl(var(--cyber-grid) / 0.4);
   }
-  100% { 
+  100% {
     opacity: 1;
     box-shadow: 0 0 15px hsl(var(--cyber-grid) / 0.8);
   }
@@ -275,16 +296,12 @@ All colors MUST be HSL.
 }
 
 @keyframes spline-glow {
-  0% { 
-    box-shadow: 
-      0 0 60px rgba(0,0,0,0.9),
-      inset 0 0 80px rgba(0,0,0,0.6),
+  0% {
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.9), inset 0 0 80px rgba(0, 0, 0, 0.6),
       0 0 120px hsl(var(--primary) / 0.2);
   }
-  100% { 
-    box-shadow: 
-      0 0 80px rgba(0,0,0,0.95),
-      inset 0 0 100px rgba(0,0,0,0.7),
+  100% {
+    box-shadow: 0 0 80px rgba(0, 0, 0, 0.95), inset 0 0 100px rgba(0, 0, 0, 0.7),
       0 0 150px hsl(var(--primary) / 0.3);
   }
 }
