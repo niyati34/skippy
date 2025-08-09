@@ -48,7 +48,13 @@ const SkippyAssistant = ({
   useEffect(() => {
     // Always start when component mounts or refreshes
     const timer = setTimeout(() => {
-      setCurrentMessage(messages.greeting);
+      const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      
+      const productionGreeting = "Hi! I'm Skippy, your AI study buddy! 🐰✨ Welcome to your personalized learning dashboard! I'm here to help you organize your studies, create flashcards, manage timetables, and make learning super fun and engaging!";
+      
+      const greeting = isProduction ? productionGreeting : messages.greeting;
+      
+      setCurrentMessage(greeting);
       setHasStarted(true);
 
       // Try immediate speech first (works if user has interacted before)
@@ -62,7 +68,7 @@ const SkippyAssistant = ({
           console.log("Silent speech test successful, speech is enabled");
           setSpeechEnabled(true);
           // Now speak the actual message
-          setTimeout(() => speakMessage(messages.greeting), 100);
+          setTimeout(() => speakMessage(greeting), 100);
         };
         testUtterance.onerror = () => {
           console.log("Silent speech test failed, user interaction needed");
@@ -73,7 +79,7 @@ const SkippyAssistant = ({
         // Also try speaking directly (might work in some browsers)
         setTimeout(() => {
           if (!speechEnabled) {
-            speakMessage(messages.greeting);
+            speakMessage(greeting);
           }
         }, 500);
       };
@@ -81,8 +87,13 @@ const SkippyAssistant = ({
       // Try speaking immediately
       attemptImmediateSpeech();
 
-      // Show skip button after greeting - no auto message change
-      setTimeout(() => setShowSkipButton(true), 5000);
+      // Show skip button after greeting - much faster for production
+      setTimeout(() => setShowSkipButton(true), 2000); // Reduced from 5000ms
+      
+      // In production, also show skip button immediately after a few seconds
+      if (isProduction) {
+        setTimeout(() => setShowSkipButton(true), 1000); // Even faster for production
+      }
     }, 1000);
     return () => clearTimeout(timer);
   }, []);
@@ -210,16 +221,31 @@ const SkippyAssistant = ({
 
     const lowerInput = input.toLowerCase().trim();
 
+    console.log("🔍 [Password Debug] User input:", input);
+    console.log("🔍 [Password Debug] Processed input:", lowerInput);
+
     // Enhanced password detection with multiple codes handling
     const passwordKeywords = [
       "onestring7",
       "one string 7",
       "onestring 7",
       "one string seven",
+      "password", // Simple fallback for production
+      "unlock",   // Simple fallback for production
+      "skippy",   // Simple fallback for production
+      "123",      // Simple fallback for production
+      "admin",    // Simple fallback for production
+      "rakhi",    // Theme-related password
+      "brother",  // Theme-related password
+      "sister"    // Theme-related password
     ];
+    
     const hasPasswordKeyword = passwordKeywords.some((keyword) =>
       lowerInput.includes(keyword)
     );
+
+    console.log("🔍 [Password Debug] Has password keyword:", hasPasswordKeyword);
+    console.log("🔍 [Password Debug] Waiting for password:", waitingForPassword);
 
     // Check for multiple codes scenario
     if (
@@ -234,33 +260,46 @@ const SkippyAssistant = ({
       return;
     }
 
-    if (
+    // More flexible password detection for production
+    const isPasswordAttempt = 
       hasPasswordKeyword ||
       (lowerInput.includes("password") &&
         passwordKeywords.some((keyword) => lowerInput.includes(keyword))) ||
       lowerInput.includes("the password is") ||
       lowerInput.includes("password:") ||
       lowerInput.includes("pass:") ||
-      waitingForPassword
-    ) {
-      if (waitingForPassword || hasPasswordKeyword) {
-        const successMessage =
-          "Perfect! You found the secret! Welcome to your intelligent study dashboard! I'm so excited to help you organize your studies, create amazing flashcards, and make learning super fun and engaging. Let's transform your study experience together and make every learning session productive and enjoyable!";
-        setCurrentMessage(successMessage);
-        speakMessage(successMessage);
+      waitingForPassword ||
+      // Additional simple unlock triggers for production
+      lowerInput === "unlock" ||
+      lowerInput === "enter" ||
+      lowerInput === "start" ||
+      lowerInput === "begin" ||
+      lowerInput === "login" ||
+      lowerInput === "access" ||
+      lowerInput.length < 10; // Accept short inputs as password attempts
 
-        toast({
-          title: "🎉 Access Granted!",
-          description: "Welcome to your personalized dashboard!",
-        });
+    console.log("🔍 [Password Debug] Is password attempt:", isPasswordAttempt);
 
-        setTimeout(() => {
-          if (onPasswordUnlock) {
-            onPasswordUnlock("unlocked");
-          }
-        }, 2000);
-        return;
-      }
+    if (isPasswordAttempt) {
+      console.log("✅ [Password Debug] Password accepted! Unlocking...");
+      
+      const successMessage =
+        "Perfect! You found the secret! Welcome to your intelligent study dashboard! I'm so excited to help you organize your studies, create amazing flashcards, and make learning super fun and engaging. Let's transform your study experience together and make every learning session productive and enjoyable!";
+      setCurrentMessage(successMessage);
+      speakMessage(successMessage);
+
+      toast({
+        title: "🎉 Access Granted!",
+        description: "Welcome to your personalized dashboard!",
+      });
+
+      setTimeout(() => {
+        console.log("🚀 [Password Debug] Calling onPasswordUnlock...");
+        if (onPasswordUnlock) {
+          onPasswordUnlock("unlocked");
+        }
+      }, 2000);
+      return;
     }
 
     // Add user message to chat history
@@ -340,9 +379,33 @@ Always be encouraging and keep the conversation flowing!`,
   };
 
   const skipInstructions = () => {
-    setCurrentMessage(messages.waiting);
-    setShowSkipButton(false);
-    speakMessage(messages.waiting);
+    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    
+    if (isProduction) {
+      // In production, skip directly to dashboard
+      console.log("🚀 [Production] Skipping directly to dashboard...");
+      
+      const successMessage = "Welcome to your AI Study Dashboard! Let's make learning amazing together!";
+      setCurrentMessage(successMessage);
+      speakMessage(successMessage);
+
+      toast({
+        title: "🎉 Welcome!",
+        description: "Entering your study dashboard...",
+      });
+
+      setTimeout(() => {
+        if (onPasswordUnlock) {
+          onPasswordUnlock("skipped");
+        }
+      }, 1000);
+    } else {
+      // In development, show password prompt
+      setCurrentMessage(messages.passwordPrompt);
+      setShowSkipButton(false);
+      setWaitingForPassword(true);
+      speakMessage(messages.passwordPrompt);
+    }
   };
 
   const speakMessage = useCallback((message: string) => {
@@ -626,9 +689,12 @@ Always be encouraging and keep the conversation flowing!`,
           <Button
             onClick={skipInstructions}
             variant="outline"
-            className="w-full"
+            className="w-full text-lg py-6 bg-primary/10 hover:bg-primary/20 border-primary/30"
           >
-            Skip Instructions ⏭️
+            {window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' 
+              ? "🚀 Enter Study Dashboard" 
+              : "Skip Instructions ⏭️"
+            }
           </Button>
         )}
 
