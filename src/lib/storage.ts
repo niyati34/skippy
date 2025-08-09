@@ -29,6 +29,31 @@ export interface StoredScheduleItem {
   createdAt: string;
 }
 
+// Enhanced Timetable Storage for day-wise organization
+export interface TimetableClass {
+  id: string;
+  title: string;
+  time: string;
+  endTime?: string;
+  room?: string;
+  instructor?: string;
+  day: "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+  type: "class" | "lab" | "lecture" | "tutorial" | "seminar";
+  source?: string;
+  createdAt: string;
+  recurring: boolean;
+}
+
+export interface DayWiseTimetable {
+  Monday: TimetableClass[];
+  Tuesday: TimetableClass[];
+  Wednesday: TimetableClass[];
+  Thursday: TimetableClass[];
+  Friday: TimetableClass[];
+  Saturday: TimetableClass[];
+  Sunday: TimetableClass[];
+}
+
 // Flashcards Storage
 export const FlashcardStorage = {
   save: (flashcards: StoredFlashcard[]) => {
@@ -261,5 +286,109 @@ export const FileHistoryStorage = {
     existing.push(newFile);
     FileHistoryStorage.save(existing);
     return newFile;
+  },
+};
+
+// Day-wise Timetable Storage
+export const TimetableStorage = {
+  save: (timetable: DayWiseTimetable) => {
+    try {
+      localStorage.setItem("skippy-timetable", JSON.stringify(timetable));
+      console.log("💾 Timetable saved:", timetable);
+    } catch (error) {
+      console.error("Error saving timetable:", error);
+    }
+  },
+
+  load: (): DayWiseTimetable => {
+    try {
+      const stored = localStorage.getItem("skippy-timetable");
+      if (stored) {
+        return JSON.parse(stored);
+      }
+      return TimetableStorage.getEmptyTimetable();
+    } catch (error) {
+      console.error("Error loading timetable:", error);
+      return TimetableStorage.getEmptyTimetable();
+    }
+  },
+
+  getEmptyTimetable: (): DayWiseTimetable => ({
+    Monday: [],
+    Tuesday: [],
+    Wednesday: [],
+    Thursday: [],
+    Friday: [],
+    Saturday: [],
+    Sunday: [],
+  }),
+
+  addClasses: (classes: TimetableClass[]) => {
+    const timetable = TimetableStorage.load();
+    
+    classes.forEach(newClass => {
+      // Check if class already exists for this day
+      const existingClasses = timetable[newClass.day];
+      const duplicate = existingClasses.find(existing => 
+        existing.title === newClass.title && 
+        existing.time === newClass.time &&
+        existing.day === newClass.day
+      );
+      
+      if (!duplicate) {
+        timetable[newClass.day].push(newClass);
+        console.log(`📅 Added class: ${newClass.title} on ${newClass.day} at ${newClass.time}`);
+      } else {
+        console.log(`⚠️ Duplicate class skipped: ${newClass.title} on ${newClass.day}`);
+      }
+    });
+    
+    TimetableStorage.save(timetable);
+    return timetable;
+  },
+
+  removeClass: (classId: string) => {
+    const timetable = TimetableStorage.load();
+    let removed = false;
+    
+    Object.keys(timetable).forEach(day => {
+      const dayKey = day as keyof DayWiseTimetable;
+      const originalLength = timetable[dayKey].length;
+      timetable[dayKey] = timetable[dayKey].filter(cls => cls.id !== classId);
+      if (timetable[dayKey].length < originalLength) {
+        removed = true;
+        console.log(`🗑️ Removed class from ${day}`);
+      }
+    });
+    
+    if (removed) {
+      TimetableStorage.save(timetable);
+    }
+    return timetable;
+  },
+
+  clearDay: (day: keyof DayWiseTimetable) => {
+    const timetable = TimetableStorage.load();
+    timetable[day] = [];
+    TimetableStorage.save(timetable);
+    console.log(`🧹 Cleared all classes for ${day}`);
+    return timetable;
+  },
+
+  clearAll: () => {
+    const emptyTimetable = TimetableStorage.getEmptyTimetable();
+    TimetableStorage.save(emptyTimetable);
+    console.log("🧹 Cleared entire timetable");
+    return emptyTimetable;
+  },
+
+  getClassesForDay: (day: keyof DayWiseTimetable): TimetableClass[] => {
+    const timetable = TimetableStorage.load();
+    return timetable[day] || [];
+  },
+
+  getAllClasses: (): TimetableClass[] => {
+    const timetable = TimetableStorage.load();
+    return Object.values(timetable).flat();
   },
 };

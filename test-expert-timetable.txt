@@ -1,0 +1,69 @@
+# Complex Weekly Timetable - Fall 2025
+
+## MONDAY SCHEDULE
+07:30-08:30 UI/UX Design – Prof. Smith – MA201
+08:30-09:30 Biotechnology Lab – Dr. Kumar – MA206  
+09:00-10:30 Project Session – Team A – MA213-A
+09:30-10:30 Biotechnology Theory – Dr. Kumar – MA206
+10:30-11:00 ☕ Tea Break
+11:00-12:00 Cloud Development – Prof. Jones – MA205
+12:00-12:30 Library Session – MC316
+12:00-01:00 Artificial Intelligence – Prof. Taylor – MC316
+12:30-01:30 Major Project 1 – MA210
+
+## TUESDAY SCHEDULE  
+07:30-08:30 Biotechnology Theory – Dr. Kumar – MA206
+08:30-09:30 Natural Language Processing – Dr. Chen – MA206
+09:00-10:30 UI/UX Workshop – Prof. Smith – MA205
+09:30-10:30 Major Project Discussion – MA211
+10:30-11:00 ☕ Tea Break
+11:00-12:00 Data Warehousing & Mining – Prof. Patel – MA206
+12:00-12:30 Library Research – MC315
+12:00-01:00 AI Practical Session – Prof. Taylor – MC315
+12:30-01:30 Project Work – MA210
+
+## WEDNESDAY SCHEDULE
+07:30-08:30 NLP Advanced Topics – Dr. Chen – MA206
+09:00-10:30 Cloud Development Lab – Prof. Jones – MB302
+09:30-10:30 NLP Tutorial – Dr. Chen – MA206
+10:30-11:00 ☕ Coffee Break
+11:00-12:00 Data Mining Practical – Prof. Patel – MA206
+12:00-12:30 Library Study – MC222
+12:00-01:00 DWDM Lab Session – Prof. Patel – MC222
+12:30-01:30 Individual Project – MA210
+
+## THURSDAY SCHEDULE
+07:30-08:30 Development Workshop – Prof. Wilson – MA210
+08:30-09:30 Advanced Development – Prof. Wilson – MA210
+09:00-10:30 Data Warehousing Lab – Prof. Patel – MC221
+10:30-11:00 ☕ Morning Break
+11:00-12:00 AI Research Seminar – Prof. Taylor – MA205
+12:00-01:00 Capstone Project – Team Sessions – MA210
+01:00-02:00 🍽️ Lunch Break
+02:00-03:30 Machine Learning Workshop – Dr. Anderson – MC316
+
+## FRIDAY SCHEDULE
+07:30-08:30 Project Presentation Prep – Various Faculty – MA210
+08:30-09:30 Industry Interface Session – Guest Speakers – Auditorium
+09:00-10:30 Comprehensive Lab Session – All Faculty – Multiple Labs
+10:30-11:00 ☕ Final Break
+11:00-12:30 Weekly Review & Assessment – Course Coordinators – MA201
+12:30-01:30 Free Study Period – Library/Labs
+01:30-02:30 🍽️ Extended Lunch
+02:30-04:00 Extra-curricular Activities – Student Council – Campus
+
+## IMPORTANT NOTES:
+- All times are in 24-hour format for precision
+- Room codes: MA=Main Academic Block, MC=Modern Computing Labs, MB=Modern Block
+- Faculty initials: PS=Prof. Smith, SKS=Dr. Kumar, etc.
+- Some sessions have overlapping times for different groups
+- Break times are consistent across all days
+- Weekend sessions available on request
+
+## ROOM DETAILS:
+- MA201-MA213: Lecture Halls (Capacity 60-80)
+- MC315-MC316: Computer Labs (30 systems each)
+- MB302: Modern Classroom with AV facilities
+- Auditorium: Main presentation hall (200 capacity)
+
+This is a comprehensive timetable with overlapping sessions, multiple faculty, various room types, and complex scheduling patterns that will test the expert extraction capabilities.

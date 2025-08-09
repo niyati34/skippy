@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import CyberGrid from '@/components/CyberGrid';
-import SkippyAssistant from '@/components/SkippyAssistant';
-import StudyDashboard from '@/components/StudyDashboard';
+import { useState } from "react";
+import CyberGrid from "@/components/CyberGrid";
+import SkippyAssistant from "@/components/SkippyAssistant";
+import StudyDashboard from "@/components/StudyDashboard";
 
 const Index = () => {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -15,10 +15,10 @@ const Index = () => {
     <div className="min-h-screen relative overflow-hidden">
       {/* Cyber Grid Background */}
       <CyberGrid />
-      
+
       {/* Main Content */}
       {!isUnlocked ? (
-        <SkippyAssistant 
+        <SkippyAssistant
           onPasswordUnlock={handlePasswordUnlock}
           isUnlocked={isUnlocked}
         />

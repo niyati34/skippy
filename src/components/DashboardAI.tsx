@@ -37,6 +37,7 @@ import {
   ChatMessage,
   analyzeFileContent,
   generateScheduleFromContent,
+  generateTimetableFromContent,
   generateFlashcards,
   generateFunLearning,
   generateNotesFromContent,
@@ -51,6 +52,7 @@ import {
   FlashcardStorage,
   NotesStorage,
   ScheduleStorage,
+  TimetableStorage,
   FileHistoryStorage,
 } from "@/lib/storage";
 
@@ -67,6 +69,30 @@ const DashboardAI = ({
   onFunLearningUpdate,
   onNotesUpdate,
 }: DashboardAIProps) => {
+  // Generate day-wise summary for Google Calendar style display
+  const generateDayWiseSummary = (classes: any[]): string => {
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let summary = "";
+    
+    days.forEach(day => {
+      const dayClasses = classes.filter(cls => cls.day === day);
+      if (dayClasses.length > 0) {
+        // Sort by time
+        dayClasses.sort((a, b) => a.time.localeCompare(b.time));
+        
+        summary += `\n**${day}:** `;
+        const classDetails = dayClasses.map(cls => {
+          const timeRange = cls.endTime ? `${cls.time}-${cls.endTime}` : cls.time;
+          const location = cls.room ? ` (${cls.room})` : "";
+          return `${timeRange} ${cls.title}${location}`;
+        });
+        summary += classDetails.join(", ");
+      }
+    });
+    
+    return summary;
+  };
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -365,6 +391,61 @@ const DashboardAI = ({
               );
               return;
             }
+          }
+        }
+
+        // Handle timetable content for day-wise organization
+        if (
+          file.name.toLowerCase().includes("timetable") ||
+          file.name.toLowerCase().includes("class") ||
+          file.name.toLowerCase().includes("schedule") ||
+          content.toLowerCase().includes("monday") ||
+          content.toLowerCase().includes("tuesday") ||
+          content.toLowerCase().includes("weekly")
+        ) {
+          console.log("🗓️ Timetable detected, extracting day-wise classes...");
+          try {
+            const timetableClasses = await generateTimetableFromContent(content, file.name);
+            console.log("🗓️ Extracted timetable classes:", timetableClasses);
+
+            if (timetableClasses.length > 0) {
+              // Store in day-wise timetable
+              const updatedTimetable = TimetableStorage.addClasses(timetableClasses);
+              
+              // Generate day-wise summary for user
+              const daysSummary = generateDayWiseSummary(timetableClasses);
+              
+              const successMessage: ChatMessage = {
+                role: "assistant",
+                content: `🎉 **Expert Timetable Extraction Complete!** 📅\n\n**${file.name}** has been processed with Google Calendar-style organization!\n\n✅ **Extracted:** ${timetableClasses.length} classes organized by days\n📊 **Day-wise Summary:**\n${daysSummary}\n\n🔄 **Recurring:** All classes repeat weekly\n📅 **Storage:** Organized Monday-Sunday for perfect display\n\n**Perfect!** Check the Weekly Timetable tab to see your expertly organized schedule! 🚀`,
+              };
+              setMessages((prev) => [...prev, successMessage]);
+              
+              // Also convert timetable classes to calendar items for the regular schedule view
+              const calendarItems = timetableClasses.map(cls => ({
+                id: cls.id,
+                title: cls.title,
+                date: new Date().toISOString().split('T')[0], // Today's date as placeholder
+                time: cls.time,
+                endTime: cls.endTime,
+                type: "class" as const,
+                priority: "medium" as const,
+                description: `${cls.type} - ${cls.day}${cls.room ? ` in ${cls.room}` : ''}${cls.instructor ? ` with ${cls.instructor}` : ''}`,
+                room: cls.room,
+                instructor: cls.instructor,
+                recurring: true,
+                source: file.name
+              }));
+              
+              onScheduleUpdate(calendarItems);
+              
+              speakMessageWithElevenLabs(
+                `Excellent! I've organized your timetable with ${timetableClasses.length} classes by days of the week. Your weekly schedule is now ready!`
+              );
+              return;
+            }
+          } catch (timetableError) {
+            console.error("🗓️ Timetable extraction failed:", timetableError);
           }
         }
 

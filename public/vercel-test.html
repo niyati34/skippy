@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>🚀 Vercel Deployment Test - Skippy AI</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      }
+      .status {
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+        border-left: 5px solid;
+      }
+      .success {
+        background: rgba(34, 197, 94, 0.2);
+        border-color: #22c55e;
+        color: #dcfce7;
+      }
+      .error {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: #ef4444;
+        color: #fecaca;
+      }
+      .info {
+        background: rgba(59, 130, 246, 0.2);
+        border-color: #3b82f6;
+        color: #dbeafe;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 30px;
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-size: 2.5em;
+        font-weight: bold;
+      }
+      .test-button {
+        display: inline-block;
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        color: white;
+        padding: 15px 30px;
+        border-radius: 25px;
+        text-decoration: none;
+        font-weight: bold;
+        margin: 10px;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      .test-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+      }
+      .test-result {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        font-family: monospace;
+        color: #e5e7eb;
+      }
+      pre {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 15px;
+        border-radius: 8px;
+        overflow-x: auto;
+        color: #fbbf24;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚀 Vercel Deployment Test</h1>
+
+      <div class="info">
+        <h2>🔧 Deployment Status</h2>
+        <div id="deployment-info">
+          <p><strong>Environment:</strong> <span id="environment">Detecting...</span></p>
+          <p><strong>URL:</strong> <span id="current-url"></span></p>
+          <p><strong>API Endpoint:</strong> <span id="api-endpoint"></span></p>
+        </div>
+      </div>
+
+      <div class="status" id="api-status">
+        <h2>🔗 API Connection Test</h2>
+        <p>Testing Azure OpenAI proxy connection...</p>
+        <button class="test-button" onclick="testAPIConnection()">Test API Connection</button>
+        <div id="api-result" class="test-result" style="display: none;"></div>
+      </div>
+
+      <div class="info">
+        <h2>📋 Deployment Checklist</h2>
+        <ul>
+          <li id="check-env">⏳ Environment Variables</li>
+          <li id="check-api">⏳ API Proxy Function</li>
+          <li id="check-cors">⏳ CORS Configuration</li>
+          <li id="check-build">⏳ Build Process</li>
+        </ul>
+      </div>
+
+      <div class="success">
+        <h2>🎯 Quick Tests</h2>
+        <button class="test-button" onclick="testMainApp()">Test Main App</button>
+        <button class="test-button" onclick="testTimetableDemo()">Test Timetable System</button>
+        <button class="test-button" onclick="testExpertExtraction()">Test Expert Extraction</button>
+      </div>
+
+      <div id="instructions" class="info">
+        <h2>📖 Next Steps</h2>
+        <ol>
+          <li><strong>If all tests pass:</strong> Your deployment is successful! 🎉</li>
+          <li><strong>If API fails:</strong> Check environment variables in Vercel dashboard</li>
+          <li><strong>If CORS errors:</strong> Verify the serverless function is deployed</li>
+          <li><strong>For issues:</strong> Check Vercel function logs in dashboard</li>
+        </ol>
+      </div>
+
+    </div>
+
+    <script>
+      // Detect environment and set up info
+      const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      const currentUrl = window.location.href;
+      const apiEndpoint = isProduction ? '/api/azure-openai/chat' : 'http://localhost:5174/api/azure-openai/chat';
+
+      document.getElementById('environment').textContent = isProduction ? 'Production (Vercel)' : 'Development (Local)';
+      document.getElementById('current-url').textContent = currentUrl;
+      document.getElementById('api-endpoint').textContent = apiEndpoint;
+
+      // Test API connection
+      async function testAPIConnection() {
+        const resultDiv = document.getElementById('api-result');
+        const statusDiv = document.getElementById('api-status');
+        
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<p>🔄 Testing API connection...</p>';
+        
+        try {
+          const testPayload = {
+            messages: [
+              { role: 'user', content: 'Hello, this is a test. Please respond with "API connection successful!"' }
+            ],
+            options: { max_tokens: 50 }
+          };
+
+          console.log('Testing API endpoint:', apiEndpoint);
+          
+          const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(testPayload)
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const content = data?.choices?.[0]?.message?.content || 'No content received';
+            
+            statusDiv.className = 'status success';
+            resultDiv.innerHTML = `
+              <p>✅ <strong>API Connection Successful!</strong></p>
+              <p><strong>Status:</strong> ${response.status} OK</p>
+              <p><strong>Response:</strong></p>
+              <pre>${content}</pre>
+            `;
+            
+            // Update checklist
+            document.getElementById('check-env').innerHTML = '✅ Environment Variables';
+            document.getElementById('check-api').innerHTML = '✅ API Proxy Function';
+            document.getElementById('check-cors').innerHTML = '✅ CORS Configuration';
+            document.getElementById('check-build').innerHTML = '✅ Build Process';
+            
+          } else {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
+        } catch (error) {
+          console.error('API test failed:', error);
+          statusDiv.className = 'status error';
+          resultDiv.innerHTML = `
+            <p>❌ <strong>API Connection Failed</strong></p>
+            <p><strong>Error:</strong> ${error.message}</p>
+            <p><strong>Check:</strong></p>
+            <ul>
+              <li>Environment variables in Vercel dashboard</li>
+              <li>Azure OpenAI service status</li>
+              <li>API key permissions</li>
+              <li>Vercel function logs</li>
+            </ul>
+          `;
+          
+          // Update checklist
+          document.getElementById('check-env').innerHTML = '❌ Environment Variables (Check Vercel dashboard)';
+          document.getElementById('check-api').innerHTML = '❌ API Proxy Function (Check deployment)';
+        }
+      }
+
+      // Quick test functions
+      function testMainApp() {
+        window.open(isProduction ? '/' : 'http://localhost:8080/', '_blank');
+      }
+
+      function testTimetableDemo() {
+        window.open('./test-date-wise-classes.html', '_blank');
+      }
+
+      function testExpertExtraction() {
+        window.open('./test-expert-extraction.html', '_blank');
+      }
+
+      // Auto-test on page load
+      setTimeout(() => {
+        console.log('🚀 Vercel Deployment Test Page Loaded');
+        console.log('Environment:', isProduction ? 'Production' : 'Development');
+        console.log('API Endpoint:', apiEndpoint);
+      }, 1000);
+    </script>
+  </body>
+</html>

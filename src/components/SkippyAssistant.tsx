@@ -212,12 +212,10 @@ const SkippyAssistant = ({
 
     // Enhanced password detection with multiple codes handling
     const passwordKeywords = [
-      "surprise",
-      "birthday",
-      "gift",
-      "present",
-      "rakhi2025",
-      "rakhi 2025",
+      "onestring7",
+      "one string 7",
+      "onestring 7",
+      "one string seven",
     ];
     const hasPasswordKeyword = passwordKeywords.some((keyword) =>
       lowerInput.includes(keyword)

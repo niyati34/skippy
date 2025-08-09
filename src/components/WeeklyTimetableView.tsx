@@ -3,6 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Calendar,
   ChevronLeft,
   ChevronRight,
@@ -14,9 +25,13 @@ import {
   FileText,
   Coffee,
   MapPin,
+  Trash2,
+  Edit,
+  Settings,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ScheduleStorage } from "@/lib/storage";
+import { ScheduleStorage, TimetableStorage, TimetableClass } from "@/lib/storage";
 
 interface CalendarItem {
   id: string;
@@ -101,17 +116,27 @@ const WeeklyTimetableView = ({
       recurring: (item as any).recurring || false,
     }));
 
-    const allItems = [...convertedStored, ...items];
+    console.log("📅 Loading timetable for current week...");
+    
+    // Generate timetable instances for the current week with specific dates
+    const weeklyTimetableItems = generateTimetableInstancesForWeek();
+    
+    const allItems = [...convertedStored, ...items, ...weeklyTimetableItems];
 
-    // Remove duplicates based on title and date
+    // Remove duplicates based on title, date, and time
     const uniqueItems = allItems.filter(
       (item, index, self) =>
         index ===
-        self.findIndex((i) => i.title === item.title && i.date === item.date)
+        self.findIndex((i) => 
+          i.title === item.title && 
+          i.date === item.date && 
+          i.time === item.time
+        )
     );
 
+    console.log("📅 Total calendar items loaded:", uniqueItems.length);
     setCalendarItems(uniqueItems);
-  }, [items]);
+  }, [items, currentWeek]); // Re-generate when week changes
 
   // Save to storage when items update
   useEffect(() => {
@@ -143,6 +168,51 @@ const WeeklyTimetableView = ({
     }
   }, [calendarItems.length]); // Only trigger when the count changes, not the items themselves
 
+  // Generate timetable instances for the current week with specific dates
+  const generateTimetableInstancesForWeek = (): CalendarItem[] => {
+    const timetableInstances: CalendarItem[] = [];
+    const weekStart = getWeekStart(currentWeek);
+    const timetableData = TimetableStorage.load();
+    
+    console.log("📅 Generating timetable for week starting:", weekStart.toDateString());
+    
+    // Generate instances for each day of the current week
+    days.forEach((dayName, dayIndex) => {
+      const dayClasses = timetableData[dayName as keyof typeof timetableData] || [];
+      
+      // Calculate the actual date for this day in the current week
+      const dayDate = new Date(weekStart);
+      dayDate.setDate(weekStart.getDate() + dayIndex);
+      const dayDateStr = dayDate.toISOString().split('T')[0];
+      
+      console.log(`📅 ${dayName} (${dayDateStr}): ${dayClasses.length} classes`);
+      
+      // Create calendar items for each class on this day
+      dayClasses.forEach((cls: TimetableClass) => {
+        const instance: CalendarItem = {
+          id: `${cls.id}-${dayDateStr}`, // Unique ID for this week instance
+          title: cls.title,
+          date: dayDateStr, // Specific date for this week
+          time: cls.time,
+          endTime: cls.endTime,
+          type: "class" as const,
+          priority: "medium" as const,
+          description: `${cls.type || 'Class'} - ${dayName}${cls.room ? ` in ${cls.room}` : ''}${cls.instructor ? ` with ${cls.instructor}` : ''}`,
+          room: cls.room,
+          instructor: cls.instructor,
+          recurring: true,
+          source: cls.source || "Weekly Timetable"
+        };
+        
+        timetableInstances.push(instance);
+        console.log(`  ⏰ ${cls.time} - ${cls.title} in ${cls.room || 'Room TBD'}`);
+      });
+    });
+    
+    console.log("📅 Generated", timetableInstances.length, "timetable instances for current week");
+    return timetableInstances;
+  };
+
   // Get start of current week (Monday)
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
@@ -163,58 +233,6 @@ const WeeklyTimetableView = ({
 
   // Get items for specific date and time
   const getItemsForSlot = (day: string, timeSlot: string) => {
-    // Get all items including recurring instances for this week
-    const weeklyRecurringInstances = generateRecurringClassesForWeek();
-    const allItemsThisWeek = [...calendarItems, ...weeklyRecurringInstances];
-    
-    const matchingItems = allItemsThisWeek.filter((item) => {
-      if (!item.time) return false;
-
-      // For current week items, match by exact date
-      const itemDate = new Date(item.date);
-      const currentWeekDates = getWeekDates();
-      const targetDate = currentWeekDates.find(d => {
-        const dayName = days[d.getDay() === 0 ? 6 : d.getDay() - 1];
-        return dayName === day;
-      });
-
-      if (!targetDate) return false;
-
-      // Check if this item is for the target date
-      const itemDateStr = item.date;
-      const targetDateStr = targetDate.toISOString().split('T')[0];
-
-      if (itemDateStr !== targetDateStr) {
-        return false;
-      }
-
-      const itemTime = item.time.replace(/[^\d:]/g, "").substring(0, 5);
-      const slotTime = timeSlot;
-
-      // Check if item falls within this time slot - RELAXED matching for timetables
-      const itemMinutes =
-        parseInt(itemTime.split(":")[0]) * 60 +
-        parseInt(itemTime.split(":")[1]);
-      const slotMinutes =
-        parseInt(slotTime.split(":")[0]) * 60 +
-        parseInt(slotTime.split(":")[1]);
-
-      // More lenient time matching - within 60 minutes for timetable classes
-      const timeDiff = Math.abs(itemMinutes - slotMinutes);
-      const matches = timeDiff < 60;
-
-      return matches;
-    });
-
-    return matchingItems;
-  };
-
-  // Get items for a specific day
-  const getItemsForDay = (day: string) => {
-    // Get all items including recurring instances for this week
-    const weeklyRecurringInstances = generateRecurringClassesForWeek();
-    const allItemsThisWeek = [...calendarItems, ...weeklyRecurringInstances];
-    
     const currentWeekDates = getWeekDates();
     const targetDate = currentWeekDates.find(d => {
       const dayName = days[d.getDay() === 0 ? 6 : d.getDay() - 1];
@@ -225,7 +243,54 @@ const WeeklyTimetableView = ({
 
     const targetDateStr = targetDate.toISOString().split('T')[0];
     
-    const dayItems = allItemsThisWeek
+    console.log(`🔍 Looking for items on ${day} (${targetDateStr}) at ${timeSlot}`);
+    
+    const matchingItems = calendarItems.filter((item) => {
+      if (!item.time) return false;
+
+      // Match exact date
+      if (item.date !== targetDateStr) {
+        return false;
+      }
+
+      const itemTime = item.time.replace(/[^\d:]/g, "").substring(0, 5);
+      const slotTime = timeSlot;
+
+      // Check if item falls within this time slot
+      const itemMinutes =
+        parseInt(itemTime.split(":")[0]) * 60 +
+        parseInt(itemTime.split(":")[1]);
+      const slotMinutes =
+        parseInt(slotTime.split(":")[0]) * 60 +
+        parseInt(slotTime.split(":")[1]);
+
+      // Match if item starts within 30 minutes of this slot
+      const timeDiff = Math.abs(itemMinutes - slotMinutes);
+      const matches = timeDiff <= 30;
+
+      if (matches) {
+        console.log(`  ✅ Found: ${item.title} at ${item.time} (${item.date})`);
+      }
+
+      return matches;
+    });
+
+    return matchingItems;
+  };
+
+  // Get items for a specific day
+  const getItemsForDay = (day: string) => {
+    const currentWeekDates = getWeekDates();
+    const targetDate = currentWeekDates.find(d => {
+      const dayName = days[d.getDay() === 0 ? 6 : d.getDay() - 1];
+      return dayName === day;
+    });
+
+    if (!targetDate) return [];
+
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+    
+    const dayItems = calendarItems
       .filter((item) => {
         return item.date === targetDateStr;
       })
@@ -235,52 +300,8 @@ const WeeklyTimetableView = ({
         return timeA.localeCompare(timeB);
       });
 
+    console.log(`📅 ${day} (${targetDateStr}): ${dayItems.length} items`);
     return dayItems;
-  };
-
-  // Generate recurring instances of timetable classes for current week
-  const generateRecurringClassesForWeek = () => {
-    const recurringInstances: CalendarItem[] = [];
-    const weekStart = getWeekStart(currentWeek);
-    
-    // Get all timetable/recurring classes - FIXED filtering logic
-    const timetableClasses = calendarItems.filter(item => {
-      // Include classes that are marked as recurring OR have class-like content
-      const isRecurring = item.recurring === true;
-      const isClassType = item.type === "class";
-      const hasClassKeywords = item.title?.toLowerCase().includes('class') ||
-                               item.title?.toLowerCase().includes('lecture') ||
-                               item.title?.toLowerCase().includes('lab') ||
-                               item.title?.toLowerCase().includes('tutorial') ||
-                               item.title?.toLowerCase().includes('session') ||
-                               item.title?.toLowerCase().includes('prof') ||
-                               item.title?.toLowerCase().includes('dr.') ||
-                               item.title?.toLowerCase().includes('-');
-      
-      return isRecurring || isClassType || hasClassKeywords;
-    });
-
-    timetableClasses.forEach(classItem => {
-      // Get the original day of week from the class
-      const originalDate = new Date(classItem.date);
-      const originalDayOfWeek = originalDate.getDay();
-      
-      // Calculate the date for this week
-      const thisWeekDate = new Date(weekStart);
-      const dayOffset = originalDayOfWeek === 0 ? 6 : originalDayOfWeek - 1; // Convert Sunday=0 to index 6
-      thisWeekDate.setDate(weekStart.getDate() + dayOffset);
-      
-      // Create a new instance for this week
-      const weeklyInstance: CalendarItem = {
-        ...classItem,
-        id: `${classItem.id}-week-${weekStart.getTime()}`,
-        date: thisWeekDate.toISOString().split('T')[0],
-      };
-      
-      recurringInstances.push(weeklyInstance);
-    });
-
-    return recurringInstances;
   };
 
   // Get today's items
@@ -368,6 +389,85 @@ const WeeklyTimetableView = ({
     };
   };
 
+  // Delete individual schedule item
+  const deleteScheduleItem = (itemId: string) => {
+    // Remove from local state
+    const updatedItems = calendarItems.filter(item => item.id !== itemId);
+    setCalendarItems(updatedItems);
+    
+    // Remove from regular schedule storage
+    ScheduleStorage.remove(itemId);
+    
+    // Check if this is a timetable class and remove from timetable storage too
+    const itemToDelete = calendarItems.find(item => item.id === itemId);
+    if (itemToDelete && (itemToDelete.recurring || itemToDelete.type === "class")) {
+      // Extract the base ID (remove the date suffix for weekly instances)
+      const baseId = itemId.split('-')[0];
+      TimetableStorage.removeClass(baseId);
+    }
+    
+    // Notify parent
+    onItemsUpdate?.(updatedItems);
+    
+    toast({
+      title: "Item deleted! 🗑️",
+      description: "Schedule item removed successfully.",
+    });
+  };
+
+  // Delete all schedule items
+  const deleteAllScheduleItems = () => {
+    setCalendarItems([]);
+    ScheduleStorage.save([]);
+    onItemsUpdate?.([]);
+    
+    toast({
+      title: "All items deleted! 🗑️",
+      description: "All schedule items have been removed.",
+    });
+  };
+
+  // Delete all timetable/recurring items only
+  const deleteTimetableItems = () => {
+    const nonTimetableItems = calendarItems.filter(item => {
+      const isRecurring = item.recurring === true;
+      const isClassType = item.type === "class";
+      const hasClassKeywords = item.title?.toLowerCase().includes('class') ||
+                               item.title?.toLowerCase().includes('lecture') ||
+                               item.title?.toLowerCase().includes('lab') ||
+                               item.title?.toLowerCase().includes('prof') ||
+                               item.title?.toLowerCase().includes('dr.');
+      
+      return !(isRecurring || isClassType || hasClassKeywords);
+    });
+    
+    setCalendarItems(nonTimetableItems);
+    
+    // Clear day-wise timetable storage
+    TimetableStorage.clearAll();
+    
+    // Update regular schedule storage
+    const storageItems = nonTimetableItems.map(item => ({
+      id: item.id,
+      title: item.title,
+      time: item.time || "00:00",
+      date: item.date,
+      type: item.type === "class" || item.type === "break" || item.type === "reminder" || item.type === "project" 
+        ? "study" as const 
+        : item.type as "assignment" | "study" | "exam" | "note",
+      source: item.source,
+      createdAt: new Date().toISOString(),
+    }));
+    ScheduleStorage.save(storageItems);
+    
+    onItemsUpdate?.(nonTimetableItems);
+    
+    toast({
+      title: "Timetable cleared! 🗑️",
+      description: "All timetable classes have been removed from day-wise storage.",
+    });
+  };
+
   const weekDates = getWeekDates();
   const todayItems = getTodayItems();
   const dueItems = getDueItems();
@@ -441,9 +541,35 @@ const WeeklyTimetableView = ({
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" className="capitalize">
-                        {item.type}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="capitalize">
+                          {item.type}
+                        </Badge>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 h-8 w-8 p-0">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Schedule Item</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete "{item.title}"? This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => deleteScheduleItem(item.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -527,6 +653,57 @@ const WeeklyTimetableView = ({
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
+        </div>
+        
+        {/* Management Buttons */}
+        <div className="flex items-center gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700">
+                <Settings className="w-4 h-4 mr-2" />
+                Clear Timetable
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear Timetable Classes</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will remove all timetable/recurring classes but keep other schedule items.
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={deleteTimetableItems} className="bg-orange-600 hover:bg-orange-700">
+                  Clear Timetable
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete All
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete All Schedule Items</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete all schedule items, assignments, classes, and notes.
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={deleteAllScheduleItems} className="bg-red-600 hover:bg-red-700">
+                  Delete All
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -635,7 +812,7 @@ const WeeklyTimetableView = ({
                                 key={item.id}
                                 className={`text-xs p-2 rounded border ${getTypeColor(
                                   item.type
-                                )} cursor-pointer hover:scale-105 transition-transform`}
+                                )} cursor-pointer hover:scale-105 transition-transform group relative`}
                                 title={`${item.title} - ${item.time}${
                                   item.room ? ` (${item.room})` : ""
                                 }`}
@@ -648,6 +825,36 @@ const WeeklyTimetableView = ({
                                     {item.room}
                                   </div>
                                 )}
+                                
+                                {/* Delete button - appears on hover */}
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="absolute top-0 right-0 w-5 h-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Schedule Item</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete "{item.title}"? This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        onClick={() => deleteScheduleItem(item.id)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
                             ))}
                           </div>

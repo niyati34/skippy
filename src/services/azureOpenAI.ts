@@ -36,9 +36,16 @@ export async function callAzureOpenAI(
   retries = 2 // Reduced for faster response
 ): Promise<string> {
   const directUrl = getCompletionsUrl();
-  const proxyUrl = `http://localhost:${
-    (import.meta as any)?.env?.VITE_PROXY_PORT || 5174
-  }/api/azure-openai/chat`;
+  
+  // Determine proxy URL based on environment
+  const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+  const proxyUrl = isProduction 
+    ? `/api/azure-openai/chat` // Vercel serverless function
+    : `http://localhost:${
+        (import.meta as any)?.env?.VITE_PROXY_PORT || 5174
+      }/api/azure-openai/chat`; // Local development
+
+  console.log(`[Azure OpenAI] Using ${isProduction ? 'production' : 'development'} proxy:`, proxyUrl);
 
   const call = async (useProxy: boolean) => {
     if (useProxy) {
@@ -50,7 +57,11 @@ export async function callAzureOpenAI(
           options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 }, // Increased tokens, lower temperature for speed
         }),
       });
-      if (!resp.ok) throw new Error(`Proxy error: ${resp.status}`);
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        console.error(`[Azure OpenAI] Proxy error:`, resp.status, errorText);
+        throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
+      }
       const data = await resp.json();
       return (
         data?.choices?.[0]?.message?.content ||
@@ -1904,6 +1915,311 @@ export async function generateScheduleFromContent(
   } catch {
     return [];
   }
+}
+
+// NEW: Enhanced timetable extraction for day-wise storage
+export async function generateTimetableFromContent(
+  content: string,
+  source: string = "PDF Upload"
+): Promise<any[]> {
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You are an expert at extracting and organizing timetable data. I will give you raw text containing timetable details in a messy format. Your task is to:
+
+1. Extract all timetable entries with their exact times, subjects, labs/classrooms, and faculty names.
+2. Arrange them in a day-wise structure for Monday to Sunday.
+3. Return ONLY a JSON array with precise time ranges and subject details.
+
+Each timetable class item must have:
+- id: unique identifier (uuid)
+- title: subject name (e.g., "Mathematics", "Physics Lab", "Computer Science")
+- day: exact day name ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+- time: start time in HH:MM format (24-hour, e.g., "09:00", "14:30")
+- endTime: end time in HH:MM format (optional, e.g., "10:30", "16:00")
+- room: lab/classroom/location (e.g., "MA201", "Lab A", "Hall B")
+- instructor: teacher/professor name (e.g., "Prof. Smith", "Dr. Johnson")
+- type: "class", "lab", "lecture", "tutorial", or "seminar"
+- recurring: true (for weekly recurring classes)
+
+Look for patterns like:
+- "Monday 9:00 AM - Math Class - Room 101 - Prof. Smith"
+- "Tuesday: Computer Science Lab at 2:00 PM - 4:00 PM"
+- "Wed 10:30-12:00 Physics - Dr. Johnson - Hall B"
+- "Thursday - English Literature (Room 102) Prof. Brown"
+- "07:30-08:30 UI/UX – PS – MA201"
+- "09:00-10:30 BT – SKS – MA206"
+
+Extract ALL timetable data - ensure no information is lost.
+If multiple activities occur at the same time, create separate entries.
+Convert all times to 24-hour format.
+Handle overlapping time slots correctly.
+
+Focus ONLY on recurring weekly classes, not one-time events like assignments or exams.`,
+    },
+    {
+      role: "user",
+      content: `Extract weekly timetable classes from this content in Google Calendar day-view style organization: ${content}`,
+    },
+  ];
+
+  try {
+    console.log("🗓️ [TIMETABLE] Extracting timetable with expert-level parsing...");
+    const response = await callAzureOpenAI(messages, 2);
+    console.log("🗓️ [TIMETABLE] AI Response:", response);
+    
+    const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
+    const parsed = JSON.parse(clean);
+    const items = Array.isArray(parsed) ? parsed : [];
+    
+    const timetableClasses = items.map((item) => ({
+      id: item.id || crypto.randomUUID(),
+      title: item.title || "Class",
+      day: item.day || "Monday",
+      time: item.time || "09:00",
+      endTime: item.endTime,
+      room: item.room,
+      instructor: item.instructor,
+      type: item.type || "class",
+      source: source,
+      createdAt: new Date().toISOString(),
+      recurring: true
+    }));
+
+    console.log("🗓️ [TIMETABLE] Extracted classes:", timetableClasses);
+    
+    // Generate formatted summary for user
+    generateTimetableSummary(timetableClasses);
+    
+    return timetableClasses;
+  } catch (error) {
+    console.error("🗓️ [TIMETABLE] Extraction failed:", error);
+    
+    // Enhanced fallback: Manual pattern detection
+    const fallbackClasses = extractTimetableManually(content, source);
+    console.log("🗓️ [TIMETABLE] Enhanced fallback extraction:", fallbackClasses);
+    
+    if (fallbackClasses.length > 0) {
+      generateTimetableSummary(fallbackClasses);
+    }
+    
+    return fallbackClasses;
+  }
+}
+
+// Generate Google Calendar style summary
+function generateTimetableSummary(classes: any[]) {
+  console.log("\n📅 ===== TIMETABLE EXTRACTION SUMMARY =====");
+  console.log("📊 Google Calendar Day-View Style Organization:\n");
+  
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  
+  // Day-wise detailed view
+  days.forEach(day => {
+    const dayClasses = classes.filter(cls => cls.day === day);
+    if (dayClasses.length > 0) {
+      console.log(`📅 ${day.toUpperCase()}`);
+      console.log("─".repeat(50));
+      
+      // Sort by time
+      dayClasses.sort((a, b) => a.time.localeCompare(b.time));
+      
+      dayClasses.forEach(cls => {
+        const timeRange = cls.endTime ? `${cls.time} - ${cls.endTime}` : cls.time;
+        const location = cls.room ? ` • ${cls.room}` : "";
+        const instructor = cls.instructor ? ` • ${cls.instructor}` : "";
+        console.log(`  ⏰ ${timeRange} | 📚 ${cls.title}${location}${instructor}`);
+      });
+      console.log("");
+    }
+  });
+  
+  // Month-view style summary
+  console.log("📊 MONTH-VIEW STYLE SUMMARY:");
+  console.log("─".repeat(60));
+  
+  days.forEach(day => {
+    const dayClasses = classes.filter(cls => cls.day === day);
+    if (dayClasses.length > 0) {
+      const subjects = dayClasses.map(cls => cls.title).join(", ");
+      console.log(`${day}: ${subjects} (${dayClasses.length} classes)`);
+    } else {
+      console.log(`${day}: No classes`);
+    }
+  });
+  
+  console.log(`\n✅ Total Classes Extracted: ${classes.length}`);
+  console.log("🔄 All classes set to recurring (weekly)");
+  console.log("=============================================\n");
+}
+
+// Enhanced fallback manual timetable extraction
+function extractTimetableManually(content: string, source: string): any[] {
+  const classes = [];
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const dayAbbr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  
+  const lines = content.split('\n');
+  let currentDay = "";
+  
+  console.log("🔍 [MANUAL] Starting enhanced manual extraction...");
+  
+  for (const line of lines) {
+    const cleanLine = line.trim();
+    if (!cleanLine) continue;
+    
+    // Enhanced day detection patterns
+    const dayMatch = days.find(day => 
+      cleanLine.toLowerCase().includes(day.toLowerCase()) ||
+      cleanLine.toLowerCase().includes(day.substring(0, 3).toLowerCase())
+    );
+    
+    if (dayMatch && (cleanLine.includes(':') || cleanLine.includes('Schedule') || cleanLine.includes('Day'))) {
+      currentDay = dayMatch;
+      console.log(`📅 [MANUAL] Found day: ${currentDay}`);
+      continue;
+    }
+    
+    // Enhanced time and content extraction patterns
+    const timePatterns = [
+      /(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/g, // Range: 09:00-10:30
+      /(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/g, // Single time: 09:00 AM
+      /(\d{1,2})\s*:\s*(\d{2})/g // Basic time: 9:00
+    ];
+    
+    // Check for any time pattern
+    let timeMatch = null;
+    let timePattern = '';
+    
+    for (const pattern of timePatterns) {
+      const match = cleanLine.match(pattern);
+      if (match) {
+        timeMatch = match;
+        timePattern = match[0];
+        break;
+      }
+    }
+    
+    if (timeMatch && currentDay) {
+      console.log(`⏰ [MANUAL] Found time pattern: ${timePattern} on ${currentDay}`);
+      
+      // Extract time range or single time
+      let startTime = '';
+      let endTime = '';
+      
+      if (timePattern.includes('-') || timePattern.includes('–') || timePattern.includes('—')) {
+        // Time range
+        const rangeParts = timePattern.split(/[-–—]/);
+        startTime = normalizeTime(rangeParts[0].trim());
+        endTime = normalizeTime(rangeParts[1].trim());
+      } else {
+        // Single time
+        startTime = normalizeTime(timePattern);
+      }
+      
+      // Extract subject/class info
+      let title = cleanLine
+        .replace(timePattern, '')
+        .replace(/[-–—]/g, '')
+        .trim();
+      
+      // Extract room information
+      let room = '';
+      const roomPatterns = [
+        /(MA\d+|MB\d+|MC\d+|Lab\s*[A-Z]|Room\s*\d+|Hall\s*[A-Z])/i,
+        /\b([A-Z]{2}\d{3})\b/g, // MA201, MC316 etc
+        /(room|hall|lab|classroom)\s*([a-z0-9]+)/i
+      ];
+      
+      for (const pattern of roomPatterns) {
+        const roomMatch = title.match(pattern);
+        if (roomMatch) {
+          room = roomMatch[0].trim();
+          title = title.replace(roomMatch[0], '').trim();
+          break;
+        }
+      }
+      
+      // Extract instructor information
+      let instructor = '';
+      const instructorPatterns = [
+        /(prof|dr|professor)\.?\s*([a-z]+)/i,
+        /–\s*([A-Z]{2,3})\s*–/g, // – PS –, – SKS –
+        /\b([A-Z]{2,4})\b(?=\s*–|\s*$)/g // PS, SKS, etc
+      ];
+      
+      for (const pattern of instructorPatterns) {
+        const instMatch = title.match(pattern);
+        if (instMatch) {
+          instructor = instMatch[0].trim();
+          title = title.replace(instMatch[0], '').trim();
+          break;
+        }
+      }
+      
+      // Clean up title
+      title = title
+        .replace(/[–—]/g, '')
+        .replace(/\s+/g, ' ')
+        .replace(/^\s*[–—]\s*|\s*[–—]\s*$/g, '')
+        .trim();
+      
+      // Determine class type
+      let type = 'class';
+      if (title.toLowerCase().includes('lab')) type = 'lab';
+      else if (title.toLowerCase().includes('lecture')) type = 'lecture';
+      else if (title.toLowerCase().includes('tutorial')) type = 'tutorial';
+      else if (title.toLowerCase().includes('seminar')) type = 'seminar';
+      
+      if (title.length > 0) {
+        const classEntry = {
+          id: crypto.randomUUID(),
+          title: title,
+          day: currentDay,
+          time: startTime,
+          endTime: endTime || undefined,
+          room: room || undefined,
+          instructor: instructor || undefined,
+          type: type,
+          source: source,
+          createdAt: new Date().toISOString(),
+          recurring: true
+        };
+        
+        classes.push(classEntry);
+        console.log(`✅ [MANUAL] Extracted class:`, classEntry);
+      }
+    }
+  }
+  
+  console.log(`📊 [MANUAL] Total extracted: ${classes.length} classes`);
+  return classes;
+}
+
+// Normalize time to 24-hour format
+function normalizeTime(timeStr: string): string {
+  timeStr = timeStr.trim();
+  
+  // Handle AM/PM
+  if (timeStr.toLowerCase().includes('pm') && !timeStr.startsWith('12')) {
+    const hour = parseInt(timeStr.split(':')[0]) + 12;
+    const minute = timeStr.split(':')[1]?.replace(/[^\d]/g, '') || '00';
+    return `${hour.toString().padStart(2, '0')}:${minute.padStart(2, '0')}`;
+  } else if (timeStr.toLowerCase().includes('am') && timeStr.startsWith('12')) {
+    const minute = timeStr.split(':')[1]?.replace(/[^\d]/g, '') || '00';
+    return `00:${minute.padStart(2, '0')}`;
+  } else {
+    // Remove non-digit/colon characters and ensure proper format
+    const cleaned = timeStr.replace(/[^\d:]/g, '');
+    const parts = cleaned.split(':');
+    if (parts.length >= 2) {
+      const hour = parts[0].padStart(2, '0');
+      const minute = parts[1].padStart(2, '0');
+      return `${hour}:${minute}`;
+    }
+  }
+  
+  return timeStr.replace(/[^\d:]/g, '') || '09:00';
 }
 
 export async function generateFlashcards(content: string): Promise<any[]> {
