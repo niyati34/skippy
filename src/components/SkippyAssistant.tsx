@@ -219,17 +219,20 @@ const SkippyAssistant = ({
       "one string 7",
       "onestring 7",
       "one string seven",
-      "password", // Keep some simple fallbacks
-      "skippy",   // Theme-related
-      "rakhi",    // Theme-related password
     ];
-    
+
     const hasPasswordKeyword = passwordKeywords.some((keyword) =>
       lowerInput.includes(keyword)
     );
 
-    console.log("🔍 [Password Debug] Has password keyword:", hasPasswordKeyword);
-    console.log("🔍 [Password Debug] Waiting for password:", waitingForPassword);
+    console.log(
+      "🔍 [Password Debug] Has password keyword:",
+      hasPasswordKeyword
+    );
+    console.log(
+      "🔍 [Password Debug] Waiting for password:",
+      waitingForPassword
+    );
 
     // Check for multiple codes scenario
     if (
@@ -245,7 +248,7 @@ const SkippyAssistant = ({
     }
 
     // More restrictive password detection
-    const isPasswordAttempt = 
+    const isPasswordAttempt =
       hasPasswordKeyword ||
       (lowerInput.includes("password") &&
         passwordKeywords.some((keyword) => lowerInput.includes(keyword))) ||
@@ -258,7 +261,7 @@ const SkippyAssistant = ({
 
     if (isPasswordAttempt) {
       console.log("✅ [Password Debug] Password accepted! Unlocking...");
-      
+
       const successMessage =
         "Perfect! You found the secret! Welcome to your intelligent study dashboard! I'm so excited to help you organize your studies, create amazing flashcards, and make learning super fun and engaging. Let's transform your study experience together and make every learning session productive and enjoyable!";
       setCurrentMessage(successMessage);
