@@ -64,7 +64,7 @@
         background: rgba(0, 0, 0, 0.3);
         padding: 2px 8px;
         border-radius: 5px;
-        font-family: 'Courier New', monospace;
+        font-family: "Courier New", monospace;
       }
       .day-section {
         margin: 15px 0;
@@ -107,17 +107,35 @@
 
       <div class="success">
         <h3>✅ NEW FEATURE: Day-wise Timetable Storage</h3>
-        <p>Classes are now organized by days of the week with perfect recurring support!</p>
+        <p>
+          Classes are now organized by days of the week with perfect recurring
+          support!
+        </p>
       </div>
 
       <div class="feature">
         <h3>🎯 Key Improvements:</h3>
         <ul>
-          <li><strong>Day-wise Organization:</strong> Classes stored separately for each day (Monday-Sunday)</li>
-          <li><strong>Smart Extraction:</strong> AI automatically detects which day each class belongs to</li>
-          <li><strong>Perfect Recurring:</strong> Classes repeat every week indefinitely</li>
-          <li><strong>No Date Dependencies:</strong> Works regardless of when you upload the timetable</li>
-          <li><strong>Efficient Storage:</strong> Optimized storage structure for fast access</li>
+          <li>
+            <strong>Day-wise Organization:</strong> Classes stored separately
+            for each day (Monday-Sunday)
+          </li>
+          <li>
+            <strong>Smart Extraction:</strong> AI automatically detects which
+            day each class belongs to
+          </li>
+          <li>
+            <strong>Perfect Recurring:</strong> Classes repeat every week
+            indefinitely
+          </li>
+          <li>
+            <strong>No Date Dependencies:</strong> Works regardless of when you
+            upload the timetable
+          </li>
+          <li>
+            <strong>Efficient Storage:</strong> Optimized storage structure for
+            fast access
+          </li>
         </ul>
       </div>
 
@@ -130,52 +148,82 @@
           <div class="time-slot">Wednesday</div>
           <div class="time-slot">Thursday</div>
           <div class="time-slot">Friday</div>
-          
+
           <div class="time-slot">09:00</div>
-          <div class="class-cell">Mathematics<br>Prof. Smith</div>
+          <div class="class-cell">Mathematics<br />Prof. Smith</div>
           <div class="empty-cell"></div>
-          <div class="class-cell">Mathematics<br>Prof. Smith</div>
+          <div class="class-cell">Mathematics<br />Prof. Smith</div>
           <div class="empty-cell"></div>
-          <div class="class-cell">Chemistry Lab<br>Dr. Wilson</div>
-          
+          <div class="class-cell">Chemistry Lab<br />Dr. Wilson</div>
+
           <div class="time-slot">10:00</div>
           <div class="empty-cell"></div>
-          <div class="class-cell">Computer Science<br>Prof. Davis</div>
+          <div class="class-cell">Computer Science<br />Prof. Davis</div>
           <div class="empty-cell"></div>
-          <div class="class-cell">Physics<br>Dr. Johnson</div>
+          <div class="class-cell">Physics<br />Dr. Johnson</div>
           <div class="empty-cell"></div>
-          
+
           <div class="time-slot">14:00</div>
-          <div class="class-cell">Physics Lab<br>Lab A</div>
+          <div class="class-cell">Physics Lab<br />Lab A</div>
           <div class="empty-cell"></div>
-          <div class="class-cell">English<br>Prof. Brown</div>
-          <div class="class-cell">Computer Lab<br>Prof. Davis</div>
-          <div class="class-cell">Math Tutorial<br>Prof. Smith</div>
+          <div class="class-cell">English<br />Prof. Brown</div>
+          <div class="class-cell">Computer Lab<br />Prof. Davis</div>
+          <div class="class-cell">Math Tutorial<br />Prof. Smith</div>
         </div>
       </div>
 
       <div class="feature">
         <h3>🧪 Test Instructions:</h3>
         <ol>
-          <li><strong>Open your app:</strong> <a href="http://localhost:8080/" target="_blank" style="color: #00ff88;">http://localhost:8080/</a></li>
+          <li>
+            <strong>Open your app:</strong>
+            <a
+              href="http://localhost:8080/"
+              target="_blank"
+              style="color: #00ff88"
+              >http://localhost:8080/</a
+            >
+          </li>
           <li><strong>Go to AI Chat tab</strong></li>
-          <li><strong>Upload one of these test files:</strong>
+          <li>
+            <strong>Upload one of these test files:</strong>
             <ul>
-              <li><code>test-clean-timetable.txt</code> - Simple weekly schedule</li>
-              <li><code>test-timetable.txt</code> - Class timetable with room info</li>
-              <li><code>test-weekly-timetable.txt</code> - Detailed schedule</li>
+              <li>
+                <code>test-clean-timetable.txt</code> - Simple weekly schedule
+              </li>
+              <li>
+                <code>test-timetable.txt</code> - Class timetable with room info
+              </li>
+              <li>
+                <code>test-weekly-timetable.txt</code> - Detailed schedule
+              </li>
             </ul>
           </li>
-          <li><strong>Watch the magic:</strong> Classes will be extracted and organized by days</li>
-          <li><strong>Check Weekly Timetable tab:</strong> See your organized classes</li>
-          <li><strong>Navigate weeks:</strong> Classes repeat perfectly every week</li>
+          <li>
+            <strong>Watch the magic:</strong> Classes will be extracted and
+            organized by days
+          </li>
+          <li>
+            <strong>Check Weekly Timetable tab:</strong> See your organized
+            classes
+          </li>
+          <li>
+            <strong>Navigate weeks:</strong> Classes repeat perfectly every week
+          </li>
         </ol>
       </div>
 
       <div class="success">
         <h3>💾 Storage Structure:</h3>
         <p>Classes are stored in this format:</p>
-        <pre style="background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 10px; overflow-x: auto;">
+        <pre
+          style="
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            overflow-x: auto;
+          "
+        >
 {
   "Monday": [
     {
@@ -197,20 +245,47 @@
       <div class="info">
         <h3>🎨 UI Features:</h3>
         <ul>
-          <li><strong>Week Navigation:</strong> Browse any week, classes appear correctly</li>
-          <li><strong>Day View:</strong> Click any day to see detailed schedule</li>
-          <li><strong>Delete Options:</strong> Remove individual classes or clear entire timetable</li>
-          <li><strong>Visual Indicators:</strong> Class types, rooms, and instructors clearly displayed</li>
-          <li><strong>Smart Time Slots:</strong> Classes appear in appropriate time slots</li>
+          <li>
+            <strong>Week Navigation:</strong> Browse any week, classes appear
+            correctly
+          </li>
+          <li>
+            <strong>Day View:</strong> Click any day to see detailed schedule
+          </li>
+          <li>
+            <strong>Delete Options:</strong> Remove individual classes or clear
+            entire timetable
+          </li>
+          <li>
+            <strong>Visual Indicators:</strong> Class types, rooms, and
+            instructors clearly displayed
+          </li>
+          <li>
+            <strong>Smart Time Slots:</strong> Classes appear in appropriate
+            time slots
+          </li>
         </ul>
       </div>
 
-      <div class="test-btn" onclick="window.open('http://localhost:8080/', '_blank')" style="display: block; text-align: center; text-decoration: none; width: fit-content; margin: 20px auto;">
+      <div
+        class="test-btn"
+        onclick="window.open('http://localhost:8080/', '_blank')"
+        style="
+          display: block;
+          text-align: center;
+          text-decoration: none;
+          width: fit-content;
+          margin: 20px auto;
+        "
+      >
         🚀 Test the Enhanced Timetable System
       </div>
 
       <div class="success">
-        <p><strong>Current Status:</strong> ✅ Ready for testing! Upload any timetable file and see the magic happen!</p>
+        <p>
+          <strong>Current Status:</strong> ✅ Ready for testing! Upload any
+          timetable file and see the magic happen!
+        </p>
       </div>
     </div>
 
@@ -220,11 +295,13 @@
       console.log("- test-clean-timetable.txt");
       console.log("- test-timetable.txt");
       console.log("- test-weekly-timetable.txt");
-      
+
       // Show current time
       const now = new Date();
       console.log(`Current time: ${now.toLocaleString()}`);
-      console.log("Upload any timetable file to see day-wise organization in action!");
+      console.log(
+        "Upload any timetable file to see day-wise organization in action!"
+      );
     </script>
   </body>
 </html>

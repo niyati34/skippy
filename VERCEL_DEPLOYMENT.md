@@ -20,6 +20,7 @@ git push origin main
 ### 2. **Deploy to Vercel**
 
 #### Option A: Vercel CLI (Recommended)
+
 ```bash
 # Install Vercel CLI
 npm i -g vercel
@@ -36,6 +37,7 @@ vercel
 ```
 
 #### Option B: Vercel Dashboard
+
 1. Go to [vercel.com/dashboard](https://vercel.com/dashboard)
 2. Click "New Project"
 3. Import your GitHub repository
@@ -78,11 +80,13 @@ skippy-rakhi-verse-main/
 ## 🔧 How It Works
 
 ### Local Development
+
 - **Frontend**: `http://localhost:8080` (Vite dev server)
 - **Proxy**: `http://localhost:5174` (Express server)
 - **API calls**: Go to local Express server
 
 ### Production (Vercel)
+
 - **Frontend**: `https://your-project.vercel.app`
 - **Proxy**: `/api/azure-openai/chat` (Vercel serverless function)
 - **API calls**: Go to Vercel serverless function
@@ -92,18 +96,21 @@ skippy-rakhi-verse-main/
 ### Common Issues:
 
 1. **"Missing Azure OpenAI environment variables"**
+
    - Add environment variables in Vercel dashboard
    - Redeploy after adding variables
 
 2. **CORS errors**
+
    - Already handled in `/api/azure-openai/chat.js`
    - Check browser console for specific errors
 
 3. **Build failures**
+
    ```bash
    # Try local build first
    npm run build
-   
+
    # Fix any TypeScript errors
    npm run lint
    ```
@@ -126,7 +133,7 @@ After successful deployment:
 
 - **Main App**: `https://your-project.vercel.app`
 - **API Endpoint**: `https://your-project.vercel.app/api/azure-openai/chat`
-- **Test Pages**: 
+- **Test Pages**:
   - `https://your-project.vercel.app/test-date-wise-classes.html`
   - `https://your-project.vercel.app/test-expert-extraction.html`
 
@@ -154,6 +161,7 @@ After successful deployment:
 ## 📞 Support
 
 If you encounter issues:
+
 1. Check Vercel [documentation](https://vercel.com/docs)
 2. Review Azure OpenAI [API documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
 3. Check the GitHub repository for updates

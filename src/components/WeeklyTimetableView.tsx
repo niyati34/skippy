@@ -31,7 +31,11 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ScheduleStorage, TimetableStorage, TimetableClass } from "@/lib/storage";
+import {
+  ScheduleStorage,
+  TimetableStorage,
+  TimetableClass,
+} from "@/lib/storage";
 
 interface CalendarItem {
   id: string;
@@ -117,20 +121,21 @@ const WeeklyTimetableView = ({
     }));
 
     console.log("📅 Loading timetable for current week...");
-    
+
     // Generate timetable instances for the current week with specific dates
     const weeklyTimetableItems = generateTimetableInstancesForWeek();
-    
+
     const allItems = [...convertedStored, ...items, ...weeklyTimetableItems];
 
     // Remove duplicates based on title, date, and time
     const uniqueItems = allItems.filter(
       (item, index, self) =>
         index ===
-        self.findIndex((i) => 
-          i.title === item.title && 
-          i.date === item.date && 
-          i.time === item.time
+        self.findIndex(
+          (i) =>
+            i.title === item.title &&
+            i.date === item.date &&
+            i.time === item.time
         )
     );
 
@@ -173,20 +178,26 @@ const WeeklyTimetableView = ({
     const timetableInstances: CalendarItem[] = [];
     const weekStart = getWeekStart(currentWeek);
     const timetableData = TimetableStorage.load();
-    
-    console.log("📅 Generating timetable for week starting:", weekStart.toDateString());
-    
+
+    console.log(
+      "📅 Generating timetable for week starting:",
+      weekStart.toDateString()
+    );
+
     // Generate instances for each day of the current week
     days.forEach((dayName, dayIndex) => {
-      const dayClasses = timetableData[dayName as keyof typeof timetableData] || [];
-      
+      const dayClasses =
+        timetableData[dayName as keyof typeof timetableData] || [];
+
       // Calculate the actual date for this day in the current week
       const dayDate = new Date(weekStart);
       dayDate.setDate(weekStart.getDate() + dayIndex);
-      const dayDateStr = dayDate.toISOString().split('T')[0];
-      
-      console.log(`📅 ${dayName} (${dayDateStr}): ${dayClasses.length} classes`);
-      
+      const dayDateStr = dayDate.toISOString().split("T")[0];
+
+      console.log(
+        `📅 ${dayName} (${dayDateStr}): ${dayClasses.length} classes`
+      );
+
       // Create calendar items for each class on this day
       dayClasses.forEach((cls: TimetableClass) => {
         const instance: CalendarItem = {
@@ -197,19 +208,27 @@ const WeeklyTimetableView = ({
           endTime: cls.endTime,
           type: "class" as const,
           priority: "medium" as const,
-          description: `${cls.type || 'Class'} - ${dayName}${cls.room ? ` in ${cls.room}` : ''}${cls.instructor ? ` with ${cls.instructor}` : ''}`,
+          description: `${cls.type || "Class"} - ${dayName}${
+            cls.room ? ` in ${cls.room}` : ""
+          }${cls.instructor ? ` with ${cls.instructor}` : ""}`,
           room: cls.room,
           instructor: cls.instructor,
           recurring: true,
-          source: cls.source || "Weekly Timetable"
+          source: cls.source || "Weekly Timetable",
         };
-        
+
         timetableInstances.push(instance);
-        console.log(`  ⏰ ${cls.time} - ${cls.title} in ${cls.room || 'Room TBD'}`);
+        console.log(
+          `  ⏰ ${cls.time} - ${cls.title} in ${cls.room || "Room TBD"}`
+        );
       });
     });
-    
-    console.log("📅 Generated", timetableInstances.length, "timetable instances for current week");
+
+    console.log(
+      "📅 Generated",
+      timetableInstances.length,
+      "timetable instances for current week"
+    );
     return timetableInstances;
   };
 
@@ -234,17 +253,19 @@ const WeeklyTimetableView = ({
   // Get items for specific date and time
   const getItemsForSlot = (day: string, timeSlot: string) => {
     const currentWeekDates = getWeekDates();
-    const targetDate = currentWeekDates.find(d => {
+    const targetDate = currentWeekDates.find((d) => {
       const dayName = days[d.getDay() === 0 ? 6 : d.getDay() - 1];
       return dayName === day;
     });
 
     if (!targetDate) return [];
 
-    const targetDateStr = targetDate.toISOString().split('T')[0];
-    
-    console.log(`🔍 Looking for items on ${day} (${targetDateStr}) at ${timeSlot}`);
-    
+    const targetDateStr = targetDate.toISOString().split("T")[0];
+
+    console.log(
+      `🔍 Looking for items on ${day} (${targetDateStr}) at ${timeSlot}`
+    );
+
     const matchingItems = calendarItems.filter((item) => {
       if (!item.time) return false;
 
@@ -281,15 +302,15 @@ const WeeklyTimetableView = ({
   // Get items for a specific day
   const getItemsForDay = (day: string) => {
     const currentWeekDates = getWeekDates();
-    const targetDate = currentWeekDates.find(d => {
+    const targetDate = currentWeekDates.find((d) => {
       const dayName = days[d.getDay() === 0 ? 6 : d.getDay() - 1];
       return dayName === day;
     });
 
     if (!targetDate) return [];
 
-    const targetDateStr = targetDate.toISOString().split('T')[0];
-    
+    const targetDateStr = targetDate.toISOString().split("T")[0];
+
     const dayItems = calendarItems
       .filter((item) => {
         return item.date === targetDateStr;
@@ -392,23 +413,26 @@ const WeeklyTimetableView = ({
   // Delete individual schedule item
   const deleteScheduleItem = (itemId: string) => {
     // Remove from local state
-    const updatedItems = calendarItems.filter(item => item.id !== itemId);
+    const updatedItems = calendarItems.filter((item) => item.id !== itemId);
     setCalendarItems(updatedItems);
-    
+
     // Remove from regular schedule storage
     ScheduleStorage.remove(itemId);
-    
+
     // Check if this is a timetable class and remove from timetable storage too
-    const itemToDelete = calendarItems.find(item => item.id === itemId);
-    if (itemToDelete && (itemToDelete.recurring || itemToDelete.type === "class")) {
+    const itemToDelete = calendarItems.find((item) => item.id === itemId);
+    if (
+      itemToDelete &&
+      (itemToDelete.recurring || itemToDelete.type === "class")
+    ) {
       // Extract the base ID (remove the date suffix for weekly instances)
-      const baseId = itemId.split('-')[0];
+      const baseId = itemId.split("-")[0];
       TimetableStorage.removeClass(baseId);
     }
-    
+
     // Notify parent
     onItemsUpdate?.(updatedItems);
-    
+
     toast({
       title: "Item deleted! 🗑️",
       description: "Schedule item removed successfully.",
@@ -420,7 +444,7 @@ const WeeklyTimetableView = ({
     setCalendarItems([]);
     ScheduleStorage.save([]);
     onItemsUpdate?.([]);
-    
+
     toast({
       title: "All items deleted! 🗑️",
       description: "All schedule items have been removed.",
@@ -429,42 +453,48 @@ const WeeklyTimetableView = ({
 
   // Delete all timetable/recurring items only
   const deleteTimetableItems = () => {
-    const nonTimetableItems = calendarItems.filter(item => {
+    const nonTimetableItems = calendarItems.filter((item) => {
       const isRecurring = item.recurring === true;
       const isClassType = item.type === "class";
-      const hasClassKeywords = item.title?.toLowerCase().includes('class') ||
-                               item.title?.toLowerCase().includes('lecture') ||
-                               item.title?.toLowerCase().includes('lab') ||
-                               item.title?.toLowerCase().includes('prof') ||
-                               item.title?.toLowerCase().includes('dr.');
-      
+      const hasClassKeywords =
+        item.title?.toLowerCase().includes("class") ||
+        item.title?.toLowerCase().includes("lecture") ||
+        item.title?.toLowerCase().includes("lab") ||
+        item.title?.toLowerCase().includes("prof") ||
+        item.title?.toLowerCase().includes("dr.");
+
       return !(isRecurring || isClassType || hasClassKeywords);
     });
-    
+
     setCalendarItems(nonTimetableItems);
-    
+
     // Clear day-wise timetable storage
     TimetableStorage.clearAll();
-    
+
     // Update regular schedule storage
-    const storageItems = nonTimetableItems.map(item => ({
+    const storageItems = nonTimetableItems.map((item) => ({
       id: item.id,
       title: item.title,
       time: item.time || "00:00",
       date: item.date,
-      type: item.type === "class" || item.type === "break" || item.type === "reminder" || item.type === "project" 
-        ? "study" as const 
-        : item.type as "assignment" | "study" | "exam" | "note",
+      type:
+        item.type === "class" ||
+        item.type === "break" ||
+        item.type === "reminder" ||
+        item.type === "project"
+          ? ("study" as const)
+          : (item.type as "assignment" | "study" | "exam" | "note"),
       source: item.source,
       createdAt: new Date().toISOString(),
     }));
     ScheduleStorage.save(storageItems);
-    
+
     onItemsUpdate?.(nonTimetableItems);
-    
+
     toast({
       title: "Timetable cleared! 🗑️",
-      description: "All timetable classes have been removed from day-wise storage.",
+      description:
+        "All timetable classes have been removed from day-wise storage.",
     });
   };
 
@@ -547,20 +577,27 @@ const WeeklyTimetableView = ({
                         </Badge>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 h-8 w-8 p-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
+                            >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Schedule Item</AlertDialogTitle>
+                              <AlertDialogTitle>
+                                Delete Schedule Item
+                              </AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete "{item.title}"? This action cannot be undone.
+                                Are you sure you want to delete "{item.title}"?
+                                This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction 
+                              <AlertDialogAction
                                 onClick={() => deleteScheduleItem(item.id)}
                                 className="bg-red-600 hover:bg-red-700"
                               >
@@ -587,28 +624,43 @@ const WeeklyTimetableView = ({
       {false && ( // Temporarily disabled
         <Card className="border-yellow-500/50 bg-yellow-500/5">
           <CardHeader>
-            <CardTitle className="text-yellow-600">Debug: Schedule Items</CardTitle>
+            <CardTitle className="text-yellow-600">
+              Debug: Schedule Items
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-sm space-y-2">
-              <p><strong>Total Items:</strong> {calendarItems.length}</p>
-              <p><strong>External Items Received:</strong> {items.length}</p>
-              <p><strong>Classes (type=class):</strong> {calendarItems.filter(i => i.type === 'class').length}</p>
-              <p><strong>Current Week:</strong> {currentWeek.toDateString()}</p>
-              <p><strong>Week Dates:</strong> {weekDates.map(d => d.toDateString()).join(', ')}</p>
-              
+              <p>
+                <strong>Total Items:</strong> {calendarItems.length}
+              </p>
+              <p>
+                <strong>External Items Received:</strong> {items.length}
+              </p>
+              <p>
+                <strong>Classes (type=class):</strong>{" "}
+                {calendarItems.filter((i) => i.type === "class").length}
+              </p>
+              <p>
+                <strong>Current Week:</strong> {currentWeek.toDateString()}
+              </p>
+              <p>
+                <strong>Week Dates:</strong>{" "}
+                {weekDates.map((d) => d.toDateString()).join(", ")}
+              </p>
+
               {calendarItems.length > 0 && (
                 <div>
                   <strong>All Items by Day:</strong>
                   <div className="space-y-1">
-                    {days.map(day => {
+                    {days.map((day) => {
                       const dayItems = getItemsForDay(day);
                       return (
                         <div key={day} className="bg-gray-100 p-2 rounded">
                           <strong>{day}:</strong> {dayItems.length} items
-                          {dayItems.map(item => (
+                          {dayItems.map((item) => (
                             <div key={item.id} className="ml-4 text-xs">
-                              • {item.title} at {item.time} (date: {item.date}, type: {item.type})
+                              • {item.title} at {item.time} (date: {item.date},
+                              type: {item.type})
                             </div>
                           ))}
                         </div>
@@ -654,12 +706,16 @@ const WeeklyTimetableView = ({
             </Button>
           </div>
         </div>
-        
+
         {/* Management Buttons */}
         <div className="flex items-center gap-2">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-orange-600 hover:text-orange-700"
+              >
                 <Settings className="w-4 h-4 mr-2" />
                 Clear Timetable
               </Button>
@@ -668,13 +724,16 @@ const WeeklyTimetableView = ({
               <AlertDialogHeader>
                 <AlertDialogTitle>Clear Timetable Classes</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will remove all timetable/recurring classes but keep other schedule items.
-                  This action cannot be undone.
+                  This will remove all timetable/recurring classes but keep
+                  other schedule items. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={deleteTimetableItems} className="bg-orange-600 hover:bg-orange-700">
+                <AlertDialogAction
+                  onClick={deleteTimetableItems}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
                   Clear Timetable
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -683,7 +742,11 @@ const WeeklyTimetableView = ({
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-600 hover:text-red-700"
+              >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete All
               </Button>
@@ -692,13 +755,16 @@ const WeeklyTimetableView = ({
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete All Schedule Items</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete all schedule items, assignments, classes, and notes.
-                  This action cannot be undone.
+                  This will permanently delete all schedule items, assignments,
+                  classes, and notes. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={deleteAllScheduleItems} className="bg-red-600 hover:bg-red-700">
+                <AlertDialogAction
+                  onClick={deleteAllScheduleItems}
+                  className="bg-red-600 hover:bg-red-700"
+                >
                   Delete All
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -825,7 +891,7 @@ const WeeklyTimetableView = ({
                                     {item.room}
                                   </div>
                                 )}
-                                
+
                                 {/* Delete button - appears on hover */}
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -839,15 +905,23 @@ const WeeklyTimetableView = ({
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete Schedule Item</AlertDialogTitle>
+                                      <AlertDialogTitle>
+                                        Delete Schedule Item
+                                      </AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Are you sure you want to delete "{item.title}"? This action cannot be undone.
+                                        Are you sure you want to delete "
+                                        {item.title}"? This action cannot be
+                                        undone.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction 
-                                        onClick={() => deleteScheduleItem(item.id)}
+                                      <AlertDialogCancel>
+                                        Cancel
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() =>
+                                          deleteScheduleItem(item.id)
+                                        }
                                         className="bg-red-600 hover:bg-red-700"
                                       >
                                         Delete

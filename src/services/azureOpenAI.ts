@@ -36,16 +36,23 @@ export async function callAzureOpenAI(
   retries = 2 // Reduced for faster response
 ): Promise<string> {
   const directUrl = getCompletionsUrl();
-  
+
   // Determine proxy URL based on environment
-  const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-  const proxyUrl = isProduction 
+  const isProduction =
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1";
+  const proxyUrl = isProduction
     ? `/api/azure-openai/chat` // Vercel serverless function
     : `http://localhost:${
         (import.meta as any)?.env?.VITE_PROXY_PORT || 5174
       }/api/azure-openai/chat`; // Local development
 
-  console.log(`[Azure OpenAI] Using ${isProduction ? 'production' : 'development'} proxy:`, proxyUrl);
+  console.log(
+    `[Azure OpenAI] Using ${
+      isProduction ? "production" : "development"
+    } proxy:`,
+    proxyUrl
+  );
 
   const call = async (useProxy: boolean) => {
     if (useProxy) {
@@ -1964,14 +1971,16 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
   ];
 
   try {
-    console.log("🗓️ [TIMETABLE] Extracting timetable with expert-level parsing...");
+    console.log(
+      "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
+    );
     const response = await callAzureOpenAI(messages, 2);
     console.log("🗓️ [TIMETABLE] AI Response:", response);
-    
+
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     const parsed = JSON.parse(clean);
     const items = Array.isArray(parsed) ? parsed : [];
-    
+
     const timetableClasses = items.map((item) => ({
       id: item.id || crypto.randomUUID(),
       title: item.title || "Class",
@@ -1983,26 +1992,29 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
       type: item.type || "class",
       source: source,
       createdAt: new Date().toISOString(),
-      recurring: true
+      recurring: true,
     }));
 
     console.log("🗓️ [TIMETABLE] Extracted classes:", timetableClasses);
-    
+
     // Generate formatted summary for user
     generateTimetableSummary(timetableClasses);
-    
+
     return timetableClasses;
   } catch (error) {
     console.error("🗓️ [TIMETABLE] Extraction failed:", error);
-    
+
     // Enhanced fallback: Manual pattern detection
     const fallbackClasses = extractTimetableManually(content, source);
-    console.log("🗓️ [TIMETABLE] Enhanced fallback extraction:", fallbackClasses);
-    
+    console.log(
+      "🗓️ [TIMETABLE] Enhanced fallback extraction:",
+      fallbackClasses
+    );
+
     if (fallbackClasses.length > 0) {
       generateTimetableSummary(fallbackClasses);
     }
-    
+
     return fallbackClasses;
   }
 }
@@ -2011,43 +2023,55 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
 function generateTimetableSummary(classes: any[]) {
   console.log("\n📅 ===== TIMETABLE EXTRACTION SUMMARY =====");
   console.log("📊 Google Calendar Day-View Style Organization:\n");
-  
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  
+
+  const days = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+
   // Day-wise detailed view
-  days.forEach(day => {
-    const dayClasses = classes.filter(cls => cls.day === day);
+  days.forEach((day) => {
+    const dayClasses = classes.filter((cls) => cls.day === day);
     if (dayClasses.length > 0) {
       console.log(`📅 ${day.toUpperCase()}`);
       console.log("─".repeat(50));
-      
+
       // Sort by time
       dayClasses.sort((a, b) => a.time.localeCompare(b.time));
-      
-      dayClasses.forEach(cls => {
-        const timeRange = cls.endTime ? `${cls.time} - ${cls.endTime}` : cls.time;
+
+      dayClasses.forEach((cls) => {
+        const timeRange = cls.endTime
+          ? `${cls.time} - ${cls.endTime}`
+          : cls.time;
         const location = cls.room ? ` • ${cls.room}` : "";
         const instructor = cls.instructor ? ` • ${cls.instructor}` : "";
-        console.log(`  ⏰ ${timeRange} | 📚 ${cls.title}${location}${instructor}`);
+        console.log(
+          `  ⏰ ${timeRange} | 📚 ${cls.title}${location}${instructor}`
+        );
       });
       console.log("");
     }
   });
-  
+
   // Month-view style summary
   console.log("📊 MONTH-VIEW STYLE SUMMARY:");
   console.log("─".repeat(60));
-  
-  days.forEach(day => {
-    const dayClasses = classes.filter(cls => cls.day === day);
+
+  days.forEach((day) => {
+    const dayClasses = classes.filter((cls) => cls.day === day);
     if (dayClasses.length > 0) {
-      const subjects = dayClasses.map(cls => cls.title).join(", ");
+      const subjects = dayClasses.map((cls) => cls.title).join(", ");
       console.log(`${day}: ${subjects} (${dayClasses.length} classes)`);
     } else {
       console.log(`${day}: No classes`);
     }
   });
-  
+
   console.log(`\n✅ Total Classes Extracted: ${classes.length}`);
   console.log("🔄 All classes set to recurring (weekly)");
   console.log("=============================================\n");
@@ -2056,41 +2080,55 @@ function generateTimetableSummary(classes: any[]) {
 // Enhanced fallback manual timetable extraction
 function extractTimetableManually(content: string, source: string): any[] {
   const classes = [];
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const days = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
   const dayAbbr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  
-  const lines = content.split('\n');
+
+  const lines = content.split("\n");
   let currentDay = "";
-  
+
   console.log("🔍 [MANUAL] Starting enhanced manual extraction...");
-  
+
   for (const line of lines) {
     const cleanLine = line.trim();
     if (!cleanLine) continue;
-    
+
     // Enhanced day detection patterns
-    const dayMatch = days.find(day => 
-      cleanLine.toLowerCase().includes(day.toLowerCase()) ||
-      cleanLine.toLowerCase().includes(day.substring(0, 3).toLowerCase())
+    const dayMatch = days.find(
+      (day) =>
+        cleanLine.toLowerCase().includes(day.toLowerCase()) ||
+        cleanLine.toLowerCase().includes(day.substring(0, 3).toLowerCase())
     );
-    
-    if (dayMatch && (cleanLine.includes(':') || cleanLine.includes('Schedule') || cleanLine.includes('Day'))) {
+
+    if (
+      dayMatch &&
+      (cleanLine.includes(":") ||
+        cleanLine.includes("Schedule") ||
+        cleanLine.includes("Day"))
+    ) {
       currentDay = dayMatch;
       console.log(`📅 [MANUAL] Found day: ${currentDay}`);
       continue;
     }
-    
+
     // Enhanced time and content extraction patterns
     const timePatterns = [
       /(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/g, // Range: 09:00-10:30
       /(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/g, // Single time: 09:00 AM
-      /(\d{1,2})\s*:\s*(\d{2})/g // Basic time: 9:00
+      /(\d{1,2})\s*:\s*(\d{2})/g, // Basic time: 9:00
     ];
-    
+
     // Check for any time pattern
     let timeMatch = null;
-    let timePattern = '';
-    
+    let timePattern = "";
+
     for (const pattern of timePatterns) {
       const match = cleanLine.match(pattern);
       if (match) {
@@ -2099,15 +2137,21 @@ function extractTimetableManually(content: string, source: string): any[] {
         break;
       }
     }
-    
+
     if (timeMatch && currentDay) {
-      console.log(`⏰ [MANUAL] Found time pattern: ${timePattern} on ${currentDay}`);
-      
+      console.log(
+        `⏰ [MANUAL] Found time pattern: ${timePattern} on ${currentDay}`
+      );
+
       // Extract time range or single time
-      let startTime = '';
-      let endTime = '';
-      
-      if (timePattern.includes('-') || timePattern.includes('–') || timePattern.includes('—')) {
+      let startTime = "";
+      let endTime = "";
+
+      if (
+        timePattern.includes("-") ||
+        timePattern.includes("–") ||
+        timePattern.includes("—")
+      ) {
         // Time range
         const rangeParts = timePattern.split(/[-–—]/);
         startTime = normalizeTime(rangeParts[0].trim());
@@ -2116,61 +2160,61 @@ function extractTimetableManually(content: string, source: string): any[] {
         // Single time
         startTime = normalizeTime(timePattern);
       }
-      
+
       // Extract subject/class info
       let title = cleanLine
-        .replace(timePattern, '')
-        .replace(/[-–—]/g, '')
+        .replace(timePattern, "")
+        .replace(/[-–—]/g, "")
         .trim();
-      
+
       // Extract room information
-      let room = '';
+      let room = "";
       const roomPatterns = [
         /(MA\d+|MB\d+|MC\d+|Lab\s*[A-Z]|Room\s*\d+|Hall\s*[A-Z])/i,
         /\b([A-Z]{2}\d{3})\b/g, // MA201, MC316 etc
-        /(room|hall|lab|classroom)\s*([a-z0-9]+)/i
+        /(room|hall|lab|classroom)\s*([a-z0-9]+)/i,
       ];
-      
+
       for (const pattern of roomPatterns) {
         const roomMatch = title.match(pattern);
         if (roomMatch) {
           room = roomMatch[0].trim();
-          title = title.replace(roomMatch[0], '').trim();
+          title = title.replace(roomMatch[0], "").trim();
           break;
         }
       }
-      
+
       // Extract instructor information
-      let instructor = '';
+      let instructor = "";
       const instructorPatterns = [
         /(prof|dr|professor)\.?\s*([a-z]+)/i,
         /–\s*([A-Z]{2,3})\s*–/g, // – PS –, – SKS –
-        /\b([A-Z]{2,4})\b(?=\s*–|\s*$)/g // PS, SKS, etc
+        /\b([A-Z]{2,4})\b(?=\s*–|\s*$)/g, // PS, SKS, etc
       ];
-      
+
       for (const pattern of instructorPatterns) {
         const instMatch = title.match(pattern);
         if (instMatch) {
           instructor = instMatch[0].trim();
-          title = title.replace(instMatch[0], '').trim();
+          title = title.replace(instMatch[0], "").trim();
           break;
         }
       }
-      
+
       // Clean up title
       title = title
-        .replace(/[–—]/g, '')
-        .replace(/\s+/g, ' ')
-        .replace(/^\s*[–—]\s*|\s*[–—]\s*$/g, '')
+        .replace(/[–—]/g, "")
+        .replace(/\s+/g, " ")
+        .replace(/^\s*[–—]\s*|\s*[–—]\s*$/g, "")
         .trim();
-      
+
       // Determine class type
-      let type = 'class';
-      if (title.toLowerCase().includes('lab')) type = 'lab';
-      else if (title.toLowerCase().includes('lecture')) type = 'lecture';
-      else if (title.toLowerCase().includes('tutorial')) type = 'tutorial';
-      else if (title.toLowerCase().includes('seminar')) type = 'seminar';
-      
+      let type = "class";
+      if (title.toLowerCase().includes("lab")) type = "lab";
+      else if (title.toLowerCase().includes("lecture")) type = "lecture";
+      else if (title.toLowerCase().includes("tutorial")) type = "tutorial";
+      else if (title.toLowerCase().includes("seminar")) type = "seminar";
+
       if (title.length > 0) {
         const classEntry = {
           id: crypto.randomUUID(),
@@ -2183,15 +2227,15 @@ function extractTimetableManually(content: string, source: string): any[] {
           type: type,
           source: source,
           createdAt: new Date().toISOString(),
-          recurring: true
+          recurring: true,
         };
-        
+
         classes.push(classEntry);
         console.log(`✅ [MANUAL] Extracted class:`, classEntry);
       }
     }
   }
-  
+
   console.log(`📊 [MANUAL] Total extracted: ${classes.length} classes`);
   return classes;
 }
@@ -2199,27 +2243,27 @@ function extractTimetableManually(content: string, source: string): any[] {
 // Normalize time to 24-hour format
 function normalizeTime(timeStr: string): string {
   timeStr = timeStr.trim();
-  
+
   // Handle AM/PM
-  if (timeStr.toLowerCase().includes('pm') && !timeStr.startsWith('12')) {
-    const hour = parseInt(timeStr.split(':')[0]) + 12;
-    const minute = timeStr.split(':')[1]?.replace(/[^\d]/g, '') || '00';
-    return `${hour.toString().padStart(2, '0')}:${minute.padStart(2, '0')}`;
-  } else if (timeStr.toLowerCase().includes('am') && timeStr.startsWith('12')) {
-    const minute = timeStr.split(':')[1]?.replace(/[^\d]/g, '') || '00';
-    return `00:${minute.padStart(2, '0')}`;
+  if (timeStr.toLowerCase().includes("pm") && !timeStr.startsWith("12")) {
+    const hour = parseInt(timeStr.split(":")[0]) + 12;
+    const minute = timeStr.split(":")[1]?.replace(/[^\d]/g, "") || "00";
+    return `${hour.toString().padStart(2, "0")}:${minute.padStart(2, "0")}`;
+  } else if (timeStr.toLowerCase().includes("am") && timeStr.startsWith("12")) {
+    const minute = timeStr.split(":")[1]?.replace(/[^\d]/g, "") || "00";
+    return `00:${minute.padStart(2, "0")}`;
   } else {
     // Remove non-digit/colon characters and ensure proper format
-    const cleaned = timeStr.replace(/[^\d:]/g, '');
-    const parts = cleaned.split(':');
+    const cleaned = timeStr.replace(/[^\d:]/g, "");
+    const parts = cleaned.split(":");
     if (parts.length >= 2) {
-      const hour = parts[0].padStart(2, '0');
-      const minute = parts[1].padStart(2, '0');
+      const hour = parts[0].padStart(2, "0");
+      const minute = parts[1].padStart(2, "0");
       return `${hour}:${minute}`;
     }
   }
-  
-  return timeStr.replace(/[^\d:]/g, '') || '09:00';
+
+  return timeStr.replace(/[^\d:]/g, "") || "09:00";
 }
 
 export async function generateFlashcards(content: string): Promise<any[]> {

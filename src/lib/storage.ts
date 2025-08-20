@@ -37,7 +37,14 @@ export interface TimetableClass {
   endTime?: string;
   room?: string;
   instructor?: string;
-  day: "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+  day:
+    | "Monday"
+    | "Tuesday"
+    | "Wednesday"
+    | "Thursday"
+    | "Friday"
+    | "Saturday"
+    | "Sunday";
   type: "class" | "lab" | "lecture" | "tutorial" | "seminar";
   source?: string;
   createdAt: string;
@@ -325,24 +332,29 @@ export const TimetableStorage = {
 
   addClasses: (classes: TimetableClass[]) => {
     const timetable = TimetableStorage.load();
-    
-    classes.forEach(newClass => {
+
+    classes.forEach((newClass) => {
       // Check if class already exists for this day
       const existingClasses = timetable[newClass.day];
-      const duplicate = existingClasses.find(existing => 
-        existing.title === newClass.title && 
-        existing.time === newClass.time &&
-        existing.day === newClass.day
+      const duplicate = existingClasses.find(
+        (existing) =>
+          existing.title === newClass.title &&
+          existing.time === newClass.time &&
+          existing.day === newClass.day
       );
-      
+
       if (!duplicate) {
         timetable[newClass.day].push(newClass);
-        console.log(`📅 Added class: ${newClass.title} on ${newClass.day} at ${newClass.time}`);
+        console.log(
+          `📅 Added class: ${newClass.title} on ${newClass.day} at ${newClass.time}`
+        );
       } else {
-        console.log(`⚠️ Duplicate class skipped: ${newClass.title} on ${newClass.day}`);
+        console.log(
+          `⚠️ Duplicate class skipped: ${newClass.title} on ${newClass.day}`
+        );
       }
     });
-    
+
     TimetableStorage.save(timetable);
     return timetable;
   },
@@ -350,17 +362,17 @@ export const TimetableStorage = {
   removeClass: (classId: string) => {
     const timetable = TimetableStorage.load();
     let removed = false;
-    
-    Object.keys(timetable).forEach(day => {
+
+    Object.keys(timetable).forEach((day) => {
       const dayKey = day as keyof DayWiseTimetable;
       const originalLength = timetable[dayKey].length;
-      timetable[dayKey] = timetable[dayKey].filter(cls => cls.id !== classId);
+      timetable[dayKey] = timetable[dayKey].filter((cls) => cls.id !== classId);
       if (timetable[dayKey].length < originalLength) {
         removed = true;
         console.log(`🗑️ Removed class from ${day}`);
       }
     });
-    
+
     if (removed) {
       TimetableStorage.save(timetable);
     }
