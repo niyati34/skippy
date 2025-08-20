@@ -1,3 +1,5 @@
+
+https://github.com/user-attachments/assets/772a8f12-d823-45e3-8eda-492622ea0663
 <div align="center">
 
 # Skippy — AI Study Dashboard with Weekly Timetable, Notes, and Voice Assistant
@@ -176,9 +178,8 @@ Timetable storage is managed via `TimetableStorage` and general schedule items v
 ## Preview
 
 ### Video
+- In production: https://github.com/user-attachments/assets/772a8f12-d823-45e3-8eda-492622ea0663
 
-- Short demo (replace with your actual file): `public/preview/demo.mp4`
-  - In production: https://skippy-kohl.vercel.app/preview/demo.mp4
 
 ### Screenshots
 
@@ -188,15 +189,17 @@ Place images under `public/preview/` and update these paths if needed.
 
 1) Dashboard Overview
 
-![Dashboard Overview](public/preview/screenshot-1.png)
+<img width="1901" height="911" alt="image" src="https://github.com/user-attachments/assets/3359faf4-2e05-4563-a6d0-3405f785b526" />
+<img width="1917" height="905" alt="image" src="https://github.com/user-attachments/assets/c9d9bd54-ba7e-4d90-8963-667d36dba757" />
 
 2) Weekly Timetable (date-wise/day-wise/time-wise)
-
-![Weekly Timetable](public/preview/screenshot-2.png)
+   
+<img width="1896" height="892" alt="image" src="https://github.com/user-attachments/assets/4b7289c3-70dd-4b38-a041-6aa5cf9de32c" />
 
 3) Notes, Flashcards, and Assistant
 
-![Notes & Assistant](public/preview/screenshot-3.png)
+<img width="1892" height="903" alt="image" src="https://github.com/user-attachments/assets/f5217c18-b19e-4685-9bb5-5cfd46256d51" />
+
 
 </div>
 
