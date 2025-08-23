@@ -1650,18 +1650,19 @@ IMPORTANT:
       return createStructuredFallbackNotes(content, fileName);
     }
 
-    return notes.map((n: any, i: number) => ({
-      title: n?.title || `Study Notes: ${fileName} - Part ${i + 1}`,
-      content: ensureProperAcademicFormatting(
-        n?.content || "",
-        content,
-        fileName
-      ),
-      category: n?.category || detectSmartCategory(content, fileName),
-      tags: Array.isArray(n?.tags)
-        ? n.tags.slice(0, 5)
-        : ["structured", "academic", "comprehensive"],
-    }));
+    // Ensure returned notes follow the exact requested academic structure
+    return notes.map((n: any, i: number) => {
+      const raw = n?.content || "";
+      const formatted = formatNotesExactStructure(raw || content, fileName);
+      return {
+        title: n?.title || `Study Notes: ${fileName} - Part ${i + 1}`,
+        content: formatted,
+        category: n?.category || detectSmartCategory(content, fileName),
+        tags: Array.isArray(n?.tags)
+          ? n.tags.slice(0, 5)
+          : ["structured", "academic", "comprehensive"],
+      };
+    });
   } catch (e) {
     console.error("Error in generateNotesFromContent:", e);
     return createStructuredFallbackNotes(content, fileName);
@@ -1695,11 +1696,132 @@ function createStructuredFallbackNotes(
   return [
     {
       title: `Study Notes: ${title}`,
-      content: structuredContent,
+      content: formatNotesExactStructure(structuredContent, fileName),
       category: detectSmartCategory(content, fileName),
       tags: ["structured", "comprehensive", "academic", "study-notes"],
     },
   ];
+}
+
+// Format any input text into the exact note structure requested by the user.
+function formatNotesExactStructure(text: string, fileName: string): string {
+  const clean = sanitize(text || "");
+  const topics = extractAllTopics(clean);
+
+  // If no detected topics, create a single Unit with the file name
+  const effectiveTopics =
+    topics.length > 0 ? topics : [fileName.replace(/\.[^/.]+$/, "")];
+
+  const definitions = extractDefinitionsFromPDF(clean);
+  const advDis = extractAdvantagesDisadvantages(clean);
+  const apps = extractApplicationsFromPDF(clean);
+
+  let out = "";
+
+  effectiveTopics.forEach((topic, idx) => {
+    const unitNum = idx + 1;
+    out += `# Unit ${unitNum} – ${topic}\n\n`;
+
+    // For each major topic produce a numbered major topic (we'll use the topic itself as first major topic)
+    out += `## 1. ${topic}\n\n`;
+
+    // Definitions: try to find definitions matching this topic
+    const defsForTopic = definitions.filter((d) =>
+      d.term.toLowerCase().includes(topic.split(" ")[0].toLowerCase())
+    );
+    if (defsForTopic.length === 0 && definitions.length > 0)
+      defsForTopic.push(definitions[0]);
+
+    if (defsForTopic.length > 0) {
+      defsForTopic.slice(0, 3).forEach((d) => {
+        out += `**${d.term}**: ${d.definition}\n\n`;
+      });
+    } else {
+      // Fallback: capture first sentence(s) mentioning topic
+      const sentMatch = clean.match(
+        new RegExp(`([^.\n]*${escapeRegExp(topic)}[^.\n]*[.\n])`, "i")
+      );
+      out += `**${topic}**: ${
+        sentMatch ? sentMatch[0].trim() : "Definition not available in source."
+      }\n\n`;
+    }
+
+    // Working Principle: extract sentences mentioning 'principle' or nearby sentences
+    const wpMatch = clean.match(
+      new RegExp(`([^.\n]{20,200}principle[^.\n]{0,200}[.\n])`, "i")
+    );
+    if (wpMatch) {
+      out += `**Working Principle**: ${wpMatch[0].trim()}\n\n`;
+    } else {
+      const near = clean.match(
+        new RegExp(
+          `([^.\n]{40,200}${escapeRegExp(topic)}[^.\n]{0,200}[.\n])`,
+          "i"
+        )
+      );
+      out += `**Working Principle**: ${
+        near ? near[0].trim() : "Not explicitly described in the source."
+      }\n\n`;
+    }
+
+    // Key Features
+    out += `**Key Features**:\n`;
+    // Attempt to extract bullets from formatted sections
+    const features = (clean.match(
+      /(?:Key Features|Features)[:\n][\s\S]*?(?:\n\n|\n#{1,2}|$)/i
+    ) || [""])[0];
+    const bullets = features.match(/[-*•]\s*(.+)/g) || [];
+    if (bullets.length > 0) {
+      bullets
+        .slice(0, 6)
+        .forEach((b) => (out += `- ${b.replace(/^[-*•]\s*/, "")}\n`));
+    } else {
+      // Fallback: take a couple of short sentences related to topic
+      const sents = extractSentencesAboutTopic(clean, topic).slice(0, 3);
+      if (sents.length > 0) sents.forEach((s) => (out += `- ${s}\n`));
+      else out += `- Not available in source.\n`;
+    }
+    out += `\n`;
+
+    // Advantages / Disadvantages
+    const ad = advDis[idx] ||
+      advDis[0] || { advantages: [], disadvantages: [] };
+    out += `**Advantages**:\n`;
+    if (ad.advantages && ad.advantages.length > 0)
+      ad.advantages.slice(0, 6).forEach((a) => (out += `- ${a}\n`));
+    else out += `- Not available in source.\n`;
+    out += `\n`;
+
+    out += `**Disadvantages**:\n`;
+    if (ad.disadvantages && ad.disadvantages.length > 0)
+      ad.disadvantages.slice(0, 6).forEach((d) => (out += `- ${d}\n`));
+    else out += `- Not available in source.\n`;
+    out += `\n`;
+
+    // Applications
+    const appsForTopic = apps.filter((a) =>
+      a.application.toLowerCase().includes(topic.split(" ")[0].toLowerCase())
+    );
+    const chosenApps =
+      appsForTopic.length > 0 ? appsForTopic : apps.slice(0, 3);
+    out += `**Applications**: `;
+    if (chosenApps.length > 0)
+      out += chosenApps.map((a) => a.application).join(", ") + "\n\n";
+    else out += `Not available in source.\n\n`;
+  });
+
+  return out.trim();
+}
+
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractSentencesAboutTopic(text: string, topic: string): string[] {
+  const sents = text.split(/(?<=[.!?])\s+/);
+  return sents
+    .filter((s) => s.toLowerCase().includes(topic.toLowerCase()))
+    .map((s) => s.trim());
 }
 
 // Preserve academic structure from source

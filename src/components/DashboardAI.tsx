@@ -268,7 +268,11 @@ const DashboardAI = ({
           "You are Skippy, an AI study assistant. Be concise and plain text only (no emojis, no markdown, no bullet points). Keep replies to 2–4 short sentences. Ask at most one clarifying question.",
       };
 
-      const response = await callOpenRouter([systemPrompt, ...messages.slice(-6), userMessage]);
+      const response = await callOpenRouter([
+        systemPrompt,
+        ...messages.slice(-6),
+        userMessage,
+      ]);
       const clean = toPlainText(response);
       const assistantMessage: ChatMessage = {
         role: "assistant",

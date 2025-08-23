@@ -38,11 +38,11 @@ const SkippyAssistant = ({
 
   const messages = {
     greeting:
-      "Hi, I'm Skippy. You have a surprise to unlock. Please provide the password to continue.",
-    waiting: "I'm ready. You can speak or type your message.",
-    passwordPrompt: "Please enter the password.",
+      "Hi! I'm Skippy, your secret study buddy! 🐰✨ You've received a special surprise—but you'll need to unlock me first!",
+    waiting: "I'm waiting for your command. You can speak to me or type below!",
+    passwordPrompt: "Awesome! What's the password?",
     unlocked:
-      "Access granted. Welcome to your study dashboard.",
+      "Perfect! Welcome to your personalized study dashboard! Let's make your studies fun! 🎓",
   };
 
   useEffect(() => {
@@ -221,24 +221,46 @@ const SkippyAssistant = ({
       "one string seven",
     ];
 
-    const hasPasswordKeyword = passwordKeywords.some((keyword) =>
-      lowerInput.includes(keyword)
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const normalizedInput = normalize(lowerInput);
+
+    // Exact match check (user typed only the password)
+    const exactMatch = passwordKeywords.some(
+      (k) => normalizedInput === normalize(k)
     );
 
-    console.log(
-      "🔍 [Password Debug] Has password keyword:",
-      hasPasswordKeyword
+    // Explicit phrase extraction: "the password is ..." or "password: ..." or "pass: ..."
+    let explicitCandidate: string | null = null;
+    const explicitMatch = lowerInput.match(
+      /(?:the password is|password[:\s]|pass[:\s])\s*(.+)/i
     );
-    console.log(
-      "🔍 [Password Debug] Waiting for password:",
-      waitingForPassword
-    );
+    if (explicitMatch && explicitMatch[1]) {
+      // take the remainder as candidate, strip surrounding punctuation
+      explicitCandidate = explicitMatch[1].trim().replace(/^['"]|['"]$/g, "");
+    }
 
-    // Check for multiple codes scenario
+    const explicitCandidateNormalized = explicitCandidate
+      ? normalize(explicitCandidate)
+      : "";
+    const explicitCandidateMatches = explicitCandidate
+      ? passwordKeywords.some(
+          (k) =>
+            explicitCandidateNormalized === normalize(k) ||
+            explicitCandidateNormalized.startsWith(normalize(k))
+        )
+      : false;
+
+    // If there are multiple codes mentioned, ask for clarification (keep this behaviour)
     if (
-      lowerInput.includes("many codes") ||
-      lowerInput.includes("multiple codes") ||
-      lowerInput.includes("several codes")
+      normalizedInput.includes("many codes") ||
+      normalizedInput.includes("multiple codes") ||
+      normalizedInput.includes("several codes")
     ) {
       const clarificationMessage =
         "If there are multiple codes, pick the unique one related to the occasion. Which one stands out?";
@@ -247,17 +269,20 @@ const SkippyAssistant = ({
       return;
     }
 
-    // More restrictive password detection
-    const isPasswordAttempt =
-      hasPasswordKeyword ||
-      (lowerInput.includes("password") &&
-        passwordKeywords.some((keyword) => lowerInput.includes(keyword))) ||
-      lowerInput.includes("the password is") ||
-      lowerInput.includes("password:") ||
-      lowerInput.includes("pass:") ||
-      waitingForPassword;
+    // Determine password attempt: require either exact match or an explicit phrase that includes the password.
+    // IMPORTANT: Do NOT accept arbitrary input when waitingForPassword is true.
+    const isPasswordAttempt = exactMatch || explicitCandidateMatches;
 
-    console.log("🔍 [Password Debug] Is password attempt:", isPasswordAttempt);
+    console.log(
+      "🔍 [Password Debug] exactMatch:",
+      exactMatch,
+      "explicitCandidate:",
+      explicitCandidate
+    );
+    console.log(
+      "🔍 [Password Debug] Waiting for password:",
+      waitingForPassword
+    );
 
     if (isPasswordAttempt) {
       console.log("✅ [Password Debug] Password accepted! Unlocking...");
@@ -288,19 +313,19 @@ const SkippyAssistant = ({
     setIsLoading(true);
 
     try {
-    // AI conversation with concise, plain-text style
+      // AI conversation with concise, plain-text style
       const conversationMessages = [
         {
           role: "system" as const,
-      content: `You are Skippy, an AI study assistant.
+          content: `You are Skippy, an AI study assistant with a warm, playful tone suitable for Raksha Bandhan.
 Style and format:
-- Be concise and direct.
+- Be concise and friendly.
 - Plain text only. No emojis, no markdown, no bullet points, no asterisks.
-- 2–4 short sentences max per reply.
-- Ask at most one clarifying question when helpful.
+- 2–4 short sentences per reply.
+- Ask at most one simple clarifying question when helpful.
 - Do not reveal or hint the password.
 Task context:
-The user is trying to find a password hidden in a physical gift box. Provide practical, step-by-step guidance in plain sentences (not lists). Focus on simple checks: exterior, layers, tags, cards, hidden flaps, textures, light and shadow. Keep it brief.`,
+The user is finding a password hidden in a gift box. Offer encouraging, practical steps (exterior, layers, tags, flaps, textures, light angles) in short sentences.`,
         },
         ...chatHistory.slice(-8), // Keep more context for better conversation
         userMessage,
@@ -325,7 +350,7 @@ The user is trying to find a password hidden in a physical gift box. Provide pra
         "Scan each layer carefully. Read any notes. Try light at an angle to reveal embossing. What did you find?",
         "Focus on corners, seams, and ribbons. If there are multiple codes, choose the one linked to the occasion.",
       ];
-  const fallbackMessage =
+      const fallbackMessage =
         fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
       setCurrentMessage(fallbackMessage);
       speakMessage(fallbackMessage);
