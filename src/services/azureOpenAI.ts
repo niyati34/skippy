@@ -1,6 +1,9 @@
-// Azure OpenAI client with proxy-first calls and high-quality note generation
-// Env vars (Vite): VITE_OPENAI_API_BASE, VITE_AZURE_OPENAI_KEY, VITE_AZURE_OPENAI_DEPLOYMENT, VITE_AZURE_OPENAI_API_VERSION
+// AI client with proxy-first calls (OpenRouter by default), with Azure OpenAI fallback
+// Env vars (Vite):
+//   OpenRouter: OPENROUTER_API_KEY (server only), OPENROUTER_MODEL (optional)
+//   Azure: VITE_OPENAI_API_BASE, VITE_AZURE_OPENAI_KEY, VITE_AZURE_OPENAI_DEPLOYMENT, VITE_AZURE_OPENAI_API_VERSION
 
+// Azure (fallback/direct) config
 const API_ENDPOINT =
   (import.meta as any)?.env?.VITE_OPENAI_API_BASE ||
   (import.meta as any)?.env?.OPENAI_API_BASE ||
@@ -17,6 +20,9 @@ const DEPLOYMENT =
   (import.meta as any)?.env?.VITE_AZURE_OPENAI_DEPLOYMENT ||
   (import.meta as any)?.env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
   "gpt-4o";
+
+// OpenRouter (proxy only) config
+const OPENROUTER_MODEL = (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
 
 function getCompletionsUrl() {
   if (!API_ENDPOINT || !DEPLOYMENT) return "";
@@ -37,26 +43,25 @@ export async function callAzureOpenAI(
 ): Promise<string> {
   const directUrl = getCompletionsUrl();
 
-  // Determine proxy URL based on environment
+  // Determine proxy URLs based on environment
   const isProduction =
     window.location.hostname !== "localhost" &&
     window.location.hostname !== "127.0.0.1";
-  const proxyUrl = isProduction
-    ? `/api/azure-openai/chat` // Vercel serverless function
-    : `http://localhost:${
-        (import.meta as any)?.env?.VITE_PROXY_PORT || 5174
-      }/api/azure-openai/chat`; // Local development
+  const baseProxy = isProduction
+    ? ""
+    : `http://localhost:${(import.meta as any)?.env?.VITE_PROXY_PORT || 5174}`;
+  const openRouterProxyUrl = `${baseProxy}/api/openrouter/chat`;
+  const azureProxyUrl = `${baseProxy}/api/azure-openai/chat`;
 
-  console.log(
-    `[Azure OpenAI] Using ${
-      isProduction ? "production" : "development"
-    } proxy:`,
-    proxyUrl
-  );
+  console.log(`[AI] Using ${isProduction ? "production" : "development"} proxies:`, {
+    openRouterProxyUrl,
+    azureProxyUrl,
+  });
 
   const call = async (useProxy: boolean) => {
     if (useProxy) {
-      const resp = await fetch(proxyUrl, {
+      // Try OpenRouter first
+      let resp = await fetch(openRouterProxyUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,8 +71,18 @@ export async function callAzureOpenAI(
       });
       if (!resp.ok) {
         const errorText = await resp.text();
-        console.error(`[Azure OpenAI] Proxy error:`, resp.status, errorText);
-        throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
+        console.warn(`[OpenRouter] Proxy error:`, resp.status, errorText);
+        // Fallback to Azure proxy
+        resp = await fetch(azureProxyUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages, options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 } }),
+        });
+        if (!resp.ok) {
+          const err2 = await resp.text();
+          console.error(`[Azure] Proxy error:`, resp.status, err2);
+          throw new Error(`Proxy error: ${resp.status} - ${err2}`);
+        }
       }
       const data = await resp.json();
       return (
