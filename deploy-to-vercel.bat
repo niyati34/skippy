@@ -48,10 +48,9 @@ if "%choice%"=="1" (
     echo 5. Deploy!
     echo.
     echo Environment variables needed:
-    echo - VITE_OPENAI_API_BASE
-    echo - VITE_AZURE_OPENAI_KEY  
-    echo - VITE_AZURE_OPENAI_DEPLOYMENT
-    echo - VITE_AZURE_OPENAI_API_VERSION
+    echo - OPENROUTER_API_KEY
+    echo - OPENROUTER_MODEL (optional)
+    echo - OPENROUTER_API_BASE (optional)
     echo.
     echo 🔧 Password Issue Fixed:
     echo - Production users can click "Enter Study Dashboard"
@@ -70,7 +69,7 @@ if "%choice%"=="1" (
     npm run build
     echo.
     echo 🌐 Opening test page...
-    start http://localhost:8080/vercel-test.html
+    start http://localhost:5173/vercel-test.html
     pause
 ) else if "%choice%"=="5" (
     echo.

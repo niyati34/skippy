@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Mic, RotateCcw, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { callAzureOpenAI, ChatMessage } from "@/services/azureOpenAI";
+import { callOpenRouter, ChatMessage } from "@/services/azureOpenAI";
 
 interface SkippyAssistantProps {
   onPasswordUnlock?: (password: string) => void;
@@ -322,7 +322,7 @@ Always be encouraging and keep the conversation flowing!`,
         userMessage,
       ];
 
-      const response = await callAzureOpenAI(conversationMessages);
+  const response = await callOpenRouter(conversationMessages);
 
       const assistantMessage = {
         role: "assistant" as const,

@@ -6,15 +6,12 @@ Your Skippy AI Study Buddy is now ready for Vercel deployment! Here's everything
 
 ### 1. **Vercel Serverless Function**
 
-- ✅ Created `/api/azure-openai/chat.js` - Azure OpenAI proxy
+- ✅ Created `/api/openrouter/chat.js` - OpenRouter proxy
 - ✅ Handles CORS automatically
-- ✅ Works with your existing Azure OpenAI configuration
-- ✅ Supports both VITE\_ and standard environment variables
+- ✅ Works with your OpenRouter configuration
 
-### 2. **Smart Environment Detection**
-
-- ✅ **Local Development**: Uses `http://localhost:5174/api/azure-openai/chat`
-- ✅ **Production (Vercel)**: Uses `/api/azure-openai/chat`
+- ✅ **Local Development**: Uses `http://localhost:5174/api/openrouter/chat`
+- ✅ **Production (Vercel)**: Uses `/api/openrouter/chat`
 - ✅ Automatic switching based on hostname
 
 ### 3. **Configuration Files**
@@ -53,10 +50,10 @@ vercel
 ## 🔐 **Environment Variables to Add in Vercel:**
 
 ```
-VITE_OPENAI_API_BASE=https://niyat-mbn9ekvt-eastus2.cognitiveservices.azure.com
-VITE_AZURE_OPENAI_KEY=EXQGi4koSjN2aZcOMNZEQAFzrFMvMPb0BfHREFOZH0SNKD3SGSERJQQJ99BFACHYHv6XJ3w3AAAAACOGheaZ
-VITE_AZURE_OPENAI_DEPLOYMENT=gpt-4o
-VITE_AZURE_OPENAI_API_VERSION=2025-01-01-preview
+OPENROUTER_API_KEY=your-openrouter-api-key
+# Optional
+OPENROUTER_MODEL=gpt-oss-20b
+OPENROUTER_API_BASE=https://openrouter.ai/api
 ```
 
 **Add these in**: Vercel Dashboard → Your Project → Settings → Environment Variables
@@ -72,7 +69,7 @@ VITE_AZURE_OPENAI_API_VERSION=2025-01-01-preview
 ```
 your-project/
 ├── api/
-│   └── azure-openai/
+│   └── openrouter/
 │       └── chat.js          # ✅ Vercel serverless function
 ├── public/
 │   └── vercel-test.html     # ✅ Deployment test page
@@ -102,7 +99,7 @@ your-project/
 ### **Production (Vercel):**
 
 - Your React app runs on `your-project.vercel.app`
-- Serverless function handles `/api/azure-openai/chat`
+- Serverless function handles `/api/openrouter/chat`
 - API calls go to Vercel serverless function
 - Same functionality, zero configuration needed!
 
@@ -111,7 +108,7 @@ your-project/
 1. **Build fails?** → Run `npm run build` locally first
 2. **API errors?** → Check environment variables in Vercel dashboard
 3. **CORS issues?** → Already handled in serverless function
-4. **Timeout errors?** → Azure OpenAI might be slow, check service status
+4. **Timeout errors?** → Check OpenRouter status and network
 
 ## 📞 **Support:**
 

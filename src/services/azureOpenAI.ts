@@ -1,35 +1,7 @@
-// AI client with proxy-first calls (OpenRouter by default), with Azure OpenAI fallback
-// Env vars (Vite):
-//   OpenRouter: OPENROUTER_API_KEY (server only), OPENROUTER_MODEL (optional)
-//   Azure: VITE_OPENAI_API_BASE, VITE_AZURE_OPENAI_KEY, VITE_AZURE_OPENAI_DEPLOYMENT, VITE_AZURE_OPENAI_API_VERSION
+// AI client using OpenRouter only (via proxy)
+// Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
 
-// Azure (fallback/direct) config
-const API_ENDPOINT =
-  (import.meta as any)?.env?.VITE_OPENAI_API_BASE ||
-  (import.meta as any)?.env?.OPENAI_API_BASE ||
-  "";
-const API_KEY =
-  (import.meta as any)?.env?.VITE_AZURE_OPENAI_KEY ||
-  (import.meta as any)?.env?.AZURE_OPENAI_API_KEY ||
-  "";
-const API_VERSION =
-  (import.meta as any)?.env?.VITE_AZURE_OPENAI_API_VERSION ||
-  (import.meta as any)?.env?.AZURE_OPENAI_API_VERSION ||
-  "2025-01-01-preview";
-const DEPLOYMENT =
-  (import.meta as any)?.env?.VITE_AZURE_OPENAI_DEPLOYMENT ||
-  (import.meta as any)?.env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
-  "gpt-4o";
-
-// OpenRouter (proxy only) config
-const OPENROUTER_MODEL =
-  (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
-
-function getCompletionsUrl() {
-  if (!API_ENDPOINT || !DEPLOYMENT) return "";
-  const base = API_ENDPOINT.replace(/\/$/, "");
-  return `${base}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`;
-}
+const OPENROUTER_MODEL = (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -38,12 +10,10 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function callAzureOpenAI(
+export async function callOpenRouter(
   messages: ChatMessage[],
-  retries = 2 // Reduced for faster response
+  retries = 2
 ): Promise<string> {
-  const directUrl = getCompletionsUrl();
-
   // Determine proxy URLs based on environment
   const isProduction =
     window.location.hostname !== "localhost" &&
@@ -52,44 +22,25 @@ export async function callAzureOpenAI(
     ? ""
     : `http://localhost:${(import.meta as any)?.env?.VITE_PROXY_PORT || 5174}`;
   const openRouterProxyUrl = `${baseProxy}/api/openrouter/chat`;
-  const azureProxyUrl = `${baseProxy}/api/azure-openai/chat`;
 
   console.log(
-    `[AI] Using ${isProduction ? "production" : "development"} proxies:`,
-    {
-      openRouterProxyUrl,
-      azureProxyUrl,
-    }
+    `[AI] Using ${isProduction ? "production" : "development"} OpenRouter proxy: ${openRouterProxyUrl} (model: ${OPENROUTER_MODEL})`
   );
 
   const call = async (useProxy: boolean) => {
     if (useProxy) {
-      // Try OpenRouter first
       let resp = await fetch(openRouterProxyUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages,
-          options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 }, // Increased tokens, lower temperature for speed
+          options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8, model: OPENROUTER_MODEL },
         }),
       });
       if (!resp.ok) {
         const errorText = await resp.text();
-        console.warn(`[OpenRouter] Proxy error:`, resp.status, errorText);
-        // Fallback to Azure proxy
-        resp = await fetch(azureProxyUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages,
-            options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 },
-          }),
-        });
-        if (!resp.ok) {
-          const err2 = await resp.text();
-          console.error(`[Azure] Proxy error:`, resp.status, err2);
-          throw new Error(`Proxy error: ${resp.status} - ${err2}`);
-        }
+        console.error(`[OpenRouter] Proxy error:`, resp.status, errorText);
+        throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
       }
       const data = await resp.json();
       return (
@@ -98,34 +49,14 @@ export async function callAzureOpenAI(
         ""
       );
     }
-
-    if (!directUrl || !API_KEY)
-      throw new Error("Missing Azure OpenAI configuration");
-
-    const resp = await fetch(directUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": API_KEY,
-      },
-      body: JSON.stringify({
-        messages,
-        max_tokens: 3000, // Increased for more detailed notes
-        temperature: 0.1, // Lower for faster, more focused responses
-        top_p: 0.8,
-        frequency_penalty: 0,
-        presence_penalty: 0,
-      }),
-    });
-    if (!resp.ok) throw new Error(`Azure error: ${resp.status}`);
-    const data = await resp.json();
-    return data?.choices?.[0]?.message?.content || "";
+    // No direct calls on client for security; require proxy
+    throw new Error("Direct OpenRouter calls are disabled on client");
   };
 
   for (let i = 0; i < retries; i++) {
     const useProxy = i < 1; // Try proxy first, then direct
     try {
-      const out = await call(useProxy);
+  const out = await call(useProxy);
       if (out) return out;
       throw new Error("Empty response");
     } catch (e) {
@@ -1141,7 +1072,7 @@ async function condenseContentIfLarge(
     },
   ];
   try {
-    const out = await callAzureOpenAI(messages, 1); // Single attempt
+  const out = await callOpenRouter(messages, 1); // Single attempt
     return out && out.trim().length > 50
       ? out.trim()
       : content.substring(0, 8000);
@@ -1496,7 +1427,7 @@ ${content}`;
   ];
 
   try {
-    const response = await callAzureOpenAI(messages, 3);
+  const response = await callOpenRouter(messages, 3);
 
     // Two-step JSON handling to avoid markdown conflicts
     let clean = (response || "").trim();
@@ -1649,7 +1580,7 @@ IMPORTANT:
       },
     ];
 
-    const response = await callAzureOpenAI(messages, 3);
+  const response = await callOpenRouter(messages, 3);
 
     // Enhanced JSON parsing to handle complex content
     let clean = (response || "").trim();
@@ -1883,7 +1814,7 @@ export async function analyzeFileContent(
     },
   ];
   try {
-    const response = await callAzureOpenAI(messages, 2);
+  const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -1924,7 +1855,7 @@ export async function generateScheduleFromContent(
     },
   ];
   try {
-    const response = await callAzureOpenAI(messages, 2);
+  const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     const parsed = JSON.parse(clean);
     const items = Array.isArray(parsed) ? parsed : [];
@@ -1996,7 +1927,7 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     console.log(
       "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
     );
-    const response = await callAzureOpenAI(messages, 2);
+  const response = await callOpenRouter(messages, 2);
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
@@ -2298,7 +2229,7 @@ export async function generateFlashcards(content: string): Promise<any[]> {
     { role: "user", content: `Create educational flashcards from: ${content}` },
   ];
   try {
-    const response = await callAzureOpenAI(messages, 2);
+  const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -2320,7 +2251,7 @@ export async function generateFunLearning(
       content: `Create a ${type} from this educational content: ${content}`,
     },
   ];
-  return await callAzureOpenAI(messages, 2);
+  return await callOpenRouter(messages, 2);
 }
 
 export async function extractTextFromImage(imageFile: File): Promise<string> {

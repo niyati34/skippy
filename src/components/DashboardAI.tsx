@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  callAzureOpenAI,
+  callOpenRouter,
   ChatMessage,
   analyzeFileContent,
   generateScheduleFromContent,
@@ -262,7 +262,7 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-      const response = await callAzureOpenAI([...messages, userMessage]);
+  const response = await callOpenRouter([...messages, userMessage]);
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: response,

@@ -103,7 +103,7 @@
 
       <div class="status" id="api-status">
         <h2>🔗 API Connection Test</h2>
-        <p>Testing Azure OpenAI proxy connection...</p>
+  <p>Testing OpenRouter proxy connection...</p>
         <button class="test-button" onclick="testAPIConnection()">
           Test API Connection
         </button>
@@ -118,7 +118,9 @@
           <li id="check-cors">⏳ CORS Configuration</li>
           <li id="check-build">⏳ Build Process</li>
         </ul>
-      </div>
+            <ul>
+              <li>OPENROUTER_API_KEY set in environment</li>
+              <li>Function /api/openrouter/chat deployed</li>
 
       <div class="success">
         <h2>🎯 Quick Tests</h2>
@@ -162,8 +164,8 @@
         window.location.hostname !== "127.0.0.1";
       const currentUrl = window.location.href;
       const apiEndpoint = isProduction
-        ? "/api/azure-openai/chat"
-        : "http://localhost:5174/api/azure-openai/chat";
+  ? "/api/openrouter/chat"
+  : "http://localhost:5174/api/openrouter/chat";
 
       document.getElementById("environment").textContent = isProduction
         ? "Production (Vercel)"
@@ -253,10 +255,12 @@
       // Quick test functions
       function testMainApp() {
         window.open(isProduction ? "/" : "http://localhost:8080/", "_blank");
+    window.open(isProduction ? "/" : "http://localhost:5173/", "_blank");
       }
 
       function testTimetableDemo() {
         window.open("./test-date-wise-classes.html", "_blank");
+    window.open("./test-date-wise-classes.html", "_blank");
       }
 
       function testExpertExtraction() {
