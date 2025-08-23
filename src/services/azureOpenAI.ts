@@ -22,7 +22,8 @@ const DEPLOYMENT =
   "gpt-4o";
 
 // OpenRouter (proxy only) config
-const OPENROUTER_MODEL = (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
+const OPENROUTER_MODEL =
+  (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
 
 function getCompletionsUrl() {
   if (!API_ENDPOINT || !DEPLOYMENT) return "";
@@ -53,10 +54,13 @@ export async function callAzureOpenAI(
   const openRouterProxyUrl = `${baseProxy}/api/openrouter/chat`;
   const azureProxyUrl = `${baseProxy}/api/azure-openai/chat`;
 
-  console.log(`[AI] Using ${isProduction ? "production" : "development"} proxies:`, {
-    openRouterProxyUrl,
-    azureProxyUrl,
-  });
+  console.log(
+    `[AI] Using ${isProduction ? "production" : "development"} proxies:`,
+    {
+      openRouterProxyUrl,
+      azureProxyUrl,
+    }
+  );
 
   const call = async (useProxy: boolean) => {
     if (useProxy) {
@@ -76,7 +80,10 @@ export async function callAzureOpenAI(
         resp = await fetch(azureProxyUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages, options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 } }),
+          body: JSON.stringify({
+            messages,
+            options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 },
+          }),
         });
         if (!resp.ok) {
           const err2 = await resp.text();

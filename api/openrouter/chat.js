@@ -54,7 +54,9 @@ export default async function handler(req, res) {
     // Prefer the request origin; fallback to Vercel URL if available
     const siteUrl =
       req.headers?.origin ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : undefined) ||
       "https://skippy-kohl.vercel.app";
 
     const headers = {
@@ -65,7 +67,12 @@ export default async function handler(req, res) {
       "X-Title": "Skippy",
     };
 
-    console.log("[vercel] OpenRouter request -> model:", MODEL, "referer:", siteUrl);
+    console.log(
+      "[vercel] OpenRouter request -> model:",
+      MODEL,
+      "referer:",
+      siteUrl
+    );
 
     const response = await fetch(ENDPOINT, {
       method: "POST",

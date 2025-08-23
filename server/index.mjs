@@ -28,7 +28,8 @@ const DEPLOYMENT =
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "gpt-oss-20b";
 const OPENROUTER_ENDPOINT =
-  process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1/chat/completions";
+  process.env.OPENROUTER_API_BASE ||
+  "https://openrouter.ai/api/v1/chat/completions";
 
 if (!OPENROUTER_API_KEY) {
   console.warn(
@@ -108,12 +109,12 @@ app.post("/api/openrouter/chat", async (req, res) => {
       presence_penalty: options?.presence_penalty ?? 0,
     };
 
-  const response = await fetch(OPENROUTER_ENDPOINT, {
+    const response = await fetch(OPENROUTER_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-    "HTTP-Referer": process.env.PUBLIC_URL || "http://localhost:5173",
+        "HTTP-Referer": process.env.PUBLIC_URL || "http://localhost:5173",
         "X-Title": "Skippy-Local",
       },
       body: JSON.stringify(payload),
