@@ -15,64 +15,70 @@ export async function callOpenRouter(
   messages: ChatMessage[],
   retries = 2
 ): Promise<string> {
-  // Determine proxy URLs based on environment
-  const isProduction =
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1";
-  const baseProxy = isProduction
-    ? ""
-    : `http://localhost:${(import.meta as any)?.env?.VITE_PROXY_PORT || 5174}`;
-  const openRouterProxyUrl = `${baseProxy}/api/openrouter/chat`;
+  // Determine candidate proxy URLs based on environment
+  const isLocal =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+  const devPort = (import.meta as any)?.env?.VITE_PROXY_PORT || 5174;
+  const devProxy = `http://localhost:${devPort}/api/openrouter/chat`;
+  const prodRelative = `/api/openrouter/chat`;
+  const prodBase = (import.meta as any)?.env?.VITE_PROD_URL?.replace(/\/$/, "");
+  const prodAbsolute = prodBase ? `${prodBase}/api/openrouter/chat` : "";
+
+  const candidates = (isLocal
+    ? [devProxy, prodAbsolute, prodRelative]
+    : [prodRelative, prodAbsolute]
+  ).filter(Boolean);
 
   console.log(
-    `[AI] Using ${
-      isProduction ? "production" : "development"
-    } OpenRouter proxy: ${openRouterProxyUrl} (model: ${OPENROUTER_MODEL})`
+    `[AI] Endpoint candidates (model ${OPENROUTER_MODEL}):`,
+    candidates
   );
 
-  const call = async (useProxy: boolean) => {
-    if (useProxy) {
-      let resp = await fetch(openRouterProxyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages,
-          options: {
-            max_tokens: 3000,
-            temperature: 0.1,
-            top_p: 0.8,
-            model: OPENROUTER_MODEL,
-          },
-        }),
-      });
-      if (!resp.ok) {
-        const errorText = await resp.text();
-        console.error(`[OpenRouter] Proxy error:`, resp.status, errorText);
-        throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
-      }
-      const data = await resp.json();
-      return (
-        data?.choices?.[0]?.message?.content ||
-        data?.choices?.[0]?.delta?.content ||
-        ""
-      );
+  const tryCall = async (url: string) => {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        options: {
+          max_tokens: 3000,
+          temperature: 0.1,
+          top_p: 0.8,
+          model: OPENROUTER_MODEL,
+        },
+      }),
+    });
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error(`[OpenRouter] Proxy error @ ${url}:`, resp.status, errorText);
+      throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
     }
-    // No direct calls on client for security; require proxy
-    throw new Error("Direct OpenRouter calls are disabled on client");
+    const data = await resp.json();
+    return (
+      data?.choices?.[0]?.message?.content ||
+      data?.choices?.[0]?.delta?.content ||
+      ""
+    );
   };
 
-  // Always use the proxy; retry on transient failures
-  for (let i = 0; i < retries; i++) {
-    try {
-      const out = await call(true);
-      if (out) return out;
-      throw new Error("Empty response");
-    } catch (e) {
-      console.warn(`API call attempt ${i + 1} failed:`, e);
-      if (i < retries - 1) await delay(200 * (i + 1)); // Reduced delay for faster retries
+  // Try each candidate with simple retries per endpoint
+  let lastErr: any = null;
+  for (const url of candidates) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const out = await tryCall(url);
+        if (out) return out;
+        throw new Error("Empty response");
+      } catch (e) {
+        lastErr = e;
+        console.warn(`API call attempt ${i + 1} failed for ${url}:`, e);
+        if (i < retries - 1) await delay(200 * (i + 1));
+      }
     }
   }
-  return "";
+  // Surface final error for visibility
+  throw lastErr ?? new Error("All endpoints failed");
 }
 
 // ----------------- Helpers for fallback notes -----------------
