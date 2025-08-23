@@ -2,9 +2,15 @@
 https://github.com/user-attachments/assets/772a8f12-d823-45e3-8eda-492622ea0663
 <div align="center">
 
+<!--
+Short Description: AI-powered study dashboard with weekly timetable, smart notes, flashcards, and a voice assistant. Built with React, Vite, Tailwind, Azure OpenAI, and Vercel.
+Website: https://skippy-kohl.vercel.app
+Topics: study dashboard ai timetable notes flashcards react vite tailwind azure-openai vercel assistant
+-->
+
 # Skippy — AI Study Dashboard with Weekly Timetable, Notes, and Voice Assistant
 
-Organize classes, generate smart study notes and flashcards, and chat with a friendly voice assistant. Built with React + Vite + Tailwind + shadcn/ui, powered by Azure OpenAI via a Vercel serverless proxy.
+Organize classes, generate smart study notes and flashcards, and chat with a friendly voice assistant. Built with React + Vite + Tailwind + shadcn/ui. AI calls go through a serverless proxy: OpenRouter by default, Azure OpenAI as fallback.
 
 </div>
 
@@ -21,7 +27,7 @@ Skippy is a sleek, student-focused dashboard that helps you:
 - Chat with a playful assistant that can speak out responses (with a permission-friendly UX)
 - Deploy easily to Vercel with a secure serverless proxy for Azure OpenAI
 
-The app runs great locally and in production on Vercel. In production, all AI calls go through a secure function at `/api/azure-openai/chat`.
+The app runs great locally and in production on Vercel. In production, AI calls go first to `/api/openrouter/chat` and fall back to `/api/azure-openai/chat` if configured.
 
 ## Features
 
@@ -30,21 +36,23 @@ The app runs great locally and in production on Vercel. In production, all AI ca
   - Accurate filtering per-day and per-time-slot
   - Clear buttons to clear only timetable items or delete all schedule items
 - AI-Powered Notes & Flashcards
-  - Uses Azure OpenAI for structured markdown with headings, key points, and summaries
+  - Uses OpenRouter (default) for structured markdown with headings, key points, and summaries
   - Fallback formatting when the API is unavailable to avoid single-paragraph dumps
 - Skippy Assistant (Voice + Chat)
   - Greeting flow with browser-safe speech permissions
   - Password-gated access flow (no direct bypass in production)
   - Conversational guide that never reveals the password
 - Zero-config Production API
-  - Vercel serverless function at `api/azure-openai/chat.js`
+  - Vercel serverless functions:
+    - `api/openrouter/chat.js` (default)
+    - `api/azure-openai/chat.js` (fallback)
   - Client auto-detects prod vs local and routes requests appropriately
 
 ## Tech Stack
 
 - React 18, TypeScript, Vite 5
 - Tailwind CSS, shadcn/ui, lucide-react
-- Azure OpenAI (Chat Completions) via serverless proxy
+- OpenRouter (default) via serverless proxy, Azure OpenAI as fallback
 - Vercel for deployment
 
 ## Quick Start (Local)
@@ -68,15 +76,22 @@ npm run dev:all
 Local endpoints used by the app:
 
 - Frontend: http://localhost:5173
-- Local proxy (optional): http://localhost:5174/api/azure-openai/chat
+- OpenRouter proxy: http://localhost:5174/api/openrouter/chat
+- Azure proxy (fallback): http://localhost:5174/api/azure-openai/chat
 
-You can use the local proxy or configure direct Azure env vars in `.env.local` for the browser to call Azure directly. In production, the proxy is always used.
+You can use the local proxies. For direct Azure calls, set Vite env vars in `.env.local` (fallback path). In production, the proxy is always used.
 
 ## Environment Variables
 
 Create `.env.local` for local dev (do not commit secrets). The app recognizes both Vite and generic names; prefer Vite names on the client.
 
-Required for production (set in Vercel Project → Settings → Environment Variables):
+Production env (set in Vercel Project → Settings → Environment Variables):
+
+- OPENROUTER_API_KEY = your_openrouter_key
+- OPENROUTER_MODEL = gpt-oss-20b (optional)
+- OPENROUTER_API_BASE = https://openrouter.ai/api/v1/chat/completions (optional)
+
+Optional Azure fallback (only if you want Azure available):
 
 - VITE_OPENAI_API_BASE = https://YOUR-RESOURCE-NAME.openai.azure.com
 - VITE_AZURE_OPENAI_KEY = your_azure_openai_key
@@ -93,7 +108,7 @@ Optional equivalents (used by server/local):
 Where they’re used:
 
 - Client service: `src/services/azureOpenAI.ts`
-- Vercel function: `api/azure-openai/chat.js`
+- Vercel functions: `api/openrouter/chat.js`, `api/azure-openai/chat.js`
 - Local proxy: `server/index.mjs`
 
 More notes: see `vercel-env-fix.md` for the production env fix context.
@@ -112,12 +127,11 @@ Defined in `package.json`:
 
 ## Deploying to Vercel
 
-1. Set the four required env vars in Vercel:
+1. Set env vars in Vercel:
 
-- VITE_OPENAI_API_BASE
-- VITE_AZURE_OPENAI_KEY
-- VITE_AZURE_OPENAI_DEPLOYMENT
-- VITE_AZURE_OPENAI_API_VERSION
+- Required: `OPENROUTER_API_KEY`
+- Optional: `OPENROUTER_MODEL` (default: gpt-oss-20b)
+- Optional Azure fallback: `VITE_OPENAI_API_BASE`, `VITE_AZURE_OPENAI_KEY`, `VITE_AZURE_OPENAI_DEPLOYMENT`, `VITE_AZURE_OPENAI_API_VERSION`
 
 2. Deploy
 
@@ -126,8 +140,8 @@ Defined in `package.json`:
 
 3. Production API path
 
-- All AI calls go to `/api/azure-openai/chat`, implemented at `api/azure-openai/chat.js`
-- The function is configured in `vercel.json`
+- AI calls go first to `/api/openrouter/chat` (OpenRouter). On proxy failure, client falls back to `/api/azure-openai/chat` if configured.
+- Both functions are configured in `vercel.json`.
 
 For deeper guidance, see `VERCEL_DEPLOYMENT.md` and `DEPLOYMENT_READY.md`.
 
@@ -187,16 +201,23 @@ Place images under `public/preview/` and update these paths if needed.
 
 <div>
 
-1) Dashboard Overview
+1. Dashboard Overview
 
 <img width="1901" height="911" alt="image" src="https://github.com/user-attachments/assets/3359faf4-2e05-4563-a6d0-3405f785b526" />
 <img width="1917" height="905" alt="image" src="https://github.com/user-attachments/assets/c9d9bd54-ba7e-4d90-8963-667d36dba757" />
 
-2) Weekly Timetable (date-wise/day-wise/time-wise)
-   
-<img width="1896" height="892" alt="image" src="https://github.com/user-attachments/assets/4b7289c3-70dd-4b38-a041-6aa5cf9de32c" />
+2. Weekly Timetable (date-wise/day-wise/time-wise)
 
-3) Notes, Flashcards, and Assistant
+<!-- Markdown image for local/standard preview -->
+![Weekly Timetable](public/preview/screenshot-2.png)
+
+<!-- HTML image for GitHub rich preview (from main branch) -->
+<img width="1896" height="892" alt="Weekly Timetable Preview" src="https://github.com/user-attachments/assets/4b7289c3-70dd-4b38-a041-6aa5cf9de32c" />
+
+<!-- HTML image for GitHub rich preview (from main branch) -->
+<img width="1896" height="892" alt="Weekly Timetable Preview" src="https://github.com/user-attachments/assets/4b7289c3-70dd-4b38-a041-6aa5cf9de32c" />
+
+3. Notes, Flashcards, and Assistant
 
 <img width="1892" height="903" alt="image" src="https://github.com/user-attachments/assets/f5217c18-b19e-4685-9bb5-5cfd46256d51" />
 
@@ -216,7 +237,8 @@ src/
 server/
 	index.mjs                     # Local Express proxy for Azure OpenAI
 api/
-	azure-openai/chat.js          # Vercel serverless proxy for production
+  openrouter/chat.js            # Vercel serverless proxy (default)
+  azure-openai/chat.js          # Azure fallback proxy
 vercel.json                     # Function config + rewrites
 ```
 
@@ -240,3 +262,11 @@ Proprietary. All rights reserved (or update this section to your preferred licen
 - Built with React + Vite + Tailwind + shadcn/ui
 - Azure OpenAI for AI features
 - Vercel for painless deployment
+
+## Releases
+
+- See the [Releases page](https://github.com/niyati34/skippy/releases) for version history, changelogs, and downloadable builds (if published).
+
+## Packages
+
+- No published npm packages yet. If you want to package Skippy as a library or component, open an issue or PR!

@@ -3,12 +3,20 @@
     "api/azure-openai/chat.js": {
       "memory": 512,
       "maxDuration": 30
+    },
+    "api/openrouter/chat.js": {
+      "memory": 512,
+      "maxDuration": 30
     }
   },
   "rewrites": [
     {
       "source": "/api/azure-openai/chat",
       "destination": "/api/azure-openai/chat"
+    },
+    {
+      "source": "/api/openrouter/chat",
+      "destination": "/api/openrouter/chat"
     }
   ]
 }
