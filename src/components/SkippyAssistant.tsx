@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Mic, RotateCcw, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { callOpenRouter, ChatMessage } from "@/services/azureOpenAI";
+import { callOpenRouter, ChatMessage } from "@/services/openrouter";
 
 interface SkippyAssistantProps {
   onPasswordUnlock?: (password: string) => void;

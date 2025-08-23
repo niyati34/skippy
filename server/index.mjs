@@ -11,18 +11,11 @@ app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
 // OpenRouter chat proxy (only)
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "gpt-oss-20b";
 const OPENROUTER_ENDPOINT =
   (process.env.OPENROUTER_API_BASE?.replace(/\/$/, "") ||
     "https://openrouter.ai/api") + "/v1/chat/completions";
 const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:5173";
-
-if (!OPENROUTER_API_KEY) {
-  console.warn(
-    "[server] OPENROUTER_API_KEY missing. OpenRouter route will return 500 until configured."
-  );
-}
 
 app.post("/api/openrouter/chat", async (req, res) => {
   try {
@@ -31,7 +24,10 @@ app.post("/api/openrouter/chat", async (req, res) => {
       return res.status(400).json({ error: "messages array required" });
     }
 
+    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
     if (!OPENROUTER_API_KEY) {
+      // Safe debug: do not log real key
+      console.error("[server] Missing OPENROUTER_API_KEY env; set it in .env.local or environment");
       return res.status(500).json({ error: "OPENROUTER_API_KEY missing" });
     }
 
@@ -45,7 +41,7 @@ app.post("/api/openrouter/chat", async (req, res) => {
       presence_penalty: options?.presence_penalty ?? 0,
     };
 
-    const response = await fetch(OPENROUTER_ENDPOINT, {
+  const response = await fetch(OPENROUTER_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

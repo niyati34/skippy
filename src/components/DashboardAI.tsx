@@ -42,7 +42,7 @@ import {
   generateFunLearning,
   generateNotesFromContent,
   extractTextFromImage,
-} from "@/services/azureOpenAI";
+} from "@/services/openrouter";
 import {
   processUploadedFile,
   FileProcessingResult,

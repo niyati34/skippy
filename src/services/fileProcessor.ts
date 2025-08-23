@@ -2,7 +2,7 @@ import {
   callOpenRouter,
   ChatMessage,
   generateNotesFromContent as generateNotesFromContentAI,
-} from "./azureOpenAI";
+} from "./openrouter";
 import { PerformanceTimer } from "../utils/performance";
 
 export interface FileProcessingResult {
