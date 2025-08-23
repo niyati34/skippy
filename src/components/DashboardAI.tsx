@@ -107,7 +107,7 @@ const DashboardAI = ({
     {
       role: "assistant",
       content:
-        "Hi! I'm Skippy, your study assistant! 🐰 I can help you with:\n• Upload files (documents & images) to create schedules\n• Generate flashcards automatically from educational content\n• Make learning fun with interactive stories and games\n• Organize all your study materials with AI-powered notes\n\nJust upload any file and I'll intelligently process it for you! What would you like to do today?",
+        "Hi, I'm Skippy. I can analyze files, create schedules, generate flashcards, and organize notes. Upload a file or ask a question to begin.",
     },
   ]);
   const [inputText, setInputText] = useState("");
@@ -262,13 +262,20 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-      const response = await callOpenRouter([...messages, userMessage]);
+      const systemPrompt: ChatMessage = {
+        role: "system",
+        content:
+          "You are Skippy, an AI study assistant. Be concise and plain text only (no emojis, no markdown, no bullet points). Keep replies to 2–4 short sentences. Ask at most one clarifying question.",
+      };
+
+      const response = await callOpenRouter([systemPrompt, ...messages.slice(-6), userMessage]);
+      const clean = toPlainText(response);
       const assistantMessage: ChatMessage = {
         role: "assistant",
-        content: response,
+        content: clean,
       };
       setMessages((prev) => [...prev, assistantMessage]);
-      speakMessageWithElevenLabs(response);
+      speakMessageWithElevenLabs(clean);
     } catch (error) {
       toast({
         title: "Error",
@@ -279,6 +286,22 @@ const DashboardAI = ({
       setIsLoading(false);
     }
   };
+
+  // Convert any AI output to concise plain text (no emojis, bullets, asterisks, markdown)
+  function toPlainText(text: string): string {
+    if (!text) return "";
+    let t = text
+      .replace(/^\s*#{1,6}\s*/gm, "")
+      .replace(/^\s*[-*•]\s+/gm, "")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
+      .replace(/[\t ]+/g, " ")
+      .replace(/\s*\n\s*/g, " ")
+      .trim();
+    const parts = t.split(/(?<=[.!?])\s+/).slice(0, 4);
+    return parts.join(" ").trim();
+  }
 
   const processFileContent = async (file: File) => {
     setIsLoading(true);

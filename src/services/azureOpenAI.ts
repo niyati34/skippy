@@ -25,9 +25,10 @@ export async function callOpenRouter(
   const prodBase = (import.meta as any)?.env?.VITE_PROD_URL?.replace(/\/$/, "");
   const prodAbsolute = prodBase ? `${prodBase}/api/openrouter/chat` : "";
 
-  const candidates = (isLocal
-    ? [devProxy, prodAbsolute, prodRelative]
-    : [prodRelative, prodAbsolute]
+  const candidates = (
+    isLocal
+      ? [devProxy, prodAbsolute, prodRelative]
+      : [prodRelative, prodAbsolute]
   ).filter(Boolean);
 
   console.log(
@@ -51,7 +52,11 @@ export async function callOpenRouter(
     });
     if (!resp.ok) {
       const errorText = await resp.text();
-      console.error(`[OpenRouter] Proxy error @ ${url}:`, resp.status, errorText);
+      console.error(
+        `[OpenRouter] Proxy error @ ${url}:`,
+        resp.status,
+        errorText
+      );
       throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
     }
     const data = await resp.json();

@@ -38,11 +38,11 @@ const SkippyAssistant = ({
 
   const messages = {
     greeting:
-      "Hi! I'm Skippy, your secret study buddy! 🐰✨ You've received a special surprise—but you'll need to unlock me first!",
-    waiting: "I'm waiting for your command. You can speak to me or type below!",
-    passwordPrompt: "Awesome! What's the password?",
+      "Hi, I'm Skippy. You have a surprise to unlock. Please provide the password to continue.",
+    waiting: "I'm ready. You can speak or type your message.",
+    passwordPrompt: "Please enter the password.",
     unlocked:
-      "Perfect! Welcome to your personalized study dashboard! Let's make your studies fun! 🎓",
+      "Access granted. Welcome to your study dashboard.",
   };
 
   useEffect(() => {
@@ -241,7 +241,7 @@ const SkippyAssistant = ({
       lowerInput.includes("several codes")
     ) {
       const clarificationMessage =
-        "Oh interesting! If there are multiple codes, look for the one that's unique or special - maybe it's related to a celebration or festive occasion? Which one stands out to you as different from the others?";
+        "If there are multiple codes, pick the unique one related to the occasion. Which one stands out?";
       setCurrentMessage(clarificationMessage);
       speakMessage(clarificationMessage);
       return;
@@ -263,13 +263,13 @@ const SkippyAssistant = ({
       console.log("✅ [Password Debug] Password accepted! Unlocking...");
 
       const successMessage =
-        "Perfect! You found the secret! Welcome to your intelligent study dashboard! I'm so excited to help you organize your studies, create amazing flashcards, and make learning super fun and engaging. Let's transform your study experience together and make every learning session productive and enjoyable!";
+        "Password accepted. Your study dashboard is now unlocked.";
       setCurrentMessage(successMessage);
       speakMessage(successMessage);
 
       toast({
-        title: "🎉 Access Granted!",
-        description: "Welcome to your personalized dashboard!",
+        title: "Access granted",
+        description: "Dashboard unlocked.",
       });
 
       setTimeout(() => {
@@ -288,35 +288,19 @@ const SkippyAssistant = ({
     setIsLoading(true);
 
     try {
-      // Enhanced AI conversation with more detailed personality
+    // AI conversation with concise, plain-text style
       const conversationMessages = [
         {
           role: "system" as const,
-          content: `You are Skippy, an incredibly enthusiastic and talkative AI study assistant! You're helping someone unlock their special study dashboard. The password is hidden in their physical gift box - NEVER reveal it directly or give any hints about what it actually is.
-
-Your personality:
-- Extremely conversational and encouraging
-- Ask lots of follow-up questions
-- Be genuinely curious about what they're finding
-- Provide multiple detailed suggestions
-- Keep the excitement and mystery alive
-- NEVER mention the actual password or give direct hints
-- Be creative with guidance about checking gift boxes
-
-Key guidelines:
-- If they seem frustrated, offer more specific (but not revealing) guidance
-- Ask about what they see, feel, or find in their gift box
-- Suggest checking different parts: cards, tags, packaging, decorations
-- Be encouraging but never give away the answer
-- Keep them engaged with questions and enthusiasm
-- Always end with encouragement and next steps
-
-Example conversation starters:
-"That's so interesting! What else catches your eye in that gift box? Sometimes the best surprises are hiding in unexpected places!"
-"I'm getting excited for you! Have you checked every corner and fold? Gift boxes often have multiple layers of surprises!"
-"Ooh, detective work! What was the occasion for this gift? That might give you a clue about what kind of word to look for!"
-
-Always be encouraging and keep the conversation flowing!`,
+      content: `You are Skippy, an AI study assistant.
+Style and format:
+- Be concise and direct.
+- Plain text only. No emojis, no markdown, no bullet points, no asterisks.
+- 2–4 short sentences max per reply.
+- Ask at most one clarifying question when helpful.
+- Do not reveal or hint the password.
+Task context:
+The user is trying to find a password hidden in a physical gift box. Provide practical, step-by-step guidance in plain sentences (not lists). Focus on simple checks: exterior, layers, tags, cards, hidden flaps, textures, light and shadow. Keep it brief.`,
         },
         ...chatHistory.slice(-8), // Keep more context for better conversation
         userMessage,
@@ -324,22 +308,24 @@ Always be encouraging and keep the conversation flowing!`,
 
       const response = await callOpenRouter(conversationMessages);
 
+      const clean = toPlainText(response);
+
       const assistantMessage = {
         role: "assistant" as const,
-        content: response,
+        content: clean,
       };
       setChatHistory((prev) => [...prev, assistantMessage]);
 
-      setCurrentMessage(response);
-      speakMessage(response);
+      setCurrentMessage(clean);
+      speakMessage(clean);
     } catch (error) {
       console.error("Error getting AI response:", error);
       const fallbackMessages = [
-        "I'm absolutely thrilled to help you unlock this mystery! Have you taken a really close look at everything in your gift box? Sometimes the most important clues are right there waiting to be discovered! What do you see when you examine all the cards, tags, and decorations?",
-        "This is like being a detective! I love it! Tell me, what kind of special occasion was this gift for? And have you checked every single piece of paper, every tag, and every decoration in that box? The answer is definitely there somewhere!",
-        "Oh how exciting! I can't wait for you to find the key! Have you looked at all the writing, checked under flaps, examined any cards or special messages? What themes or decorations do you notice? Sometimes the clues are themed around the special occasion!",
+        "Check the exterior, tags, and any cards. Look under flaps and inside folds. What detail stands out?",
+        "Scan each layer carefully. Read any notes. Try light at an angle to reveal embossing. What did you find?",
+        "Focus on corners, seams, and ribbons. If there are multiple codes, choose the one linked to the occasion.",
       ];
-      const fallbackMessage =
+  const fallbackMessage =
         fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
       setCurrentMessage(fallbackMessage);
       speakMessage(fallbackMessage);
@@ -349,6 +335,26 @@ Always be encouraging and keep the conversation flowing!`,
 
     setInputText("");
   };
+
+  // Convert any AI output to concise plain text (no emojis, bullets, asterisks, markdown)
+  function toPlainText(text: string): string {
+    if (!text) return "";
+    let t = text
+      // Remove markdown headings and list markers
+      .replace(/^\s*#{1,6}\s*/gm, "")
+      .replace(/^\s*[-*•]\s+/gm, "")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      // Remove common emoji ranges
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
+      // Collapse whitespace
+      .replace(/[\t ]+/g, " ")
+      .replace(/\s*\n\s*/g, " ")
+      .trim();
+    // Limit to ~4 short sentences
+    const parts = t.split(/(?<=[.!?])\s+/).slice(0, 4);
+    return parts.join(" ").trim();
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

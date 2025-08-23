@@ -141,7 +141,7 @@ After successful deployment:
 - Environment variables are secure on Vercel
 - API keys are not exposed to client-side code
 - CORS is properly configured for production use
-- Rate limiting is handled by Azure OpenAI
+- Rate limiting is subject to your OpenRouter plan
 
 ## 📊 Performance
 

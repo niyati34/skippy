@@ -2,9 +2,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-// Load env from .env.local or .env
-dotenv.config({ path: ".env.local" });
-dotenv.config();
+// Load env from .env.local or .env (override to avoid empty system vars shadowing)
+dotenv.config({ path: ".env.local", override: true });
+dotenv.config({ override: true });
 
 const app = express();
 app.use(cors());
@@ -17,6 +17,13 @@ const OPENROUTER_ENDPOINT =
     "https://openrouter.ai/api") + "/v1/chat/completions";
 const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:5173";
 
+// Safe startup debug (no secrets)
+console.log(
+  `[server] env check: has OPENROUTER_API_KEY=${Boolean(
+    process.env.OPENROUTER_API_KEY
+  )}, len=${(process.env.OPENROUTER_API_KEY || "").length}`
+);
+
 app.post("/api/openrouter/chat", async (req, res) => {
   try {
     const { messages, options } = req.body || {};
@@ -27,7 +34,9 @@ app.post("/api/openrouter/chat", async (req, res) => {
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
     if (!OPENROUTER_API_KEY) {
       // Safe debug: do not log real key
-      console.error("[server] Missing OPENROUTER_API_KEY env; set it in .env.local or environment");
+      console.error(
+        "[server] Missing OPENROUTER_API_KEY env; set it in .env.local or environment"
+      );
       return res.status(500).json({ error: "OPENROUTER_API_KEY missing" });
     }
 
@@ -41,7 +50,7 @@ app.post("/api/openrouter/chat", async (req, res) => {
       presence_penalty: options?.presence_penalty ?? 0,
     };
 
-  const response = await fetch(OPENROUTER_ENDPOINT, {
+    const response = await fetch(OPENROUTER_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
