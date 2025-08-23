@@ -192,8 +192,8 @@ src/
 		WeeklyTimetableView.tsx     # Weekly calendar with date-wise instances
 		SkippyAssistant.tsx         # Voice/chat assistant + password flow
 		...                         # Other dashboard features
-	services/
-		azureOpenAI.ts              # Proxy-first AI client with formatting fallbacks
+  services/
+    azureOpenAI.ts              # OpenRouter client with rich formatting fallbacks
 server/
   index.mjs                     # Local Express proxy for OpenRouter
 api/
