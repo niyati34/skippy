@@ -262,7 +262,7 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-  const response = await callOpenRouter([...messages, userMessage]);
+      const response = await callOpenRouter([...messages, userMessage]);
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: response,

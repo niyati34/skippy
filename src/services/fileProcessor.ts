@@ -415,7 +415,7 @@ RETURN ONLY THE JSON ARRAY, no other text or explanations.`,
     console.log("[DEBUG] Content length:", content.length);
     console.log("[DEBUG] Source file:", source);
 
-  const response = await callOpenRouter(messages);
+    const response = await callOpenRouter(messages);
     console.log("[DEBUG] AI Response:", response.substring(0, 500));
 
     const cleanResponse = response.trim().replace(/```json\n?|\n?```/g, "");
@@ -1030,7 +1030,7 @@ IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
 
   try {
     console.log("🗓️ [SCHEDULE] Calling AI for schedule generation...");
-  const response = await callOpenRouter(messages);
+    const response = await callOpenRouter(messages);
     console.log("🗓️ [SCHEDULE] AI Response:", response);
 
     if (!response || response.trim().length === 0) {

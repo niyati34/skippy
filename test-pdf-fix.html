@@ -63,9 +63,7 @@
       <h3>🎯 Test Status:</h3>
       <p><strong>✅ Server Status:</strong></p>
       <ul>
-        <li>
-          OpenRouter Proxy: <code>http://localhost:5174</code> ✅ Running
-        </li>
+        <li>OpenRouter Proxy: <code>http://localhost:5174</code> ✅ Running</li>
         <li>
           Development Server: <code>http://localhost:8082</code> ✅ Running
         </li>
@@ -91,7 +89,7 @@
           ✅ No more "Cannot read properties of undefined (reading 'trim')"
           errors
         </li>
-  <li>✅ Successful API calls to OpenRouter</li>
+        <li>✅ Successful API calls to OpenRouter</li>
         <li>
           ✅ Proper academic notes generation following your specifications
         </li>
@@ -131,7 +129,7 @@ Environment Variables Expected (server):
       debugInfo.textContent = info;
 
       // Test API connectivity
-  fetch("http://localhost:5174/api/openrouter/chat", {
+      fetch("http://localhost:5174/api/openrouter/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

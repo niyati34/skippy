@@ -15,8 +15,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "gpt-oss-20b";
 const OPENROUTER_ENDPOINT =
   (process.env.OPENROUTER_API_BASE?.replace(/\/$/, "") ||
-    "https://openrouter.ai/api") + 
-  "/v1/chat/completions";
+    "https://openrouter.ai/api") + "/v1/chat/completions";
 const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:5173";
 
 if (!OPENROUTER_API_KEY) {
@@ -75,6 +74,6 @@ app.post("/api/openrouter/chat", async (req, res) => {
 const PORT = Number(process.env.PORT || 5174);
 app.listen(PORT, () => {
   console.log(
-  `[server] OpenRouter proxy running on http://localhost:${PORT} -> ${OPENROUTER_ENDPOINT} (model: ${OPENROUTER_MODEL})`
+    `[server] OpenRouter proxy running on http://localhost:${PORT} -> ${OPENROUTER_ENDPOINT} (model: ${OPENROUTER_MODEL})`
   );
 });

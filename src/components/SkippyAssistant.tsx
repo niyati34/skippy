@@ -322,7 +322,7 @@ Always be encouraging and keep the conversation flowing!`,
         userMessage,
       ];
 
-  const response = await callOpenRouter(conversationMessages);
+      const response = await callOpenRouter(conversationMessages);
 
       const assistantMessage = {
         role: "assistant" as const,

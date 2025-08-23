@@ -1,7 +1,8 @@
 // AI client using OpenRouter only (via proxy)
 // Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
 
-const OPENROUTER_MODEL = (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
+const OPENROUTER_MODEL =
+  (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -24,7 +25,9 @@ export async function callOpenRouter(
   const openRouterProxyUrl = `${baseProxy}/api/openrouter/chat`;
 
   console.log(
-    `[AI] Using ${isProduction ? "production" : "development"} OpenRouter proxy: ${openRouterProxyUrl} (model: ${OPENROUTER_MODEL})`
+    `[AI] Using ${
+      isProduction ? "production" : "development"
+    } OpenRouter proxy: ${openRouterProxyUrl} (model: ${OPENROUTER_MODEL})`
   );
 
   const call = async (useProxy: boolean) => {
@@ -34,7 +37,12 @@ export async function callOpenRouter(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages,
-          options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8, model: OPENROUTER_MODEL },
+          options: {
+            max_tokens: 3000,
+            temperature: 0.1,
+            top_p: 0.8,
+            model: OPENROUTER_MODEL,
+          },
         }),
       });
       if (!resp.ok) {
@@ -53,10 +61,10 @@ export async function callOpenRouter(
     throw new Error("Direct OpenRouter calls are disabled on client");
   };
 
+  // Always use the proxy; retry on transient failures
   for (let i = 0; i < retries; i++) {
-    const useProxy = i < 1; // Try proxy first, then direct
     try {
-  const out = await call(useProxy);
+      const out = await call(true);
       if (out) return out;
       throw new Error("Empty response");
     } catch (e) {
@@ -1072,7 +1080,7 @@ async function condenseContentIfLarge(
     },
   ];
   try {
-  const out = await callOpenRouter(messages, 1); // Single attempt
+    const out = await callOpenRouter(messages, 1); // Single attempt
     return out && out.trim().length > 50
       ? out.trim()
       : content.substring(0, 8000);
@@ -1427,7 +1435,7 @@ ${content}`;
   ];
 
   try {
-  const response = await callOpenRouter(messages, 3);
+    const response = await callOpenRouter(messages, 3);
 
     // Two-step JSON handling to avoid markdown conflicts
     let clean = (response || "").trim();
@@ -1580,7 +1588,7 @@ IMPORTANT:
       },
     ];
 
-  const response = await callOpenRouter(messages, 3);
+    const response = await callOpenRouter(messages, 3);
 
     // Enhanced JSON parsing to handle complex content
     let clean = (response || "").trim();
@@ -1814,7 +1822,7 @@ export async function analyzeFileContent(
     },
   ];
   try {
-  const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -1855,7 +1863,7 @@ export async function generateScheduleFromContent(
     },
   ];
   try {
-  const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     const parsed = JSON.parse(clean);
     const items = Array.isArray(parsed) ? parsed : [];
@@ -1927,7 +1935,7 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     console.log(
       "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
     );
-  const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
@@ -2229,7 +2237,7 @@ export async function generateFlashcards(content: string): Promise<any[]> {
     { role: "user", content: `Create educational flashcards from: ${content}` },
   ];
   try {
-  const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {

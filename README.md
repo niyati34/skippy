@@ -15,7 +15,7 @@ Organize classes, generate smart study notes and flashcards, and chat with a fri
 ## Live Demo
 
 - Website: https://skippy-kohl.vercel.app
-Skippy is a sleek, student-focused dashboard that helps you:
+  Skippy is a sleek, student-focused dashboard that helps you:
 
 - Build a clean weekly timetable that’s truly date-wise, day-wise, and time-aligned
 - Upload files and generate structured notes and flashcards with AI
@@ -23,6 +23,7 @@ Skippy is a sleek, student-focused dashboard that helps you:
 - Deploy easily to Vercel with a secure serverless proxy for OpenRouter
 
 The app runs great locally and in production on Vercel. In production, AI calls use `/api/openrouter/chat`.
+
 ## Features
 
 - Weekly Timetable (date-wise/day-wise/time-wise)
@@ -55,6 +56,7 @@ npm run server
 # Or run both (Windows PowerShell)
 npm run dev:all
 ```
+
 ```
 
 Local endpoints used by the app:
@@ -95,7 +97,7 @@ Defined in `package.json`:
 
 - Required: `OPENROUTER_API_KEY`
 - Optional: `OPENROUTER_MODEL` (default: gpt-oss-20b)
- 
+
 
 2. Deploy
 
@@ -135,7 +137,7 @@ Timetable storage is managed via `TimetableStorage` and general schedule items v
 
 ## Troubleshooting
 
- 
+
 
   - Cause: Missing env vars
   - Fix: Set the four VITE\_\* env vars in Vercel and redeploy (see `vercel-env-fix.md`)
@@ -150,7 +152,7 @@ Timetable storage is managed via `TimetableStorage` and general schedule items v
   - Cause: Autoplay/speech blocked by browser until user interaction
   - Fix: Click “Enable Voice & Hear Skippy” in the modal, or press replay
 
- 
+
 
 ## Preview
 
@@ -187,19 +189,21 @@ Place images under `public/preview/` and update these paths if needed.
 ## Project Structure (highlights)
 
 ```
+
 src/
-	components/
-		WeeklyTimetableView.tsx     # Weekly calendar with date-wise instances
-		SkippyAssistant.tsx         # Voice/chat assistant + password flow
-		...                         # Other dashboard features
-  services/
-    azureOpenAI.ts              # OpenRouter client with rich formatting fallbacks
+components/
+WeeklyTimetableView.tsx # Weekly calendar with date-wise instances
+SkippyAssistant.tsx # Voice/chat assistant + password flow
+... # Other dashboard features
+services/
+azureOpenAI.ts # OpenRouter client with rich formatting fallbacks
 server/
-  index.mjs                     # Local Express proxy for OpenRouter
+index.mjs # Local Express proxy for OpenRouter
 api/
-  openrouter/chat.js            # Vercel serverless proxy (default)
-  openrouter/chat.js            # OpenRouter proxy
-vercel.json                     # Function config + rewrites
+openrouter/chat.js # Vercel serverless proxy (default)
+openrouter/chat.js # OpenRouter proxy
+vercel.json # Function config + rewrites
+
 ```
 
 ## Security Notes
@@ -230,3 +234,4 @@ Proprietary. All rights reserved (or update this section to your preferred licen
 ## Packages
 
 - No published npm packages yet. If you want to package Skippy as a library or component, open an issue or PR!
+```
