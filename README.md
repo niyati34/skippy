@@ -204,9 +204,14 @@ Place images under `public/preview/` and update these paths if needed.
 
 ![Dashboard Overview](public/preview/screenshot-1.png)
 
+
 2. Weekly Timetable (date-wise/day-wise/time-wise)
 
+<!-- Markdown image for local/standard preview -->
 ![Weekly Timetable](public/preview/screenshot-2.png)
+
+<!-- HTML image for GitHub rich preview (from main branch) -->
+<img width="1896" height="892" alt="Weekly Timetable Preview" src="https://github.com/user-attachments/assets/4b7289c3-70dd-4b38-a041-6aa5cf9de32c" />
 
 3. Notes, Flashcards, and Assistant
 
