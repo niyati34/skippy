@@ -44,6 +44,15 @@ import {
   extractTextFromImage,
 } from "@/services/openrouter";
 import {
+  Orchestrator,
+  BuddyAgent,
+  NotesAgent,
+  PlannerAgent,
+  FlashcardAgent,
+  FunAgent,
+} from "@/lib/agent";
+import { parseIntent } from "@/lib/intent";
+import {
   processUploadedFile,
   FileProcessingResult,
   extractFileContent,
@@ -124,6 +133,14 @@ const DashboardAI = ({
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const orchestrator = new Orchestrator([
+    new NotesAgent(),
+    new PlannerAgent(),
+    new FlashcardAgent(),
+    // handle fun learning before buddy fallback
+    new FunAgent(),
+    new BuddyAgent(),
+  ]);
 
   const handleVoiceInput = async () => {
     if (
@@ -262,7 +279,58 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-      // 1) Intent detection: run generators directly when asked
+      // 1) Try centralized orchestrator (now wired to real tools)
+      try {
+        const result = await orchestrator.handle({ text: messageText });
+        const summary = result?.summary ? toPlainText(result.summary) : "";
+        const arts = result?.artifacts || {};
+        let consumed = false;
+
+        if (arts.notes && Array.isArray(arts.notes) && arts.notes.length) {
+          onNotesUpdate(arts.notes);
+          consumed = true;
+        }
+        if (
+          arts.flashcards &&
+          Array.isArray(arts.flashcards) &&
+          arts.flashcards.length
+        ) {
+          onFlashcardsUpdate(
+            arts.flashcards.map((c: any) => ({
+              question: c.question || c.front || "Question",
+              answer: c.answer || c.back || "Answer",
+              category: c.category || "General",
+            }))
+          );
+          consumed = true;
+        }
+        if (
+          arts.schedule &&
+          Array.isArray(arts.schedule) &&
+          arts.schedule.length
+        ) {
+          onScheduleUpdate(arts.schedule);
+          consumed = true;
+        }
+        if (arts.fun && arts.fun.content) {
+          onFunLearningUpdate(arts.fun.content, arts.fun.type || "story");
+          consumed = true;
+        }
+
+        if (summary) {
+          const a: ChatMessage = { role: "assistant", content: summary };
+          setMessages((p) => [...p, a]);
+          speakMessageWithElevenLabs(a.content);
+        }
+
+        if (consumed || summary) {
+          setIsLoading(false);
+          setInputText("");
+          return;
+        }
+      } catch {}
+
+      // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
       const intentHandled = await handleIntentCommand(messageText);
       if (intentHandled) {
         setIsLoading(false);
@@ -270,7 +338,7 @@ const DashboardAI = ({
         return;
       }
 
-      // 2) Otherwise, do a short general chat reply
+      // 3) Otherwise, do a short general chat reply
       const systemPrompt: ChatMessage = {
         role: "system",
         content:
@@ -311,7 +379,9 @@ const DashboardAI = ({
     try {
       // Flashcards
       if (/(make|create|generate)\s+(some\s+)?flashcards?\b/i.test(s)) {
-        const content = after(/flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i);
+        const content = after(
+          /flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+        );
         if (content.length < 15) return false; // need some content
         const cards = await generateFlashcards(content);
         if (Array.isArray(cards) && cards.length > 0) {
@@ -334,7 +404,8 @@ const DashboardAI = ({
         }
         const msg: ChatMessage = {
           role: "assistant",
-          content: "I couldn’t extract enough content to make flashcards. Try adding more detail or paste text.",
+          content:
+            "I couldn’t extract enough content to make flashcards. Try adding more detail or paste text.",
         };
         setMessages((p) => [...p, { role: "user", content: s }, msg]);
         return true;
@@ -342,7 +413,8 @@ const DashboardAI = ({
 
       // Notes
       if (/(make|create|generate)\s+(study\s+)?notes?\b/i.test(s)) {
-        const content = after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+        const content =
+          after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
         if (content.length < 30) return false;
         const notes = await generateNotesFromContent(content, "chat-input");
         if (Array.isArray(notes) && notes.length > 0) {
@@ -370,22 +442,33 @@ const DashboardAI = ({
       }
 
       // Schedule / Timetable
-      if (/(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(s)) {
-        const content = after(/(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+      if (
+        /(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(
+          s
+        )
+      ) {
+        const content =
+          after(
+            /(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+          ) || s;
         if (content.length < 20) return false;
         const items = await generateScheduleFromContent(content);
         if (Array.isArray(items) && items.length > 0) {
           onScheduleUpdate(items);
           const summary = items
             .slice(0, 3)
-            .map((i: any) => `${i.title} - ${i.date}${i.time ? ` ${i.time}` : ""}`)
+            .map(
+              (i: any) => `${i.title} - ${i.date}${i.time ? ` ${i.time}` : ""}`
+            )
             .join("; ");
           setMessages((p) => [
             ...p,
             { role: "user", content: s },
             {
               role: "assistant",
-              content: `Added ${items.length} schedule items. Example: ${summary}${
+              content: `Added ${
+                items.length
+              } schedule items. Example: ${summary}${
                 items.length > 3 ? " …" : ""
               }`,
             },
@@ -411,14 +494,23 @@ const DashboardAI = ({
       const funMatch = s.match(/(story|quiz|poem|song|rap|riddle|game)/i);
       if (funMatch && /(make|create|generate)\b/i.test(s)) {
         const kind = funMatch[1].toLowerCase();
-        const content = after(new RegExp(`${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`, "i")) || s;
+        const content =
+          after(
+            new RegExp(
+              `${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`,
+              "i"
+            )
+          ) || s;
         if (content.length < 15) return false;
         const out = await generateFunLearning(content, kind);
         onFunLearningUpdate(out, kind);
         setMessages((p) => [
           ...p,
           { role: "user", content: s },
-          { role: "assistant", content: `Created a ${kind}. See the Fun Learning tab.` },
+          {
+            role: "assistant",
+            content: `Created a ${kind}. See the Fun Learning tab.`,
+          },
         ]);
         speakMessageWithElevenLabs(`Your ${kind} is ready in Fun Learning.`);
         return true;

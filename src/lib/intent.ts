@@ -15,19 +15,27 @@ export function parseIntent(raw: string): ParsedIntent {
 
   // Flashcards
   if (/(make|create|generate)\s+(some\s+)?flashcards?\b/i.test(s)) {
-    const content = after(/flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i);
+    const content = after(
+      /flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+    );
     return { type: "flashcards", content };
   }
 
   // Notes
   if (/(make|create|generate)\s+(study\s+)?notes?\b/i.test(s)) {
-    const content = after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+    const content =
+      after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
     return { type: "notes", content };
   }
 
   // Schedule
-  if (/(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(s)) {
-    const content = after(/(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+  if (
+    /(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(s)
+  ) {
+    const content =
+      after(
+        /(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+      ) || s;
     return { type: "schedule", content };
   }
 
@@ -35,7 +43,10 @@ export function parseIntent(raw: string): ParsedIntent {
   const funMatch = s.match(/(story|quiz|poem|song|rap|riddle|game)/i);
   if (funMatch && /(make|create|generate)\b/i.test(s)) {
     const kind = funMatch[1].toLowerCase();
-    const content = after(new RegExp(`${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`, "i")) || s;
+    const content =
+      after(
+        new RegExp(`${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`, "i")
+      ) || s;
     return { type: "fun", content, funKind: kind };
   }
 
