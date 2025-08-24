@@ -6,42 +6,35 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 dotenv.config();
 
-const app = express();
+const app = (express as any)();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-const API_BASE =
-  process.env.VITE_OPENAI_API_BASE || process.env.OPENAI_API_BASE || "";
-const API_KEY =
-  process.env.VITE_AZURE_OPENAI_KEY || process.env.AZURE_OPENAI_API_KEY || "";
-const API_VERSION =
-  process.env.VITE_AZURE_OPENAI_API_VERSION ||
-  process.env.AZURE_OPENAI_API_VERSION ||
-  "2025-01-01-preview";
-const DEPLOYMENT =
-  process.env.VITE_AZURE_OPENAI_DEPLOYMENT ||
-  process.env.AZURE_OPENAI_DEPLOYMENT_NAME ||
-  "gpt-4o";
+// OpenRouter configuration
+const OPENROUTER_API_BASE =
+  process.env.OPENROUTER_API_BASE?.replace(/\/$/, "") ||
+  "https://openrouter.ai/api"; // base without /v1
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "gpt-oss-20b";
+const PUBLIC_URL = process.env.PUBLIC_URL || "http://localhost:5173";
 
-if (!API_BASE || !API_KEY) {
+if (!OPENROUTER_API_KEY) {
   console.warn(
-    "[server] Azure OpenAI env vars missing. Set OPENAI_API_BASE and AZURE_OPENAI_API_KEY or VITE_* equivalents."
+    "[server] OPENROUTER_API_KEY is not set. Set it in your environment to enable AI."
   );
 }
 
-app.post("/api/azure-openai/chat", async (req, res) => {
+// OpenRouter proxy route
+app.post("/api/openrouter/chat", async (req, res) => {
   try {
     const { messages, options } = req.body || {};
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "messages array required" });
     }
 
-    const url = `${API_BASE.replace(
-      /\/$/,
-      ""
-    )}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`;
-
+    const url = `${OPENROUTER_API_BASE}/v1/chat/completions`;
     const payload = {
+      model: OPENROUTER_MODEL,
       messages,
       max_tokens: options?.max_tokens ?? 2000,
       temperature: options?.temperature ?? 0.3,
@@ -54,14 +47,16 @@ app.post("/api/azure-openai/chat", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "api-key": API_KEY,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": PUBLIC_URL,
+        "X-Title": "Skippy AI",
       },
       body: JSON.stringify(payload),
     });
 
     const text = await response.text();
     if (!response.ok) {
-      console.error("[server] Azure error:", response.status, text);
+      console.error("[server] OpenRouter error:", response.status, text);
       return res.status(response.status).send(text);
     }
 
@@ -77,6 +72,6 @@ app.post("/api/azure-openai/chat", async (req, res) => {
 const PORT = Number(process.env.PORT || 5174);
 app.listen(PORT, () => {
   console.log(
-    `[server] Azure OpenAI proxy running on http://localhost:${PORT}`
+    `[server] OpenRouter proxy running on http://localhost:${PORT} -> ${OPENROUTER_API_BASE}/v1/chat/completions (model: ${OPENROUTER_MODEL})`
   );
 });

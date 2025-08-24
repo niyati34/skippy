@@ -1,35 +1,8 @@
-// AI client with proxy-first calls (OpenRouter by default), with Azure OpenAI fallback
-// Env vars (Vite):
-//   OpenRouter: OPENROUTER_API_KEY (server only), OPENROUTER_MODEL (optional)
-//   Azure: VITE_OPENAI_API_BASE, VITE_AZURE_OPENAI_KEY, VITE_AZURE_OPENAI_DEPLOYMENT, VITE_AZURE_OPENAI_API_VERSION
+// AI client using OpenRouter only (via proxy)
+// Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
 
-// Azure (fallback/direct) config
-const API_ENDPOINT =
-  (import.meta as any)?.env?.VITE_OPENAI_API_BASE ||
-  (import.meta as any)?.env?.OPENAI_API_BASE ||
-  "";
-const API_KEY =
-  (import.meta as any)?.env?.VITE_AZURE_OPENAI_KEY ||
-  (import.meta as any)?.env?.AZURE_OPENAI_API_KEY ||
-  "";
-const API_VERSION =
-  (import.meta as any)?.env?.VITE_AZURE_OPENAI_API_VERSION ||
-  (import.meta as any)?.env?.AZURE_OPENAI_API_VERSION ||
-  "2025-01-01-preview";
-const DEPLOYMENT =
-  (import.meta as any)?.env?.VITE_AZURE_OPENAI_DEPLOYMENT ||
-  (import.meta as any)?.env?.AZURE_OPENAI_DEPLOYMENT_NAME ||
-  "gpt-4o";
-
-// OpenRouter (proxy only) config
 const OPENROUTER_MODEL =
   (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
-
-function getCompletionsUrl() {
-  if (!API_ENDPOINT || !DEPLOYMENT) return "";
-  const base = API_ENDPOINT.replace(/\/$/, "");
-  return `${base}/openai/deployments/${DEPLOYMENT}/chat/completions?api-version=${API_VERSION}`;
-}
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -38,102 +11,79 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function callAzureOpenAI(
+export async function callOpenRouter(
   messages: ChatMessage[],
-  retries = 2 // Reduced for faster response
+  retries = 2
 ): Promise<string> {
-  const directUrl = getCompletionsUrl();
+  // Determine candidate proxy URLs based on environment
+  const isLocal =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+  const devPort = (import.meta as any)?.env?.VITE_PROXY_PORT || 5174;
+  const devProxy = `http://localhost:${devPort}/api/openrouter/chat`;
+  const prodRelative = `/api/openrouter/chat`;
+  const prodBase = (import.meta as any)?.env?.VITE_PROD_URL?.replace(/\/$/, "");
+  const prodAbsolute = prodBase ? `${prodBase}/api/openrouter/chat` : "";
 
-  // Determine proxy URLs based on environment
-  const isProduction =
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1";
-  const baseProxy = isProduction
-    ? ""
-    : `http://localhost:${(import.meta as any)?.env?.VITE_PROXY_PORT || 5174}`;
-  const openRouterProxyUrl = `${baseProxy}/api/openrouter/chat`;
-  const azureProxyUrl = `${baseProxy}/api/azure-openai/chat`;
+  const candidates = (
+    isLocal
+      ? [devProxy, prodAbsolute, prodRelative]
+      : [prodRelative, prodAbsolute]
+  ).filter(Boolean);
 
   console.log(
-    `[AI] Using ${isProduction ? "production" : "development"} proxies:`,
-    {
-      openRouterProxyUrl,
-      azureProxyUrl,
-    }
+    `[AI] Endpoint candidates (model ${OPENROUTER_MODEL}):`,
+    candidates
   );
 
-  const call = async (useProxy: boolean) => {
-    if (useProxy) {
-      // Try OpenRouter first
-      let resp = await fetch(openRouterProxyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages,
-          options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 }, // Increased tokens, lower temperature for speed
-        }),
-      });
-      if (!resp.ok) {
-        const errorText = await resp.text();
-        console.warn(`[OpenRouter] Proxy error:`, resp.status, errorText);
-        // Fallback to Azure proxy
-        resp = await fetch(azureProxyUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages,
-            options: { max_tokens: 3000, temperature: 0.1, top_p: 0.8 },
-          }),
-        });
-        if (!resp.ok) {
-          const err2 = await resp.text();
-          console.error(`[Azure] Proxy error:`, resp.status, err2);
-          throw new Error(`Proxy error: ${resp.status} - ${err2}`);
-        }
-      }
-      const data = await resp.json();
-      return (
-        data?.choices?.[0]?.message?.content ||
-        data?.choices?.[0]?.delta?.content ||
-        ""
-      );
-    }
-
-    if (!directUrl || !API_KEY)
-      throw new Error("Missing Azure OpenAI configuration");
-
-    const resp = await fetch(directUrl, {
+  const tryCall = async (url: string) => {
+    const resp = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": API_KEY,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages,
-        max_tokens: 3000, // Increased for more detailed notes
-        temperature: 0.1, // Lower for faster, more focused responses
-        top_p: 0.8,
-        frequency_penalty: 0,
-        presence_penalty: 0,
+        options: {
+          max_tokens: 3000,
+          temperature: 0.1,
+          top_p: 0.8,
+          model: OPENROUTER_MODEL,
+        },
       }),
     });
-    if (!resp.ok) throw new Error(`Azure error: ${resp.status}`);
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error(
+        `[OpenRouter] Proxy error @ ${url}:`,
+        resp.status,
+        errorText
+      );
+      throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
+    }
     const data = await resp.json();
-    return data?.choices?.[0]?.message?.content || "";
+    return (
+      data?.choices?.[0]?.message?.content ||
+      data?.choices?.[0]?.delta?.content ||
+      ""
+    );
   };
 
-  for (let i = 0; i < retries; i++) {
-    const useProxy = i < 1; // Try proxy first, then direct
-    try {
-      const out = await call(useProxy);
-      if (out) return out;
-      throw new Error("Empty response");
-    } catch (e) {
-      console.warn(`API call attempt ${i + 1} failed:`, e);
-      if (i < retries - 1) await delay(200 * (i + 1)); // Reduced delay for faster retries
+  // Try each candidate with simple retries per endpoint
+  let lastErr: any = null;
+  for (const url of candidates) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const out = await tryCall(url);
+        if (out) return out;
+        throw new Error("Empty response");
+      } catch (e) {
+        lastErr = e;
+        console.warn(`API call attempt ${i + 1} failed for ${url}:`, e);
+        if (i < retries - 1) await delay(200 * (i + 1));
+      }
     }
   }
-  return "";
+  // Surface final error for visibility
+  throw lastErr ?? new Error("All endpoints failed");
 }
 
 // ----------------- Helpers for fallback notes -----------------
@@ -1141,7 +1091,7 @@ async function condenseContentIfLarge(
     },
   ];
   try {
-    const out = await callAzureOpenAI(messages, 1); // Single attempt
+    const out = await callOpenRouter(messages, 1); // Single attempt
     return out && out.trim().length > 50
       ? out.trim()
       : content.substring(0, 8000);
@@ -1496,7 +1446,7 @@ ${content}`;
   ];
 
   try {
-    const response = await callAzureOpenAI(messages, 3);
+    const response = await callOpenRouter(messages, 3);
 
     // Two-step JSON handling to avoid markdown conflicts
     let clean = (response || "").trim();
@@ -1649,7 +1599,7 @@ IMPORTANT:
       },
     ];
 
-    const response = await callAzureOpenAI(messages, 3);
+    const response = await callOpenRouter(messages, 3);
 
     // Enhanced JSON parsing to handle complex content
     let clean = (response || "").trim();
@@ -1700,18 +1650,19 @@ IMPORTANT:
       return createStructuredFallbackNotes(content, fileName);
     }
 
-    return notes.map((n: any, i: number) => ({
-      title: n?.title || `Study Notes: ${fileName} - Part ${i + 1}`,
-      content: ensureProperAcademicFormatting(
-        n?.content || "",
-        content,
-        fileName
-      ),
-      category: n?.category || detectSmartCategory(content, fileName),
-      tags: Array.isArray(n?.tags)
-        ? n.tags.slice(0, 5)
-        : ["structured", "academic", "comprehensive"],
-    }));
+    // Ensure returned notes follow the exact requested academic structure
+    return notes.map((n: any, i: number) => {
+      const raw = n?.content || "";
+      const formatted = formatNotesExactStructure(raw || content, fileName);
+      return {
+        title: n?.title || `Study Notes: ${fileName} - Part ${i + 1}`,
+        content: formatted,
+        category: n?.category || detectSmartCategory(content, fileName),
+        tags: Array.isArray(n?.tags)
+          ? n.tags.slice(0, 5)
+          : ["structured", "academic", "comprehensive"],
+      };
+    });
   } catch (e) {
     console.error("Error in generateNotesFromContent:", e);
     return createStructuredFallbackNotes(content, fileName);
@@ -1745,11 +1696,132 @@ function createStructuredFallbackNotes(
   return [
     {
       title: `Study Notes: ${title}`,
-      content: structuredContent,
+      content: formatNotesExactStructure(structuredContent, fileName),
       category: detectSmartCategory(content, fileName),
       tags: ["structured", "comprehensive", "academic", "study-notes"],
     },
   ];
+}
+
+// Format any input text into the exact note structure requested by the user.
+function formatNotesExactStructure(text: string, fileName: string): string {
+  const clean = sanitize(text || "");
+  const topics = extractAllTopics(clean);
+
+  // If no detected topics, create a single Unit with the file name
+  const effectiveTopics =
+    topics.length > 0 ? topics : [fileName.replace(/\.[^/.]+$/, "")];
+
+  const definitions = extractDefinitionsFromPDF(clean);
+  const advDis = extractAdvantagesDisadvantages(clean);
+  const apps = extractApplicationsFromPDF(clean);
+
+  let out = "";
+
+  effectiveTopics.forEach((topic, idx) => {
+    const unitNum = idx + 1;
+    out += `# Unit ${unitNum} – ${topic}\n\n`;
+
+    // For each major topic produce a numbered major topic (we'll use the topic itself as first major topic)
+    out += `## 1. ${topic}\n\n`;
+
+    // Definitions: try to find definitions matching this topic
+    const defsForTopic = definitions.filter((d) =>
+      d.term.toLowerCase().includes(topic.split(" ")[0].toLowerCase())
+    );
+    if (defsForTopic.length === 0 && definitions.length > 0)
+      defsForTopic.push(definitions[0]);
+
+    if (defsForTopic.length > 0) {
+      defsForTopic.slice(0, 3).forEach((d) => {
+        out += `**${d.term}**: ${d.definition}\n\n`;
+      });
+    } else {
+      // Fallback: capture first sentence(s) mentioning topic
+      const sentMatch = clean.match(
+        new RegExp(`([^.\n]*${escapeRegExp(topic)}[^.\n]*[.\n])`, "i")
+      );
+      out += `**${topic}**: ${
+        sentMatch ? sentMatch[0].trim() : "Definition not available in source."
+      }\n\n`;
+    }
+
+    // Working Principle: extract sentences mentioning 'principle' or nearby sentences
+    const wpMatch = clean.match(
+      new RegExp(`([^.\n]{20,200}principle[^.\n]{0,200}[.\n])`, "i")
+    );
+    if (wpMatch) {
+      out += `**Working Principle**: ${wpMatch[0].trim()}\n\n`;
+    } else {
+      const near = clean.match(
+        new RegExp(
+          `([^.\n]{40,200}${escapeRegExp(topic)}[^.\n]{0,200}[.\n])`,
+          "i"
+        )
+      );
+      out += `**Working Principle**: ${
+        near ? near[0].trim() : "Not explicitly described in the source."
+      }\n\n`;
+    }
+
+    // Key Features
+    out += `**Key Features**:\n`;
+    // Attempt to extract bullets from formatted sections
+    const features = (clean.match(
+      /(?:Key Features|Features)[:\n][\s\S]*?(?:\n\n|\n#{1,2}|$)/i
+    ) || [""])[0];
+    const bullets = features.match(/[-*•]\s*(.+)/g) || [];
+    if (bullets.length > 0) {
+      bullets
+        .slice(0, 6)
+        .forEach((b) => (out += `- ${b.replace(/^[-*•]\s*/, "")}\n`));
+    } else {
+      // Fallback: take a couple of short sentences related to topic
+      const sents = extractSentencesAboutTopic(clean, topic).slice(0, 3);
+      if (sents.length > 0) sents.forEach((s) => (out += `- ${s}\n`));
+      else out += `- Not available in source.\n`;
+    }
+    out += `\n`;
+
+    // Advantages / Disadvantages
+    const ad = advDis[idx] ||
+      advDis[0] || { advantages: [], disadvantages: [] };
+    out += `**Advantages**:\n`;
+    if (ad.advantages && ad.advantages.length > 0)
+      ad.advantages.slice(0, 6).forEach((a) => (out += `- ${a}\n`));
+    else out += `- Not available in source.\n`;
+    out += `\n`;
+
+    out += `**Disadvantages**:\n`;
+    if (ad.disadvantages && ad.disadvantages.length > 0)
+      ad.disadvantages.slice(0, 6).forEach((d) => (out += `- ${d}\n`));
+    else out += `- Not available in source.\n`;
+    out += `\n`;
+
+    // Applications
+    const appsForTopic = apps.filter((a) =>
+      a.application.toLowerCase().includes(topic.split(" ")[0].toLowerCase())
+    );
+    const chosenApps =
+      appsForTopic.length > 0 ? appsForTopic : apps.slice(0, 3);
+    out += `**Applications**: `;
+    if (chosenApps.length > 0)
+      out += chosenApps.map((a) => a.application).join(", ") + "\n\n";
+    else out += `Not available in source.\n\n`;
+  });
+
+  return out.trim();
+}
+
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractSentencesAboutTopic(text: string, topic: string): string[] {
+  const sents = text.split(/(?<=[.!?])\s+/);
+  return sents
+    .filter((s) => s.toLowerCase().includes(topic.toLowerCase()))
+    .map((s) => s.trim());
 }
 
 // Preserve academic structure from source
@@ -1883,7 +1955,7 @@ export async function analyzeFileContent(
     },
   ];
   try {
-    const response = await callAzureOpenAI(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -1924,7 +1996,7 @@ export async function generateScheduleFromContent(
     },
   ];
   try {
-    const response = await callAzureOpenAI(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     const parsed = JSON.parse(clean);
     const items = Array.isArray(parsed) ? parsed : [];
@@ -1996,7 +2068,7 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     console.log(
       "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
     );
-    const response = await callAzureOpenAI(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
@@ -2298,7 +2370,7 @@ export async function generateFlashcards(content: string): Promise<any[]> {
     { role: "user", content: `Create educational flashcards from: ${content}` },
   ];
   try {
-    const response = await callAzureOpenAI(messages, 2);
+    const response = await callOpenRouter(messages, 2);
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -2320,7 +2392,7 @@ export async function generateFunLearning(
       content: `Create a ${type} from this educational content: ${content}`,
     },
   ];
-  return await callAzureOpenAI(messages, 2);
+  return await callOpenRouter(messages, 2);
 }
 
 export async function extractTextFromImage(imageFile: File): Promise<string> {

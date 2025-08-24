@@ -1,8 +1,9 @@
 import {
-  callAzureOpenAI,
+  callOpenRouter,
   ChatMessage,
   generateNotesFromContent as generateNotesFromContentAI,
-} from "./azureOpenAI";
+} from "./openrouter";
+import { AICache } from "../lib/storage";
 import { PerformanceTimer } from "../utils/performance";
 
 export interface FileProcessingResult {
@@ -415,7 +416,7 @@ RETURN ONLY THE JSON ARRAY, no other text or explanations.`,
     console.log("[DEBUG] Content length:", content.length);
     console.log("[DEBUG] Source file:", source);
 
-    const response = await callAzureOpenAI(messages);
+    const response = await callOpenRouter(messages);
     console.log("[DEBUG] AI Response:", response.substring(0, 500));
 
     const cleanResponse = response.trim().replace(/```json\n?|\n?```/g, "");
@@ -508,8 +509,19 @@ export async function generateNotesFromContent(
     tags: string[];
   }>
 > {
-  // Use the high-quality notes generation from azureOpenAI.ts
-  return generateNotesFromContentAI(content, source);
+  // Cache by content hash + source
+  const key = AICache.hash(`${source}::${content}`);
+  const cached = AICache.get(key);
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    console.log("[AICache] notes cache hit", { source, key });
+    return cached as any[];
+  }
+
+  const notes = await generateNotesFromContentAI(content, source);
+  if (notes && Array.isArray(notes) && notes.length > 0) {
+    AICache.set(key, notes);
+  }
+  return notes;
 }
 
 // Clean note content from unwanted symbols and artifacts
@@ -812,7 +824,6 @@ function extractScheduleFallback(
   date: string;
   type: "assignment" | "study" | "exam" | "note";
 }> {
-  console.log("🗓️ [SCHEDULE] Running fallback extraction...");
   const items: Array<{
     title: string;
     time: string;
@@ -901,8 +912,6 @@ function extractScheduleFallback(
 
   console.log(`🗓️ [SCHEDULE] Fallback extracted ${items.length} items`);
   return items.slice(0, 5); // Limit to 5 items
-
-  return items;
 }
 
 // Generate schedule items from content using AI - ENHANCED to only extract important events
@@ -1030,7 +1039,7 @@ IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
 
   try {
     console.log("🗓️ [SCHEDULE] Calling AI for schedule generation...");
-    const response = await callAzureOpenAI(messages);
+    const response = await callOpenRouter(messages);
     console.log("🗓️ [SCHEDULE] AI Response:", response);
 
     if (!response || response.trim().length === 0) {

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { verifySession } from "@/lib/session";
 import CyberGrid from "@/components/CyberGrid";
 import SkippyAssistant from "@/components/SkippyAssistant";
 import StudyDashboard from "@/components/StudyDashboard";
@@ -11,13 +12,28 @@ const Index = () => {
     setIsUnlocked(true);
   };
 
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const ok = await verifySession();
+      if (!cancelled) {
+        setIsUnlocked(ok);
+        setChecking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Cyber Grid Background */}
       <CyberGrid />
 
       {/* Main Content */}
-      {!isUnlocked ? (
+  {checking ? null : !isUnlocked ? (
         <SkippyAssistant
           onPasswordUnlock={handlePasswordUnlock}
           isUnlocked={isUnlocked}

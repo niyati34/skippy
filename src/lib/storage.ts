@@ -296,6 +296,35 @@ export const FileHistoryStorage = {
   },
 };
 
+// Simple cache for AI outputs by content hash
+export const AICache = {
+  get(key: string): any | null {
+    try {
+      const raw = localStorage.getItem(`skippy-ai-cache:${key}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      console.warn("AICache get failed", e);
+      return null;
+    }
+  },
+  set(key: string, value: any) {
+    try {
+      localStorage.setItem(`skippy-ai-cache:${key}`, JSON.stringify(value));
+    } catch (e) {
+      console.warn("AICache set failed", e);
+    }
+  },
+  hash(text: string): string {
+    // Lightweight, non-crypto hash
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+    }
+    return (h >>> 0).toString(36);
+  },
+};
+
 // Day-wise Timetable Storage
 export const TimetableStorage = {
   save: (timetable: DayWiseTimetable) => {

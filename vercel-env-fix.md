@@ -1,20 +1,15 @@
-# Vercel Environment Variables Fix
+# Vercel Environment Variables
 
-This file tracks the Vercel deployment configuration fix.
+This file tracks the Vercel deployment configuration.
 
-## Issue
+## OpenRouter (Primary)
 
-Azure OpenAI environment variables not configured in Vercel, causing API errors.
+Add these to Vercel dashboard:
 
-## Fix Applied
+- OPENROUTER_API_KEY
+- OPENROUTER_MODEL (optional)
+- OPENROUTER_API_BASE (optional)
 
-Environment variables added to Vercel dashboard:
+## Status
 
-- VITE_OPENAI_API_BASE
-- VITE_AZURE_OPENAI_KEY
-- VITE_AZURE_OPENAI_DEPLOYMENT
-- VITE_AZURE_OPENAI_API_VERSION
-
-## Date: August 9, 2025
-
-Status: Ready for redeployment
+Ready for redeployment

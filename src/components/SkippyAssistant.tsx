@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Mic, RotateCcw, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { callAzureOpenAI, ChatMessage } from "@/services/azureOpenAI";
+import { callOpenRouter, ChatMessage } from "@/services/openrouter";
 
 interface SkippyAssistantProps {
   onPasswordUnlock?: (password: string) => void;
@@ -205,6 +205,33 @@ const SkippyAssistant = ({
     recognition.start();
   };
 
+  async function verifyPasswordServer(password: string) {
+    const call = async (url: string) => {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+        credentials: "include",
+      });
+      if (!resp.ok) throw resp;
+      return await resp.json().catch(() => ({}));
+    };
+    try {
+      const data =
+        (await call("/api/unlock").catch(() => null)) ||
+        (await call("http://localhost:5174/api/unlock"));
+      return { ok: Boolean((data as any)?.ok), data: data || {} } as const;
+    } catch (e) {
+      const fallback = (e as any);
+      try {
+        const json = await fallback.json();
+        return { ok: false, data: json } as const;
+      } catch {
+        return { ok: false, data: { error: "network_error" } } as const;
+      }
+    }
+  }
+
   const handleUserInput = async (input: string) => {
     if (!input.trim()) return;
 
@@ -213,71 +240,95 @@ const SkippyAssistant = ({
     console.log("🔍 [Password Debug] User input:", input);
     console.log("🔍 [Password Debug] Processed input:", lowerInput);
 
-    // Enhanced password detection with multiple codes handling
-    const passwordKeywords = [
-      "onestring7",
-      "one string 7",
-      "onestring 7",
-      "one string seven",
-    ];
+  // Enhanced password detection and explicit phrase extraction
 
-    const hasPasswordKeyword = passwordKeywords.some((keyword) =>
-      lowerInput.includes(keyword)
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const normalizedInput = normalize(lowerInput);
+
+    // Exact match check (user typed only the password)
+  const exactMatch = false; // Disabled keyword-based acceptance; rely on server
+
+    // Explicit phrase extraction: "the password is ..." or "password: ..." or "pass: ..."
+    let explicitCandidate: string | null = null;
+    const explicitMatch = lowerInput.match(
+      /(?:the password is|password[:\s]|pass[:\s])\s*(.+)/i
     );
+    if (explicitMatch && explicitMatch[1]) {
+      // take the remainder as candidate, strip surrounding punctuation
+      explicitCandidate = explicitMatch[1].trim().replace(/^['"]|['"]$/g, "");
+    }
+
+    const explicitCandidateNormalized = explicitCandidate
+      ? normalize(explicitCandidate)
+      : "";
+  const explicitCandidateMatches = Boolean(explicitCandidate);
+
+    // If there are multiple codes mentioned, ask for clarification (keep this behaviour)
+    if (
+      normalizedInput.includes("many codes") ||
+      normalizedInput.includes("multiple codes") ||
+      normalizedInput.includes("several codes")
+    ) {
+      const clarificationMessage =
+        "If there are multiple codes, pick the unique one related to the occasion. Which one stands out?";
+      setCurrentMessage(clarificationMessage);
+      speakMessage(clarificationMessage);
+      return;
+    }
+
+    // Determine password attempt: require either exact match or an explicit phrase that includes the password.
+    // IMPORTANT: Do NOT accept arbitrary input when waitingForPassword is true.
+  const isPasswordAttempt = waitingForPassword || explicitCandidateMatches;
 
     console.log(
-      "🔍 [Password Debug] Has password keyword:",
-      hasPasswordKeyword
+      "🔍 [Password Debug] exactMatch:",
+      exactMatch,
+      "explicitCandidate:",
+      explicitCandidate
     );
     console.log(
       "🔍 [Password Debug] Waiting for password:",
       waitingForPassword
     );
 
-    // Check for multiple codes scenario
-    if (
-      lowerInput.includes("many codes") ||
-      lowerInput.includes("multiple codes") ||
-      lowerInput.includes("several codes")
-    ) {
-      const clarificationMessage =
-        "Oh interesting! If there are multiple codes, look for the one that's unique or special - maybe it's related to a celebration or festive occasion? Which one stands out to you as different from the others?";
-      setCurrentMessage(clarificationMessage);
-      speakMessage(clarificationMessage);
-      return;
-    }
-
-    // More restrictive password detection
-    const isPasswordAttempt =
-      hasPasswordKeyword ||
-      (lowerInput.includes("password") &&
-        passwordKeywords.some((keyword) => lowerInput.includes(keyword))) ||
-      lowerInput.includes("the password is") ||
-      lowerInput.includes("password:") ||
-      lowerInput.includes("pass:") ||
-      waitingForPassword;
-
-    console.log("🔍 [Password Debug] Is password attempt:", isPasswordAttempt);
-
     if (isPasswordAttempt) {
-      console.log("✅ [Password Debug] Password accepted! Unlocking...");
+      // Verify on server for security
+  const candidate = explicitCandidate || input;
+      const result = await verifyPasswordServer(candidate);
+      if (result.ok) {
+        console.log("✅ [Password Debug] Server accepted password. Unlocking...");
+        const successMessage =
+          "Password accepted. Your study dashboard is now unlocked.";
+        setCurrentMessage(successMessage);
+        speakMessage(successMessage);
+        toast({ title: "Access granted", description: "Dashboard unlocked." });
+        setTimeout(() => onPasswordUnlock && onPasswordUnlock("unlocked"), 1200);
+        return;
+      }
 
-      const successMessage =
-        "Perfect! You found the secret! Welcome to your intelligent study dashboard! I'm so excited to help you organize your studies, create amazing flashcards, and make learning super fun and engaging. Let's transform your study experience together and make every learning session productive and enjoyable!";
-      setCurrentMessage(successMessage);
-      speakMessage(successMessage);
+      const remain = (result.data as any)?.remainingAttempts;
+      const locked = (result.data as any)?.lockedOut;
+      const retryAfter = (result.data as any)?.retryAfterSeconds;
 
-      toast({
-        title: "🎉 Access Granted!",
-        description: "Welcome to your personalized dashboard!",
-      });
+      if (locked) {
+        const msg = `Too many attempts. Try again after ${retryAfter}s.`;
+        setCurrentMessage(msg);
+        speakMessage(msg);
+        toast({ title: "Locked out", description: msg, variant: "destructive" });
+        return;
+      }
 
-      setTimeout(() => {
-        console.log("🚀 [Password Debug] Calling onPasswordUnlock...");
-        if (onPasswordUnlock) {
-          onPasswordUnlock("unlocked");
-        }
-      }, 2000);
+      const msg = remain >= 0 ? `Incorrect password. ${remain} attempts left.` : "Incorrect password.";
+      setCurrentMessage(msg);
+      speakMessage(msg);
+      toast({ title: "Access denied", description: msg, variant: "destructive" });
+      setWaitingForPassword(true);
       return;
     }
 
@@ -288,56 +339,42 @@ const SkippyAssistant = ({
     setIsLoading(true);
 
     try {
-      // Enhanced AI conversation with more detailed personality
+      // AI conversation with concise, plain-text style
       const conversationMessages = [
         {
           role: "system" as const,
-          content: `You are Skippy, an incredibly enthusiastic and talkative AI study assistant! You're helping someone unlock their special study dashboard. The password is hidden in their physical gift box - NEVER reveal it directly or give any hints about what it actually is.
-
-Your personality:
-- Extremely conversational and encouraging
-- Ask lots of follow-up questions
-- Be genuinely curious about what they're finding
-- Provide multiple detailed suggestions
-- Keep the excitement and mystery alive
-- NEVER mention the actual password or give direct hints
-- Be creative with guidance about checking gift boxes
-
-Key guidelines:
-- If they seem frustrated, offer more specific (but not revealing) guidance
-- Ask about what they see, feel, or find in their gift box
-- Suggest checking different parts: cards, tags, packaging, decorations
-- Be encouraging but never give away the answer
-- Keep them engaged with questions and enthusiasm
-- Always end with encouragement and next steps
-
-Example conversation starters:
-"That's so interesting! What else catches your eye in that gift box? Sometimes the best surprises are hiding in unexpected places!"
-"I'm getting excited for you! Have you checked every corner and fold? Gift boxes often have multiple layers of surprises!"
-"Ooh, detective work! What was the occasion for this gift? That might give you a clue about what kind of word to look for!"
-
-Always be encouraging and keep the conversation flowing!`,
+          content: `You are Skippy, an AI study assistant with a warm, playful tone suitable for Raksha Bandhan.
+Style and format:
+- Be concise and friendly.
+- Plain text only. No emojis, no markdown, no bullet points, no asterisks.
+- 2–4 short sentences per reply.
+- Ask at most one simple clarifying question when helpful.
+- Do not reveal or hint the password.
+Task context:
+The user is finding a password hidden in a gift box. Offer encouraging, practical steps (exterior, layers, tags, flaps, textures, light angles) in short sentences.`,
         },
         ...chatHistory.slice(-8), // Keep more context for better conversation
         userMessage,
       ];
 
-      const response = await callAzureOpenAI(conversationMessages);
+      const response = await callOpenRouter(conversationMessages);
+
+      const clean = toPlainText(response);
 
       const assistantMessage = {
         role: "assistant" as const,
-        content: response,
+        content: clean,
       };
       setChatHistory((prev) => [...prev, assistantMessage]);
 
-      setCurrentMessage(response);
-      speakMessage(response);
+      setCurrentMessage(clean);
+      speakMessage(clean);
     } catch (error) {
       console.error("Error getting AI response:", error);
       const fallbackMessages = [
-        "I'm absolutely thrilled to help you unlock this mystery! Have you taken a really close look at everything in your gift box? Sometimes the most important clues are right there waiting to be discovered! What do you see when you examine all the cards, tags, and decorations?",
-        "This is like being a detective! I love it! Tell me, what kind of special occasion was this gift for? And have you checked every single piece of paper, every tag, and every decoration in that box? The answer is definitely there somewhere!",
-        "Oh how exciting! I can't wait for you to find the key! Have you looked at all the writing, checked under flaps, examined any cards or special messages? What themes or decorations do you notice? Sometimes the clues are themed around the special occasion!",
+        "Check the exterior, tags, and any cards. Look under flaps and inside folds. What detail stands out?",
+        "Scan each layer carefully. Read any notes. Try light at an angle to reveal embossing. What did you find?",
+        "Focus on corners, seams, and ribbons. If there are multiple codes, choose the one linked to the occasion.",
       ];
       const fallbackMessage =
         fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
@@ -349,6 +386,26 @@ Always be encouraging and keep the conversation flowing!`,
 
     setInputText("");
   };
+
+  // Convert any AI output to concise plain text (no emojis, bullets, asterisks, markdown)
+  function toPlainText(text: string): string {
+    if (!text) return "";
+    let t = text
+      // Remove markdown headings and list markers
+      .replace(/^\s*#{1,6}\s*/gm, "")
+      .replace(/^\s*[-*•]\s+/gm, "")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      // Remove common emoji ranges
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
+      // Collapse whitespace
+      .replace(/[\t ]+/g, " ")
+      .replace(/\s*\n\s*/g, " ")
+      .trim();
+    // Limit to ~4 short sentences
+    const parts = t.split(/(?<=[.!?])\s+/).slice(0, 4);
+    return parts.join(" ").trim();
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

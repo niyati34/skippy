@@ -3,7 +3,7 @@
 ## 📋 Prerequisites
 
 1. **Vercel Account**: Sign up at [vercel.com](https://vercel.com)
-2. **Azure OpenAI**: Active Azure OpenAI resource with API key
+2. **OpenRouter**: API key from openrouter.ai
 3. **GitHub Repository**: Push your code to GitHub
 
 ## 🛠️ Step-by-Step Deployment
@@ -49,27 +49,27 @@ vercel
 In Vercel Dashboard → Project → Settings → Environment Variables, add:
 
 ```
-VITE_OPENAI_API_BASE=https://your-resource.openai.azure.com
-VITE_AZURE_OPENAI_KEY=your-azure-openai-api-key
-VITE_AZURE_OPENAI_DEPLOYMENT=gpt-4o
-VITE_AZURE_OPENAI_API_VERSION=2025-01-01-preview
+OPENROUTER_API_KEY=your-openrouter-api-key
+# optional
+OPENROUTER_MODEL=gpt-oss-20b
+OPENROUTER_API_BASE=https://openrouter.ai/api
 ```
 
-**⚠️ Important**: These are server-side environment variables for the Vercel serverless function.
+These are server-side environment variables used by the serverless function.
 
 ### 4. **Verify Deployment**
 
 1. **Visit your app**: `https://your-project.vercel.app`
 2. **Test AI functionality**: Upload a PDF and check console
-3. **Check serverless function**: `https://your-project.vercel.app/api/azure-openai/chat`
+3. **Check serverless function**: `https://your-project.vercel.app/api/openrouter/chat`
 
 ## 📁 Project Structure for Vercel
 
 ```
 skippy-rakhi-verse-main/
 ├── api/                     # Vercel serverless functions
-│   └── azure-openai/
-│       └── chat.js         # Azure OpenAI proxy
+│   └── openrouter/
+│       └── chat.js         # OpenRouter proxy
 ├── src/                    # React app source
 ├── public/                 # Static assets
 ├── vercel.json            # Vercel configuration
@@ -88,21 +88,21 @@ skippy-rakhi-verse-main/
 ### Production (Vercel)
 
 - **Frontend**: `https://your-project.vercel.app`
-- **Proxy**: `/api/azure-openai/chat` (Vercel serverless function)
+- **Proxy**: `/api/openrouter/chat` (Vercel serverless function)
 - **API calls**: Go to Vercel serverless function
 
 ## 🚨 Troubleshooting
 
 ### Common Issues:
 
-1. **"Missing Azure OpenAI environment variables"**
+1. Missing OpenRouter environment variables
 
-   - Add environment variables in Vercel dashboard
+   - Add OPENROUTER_API_KEY in Vercel dashboard
    - Redeploy after adding variables
 
 2. **CORS errors**
 
-   - Already handled in `/api/azure-openai/chat.js`
+   - Already handled in `/api/openrouter/chat.js`
    - Check browser console for specific errors
 
 3. **Build failures**
@@ -115,15 +115,14 @@ skippy-rakhi-verse-main/
    npm run lint
    ```
 
-4. **API timeout errors**
-   - Azure OpenAI might be slow
-   - Check Azure OpenAI service status
+4. API errors
+   - Check OpenRouter status
    - Verify API key permissions
 
 ### Debug Steps:
 
 1. **Check deployment logs**: Vercel Dashboard → Project → Functions tab
-2. **Test API endpoint**: Visit `https://your-project.vercel.app/api/azure-openai/chat`
+2. **Test API endpoint**: Visit `https://your-project.vercel.app/api/openrouter/chat`
 3. **Browser console**: Check for network errors
 4. **Environment variables**: Verify they're set correctly in Vercel
 
@@ -132,7 +131,7 @@ skippy-rakhi-verse-main/
 After successful deployment:
 
 - **Main App**: `https://your-project.vercel.app`
-- **API Endpoint**: `https://your-project.vercel.app/api/azure-openai/chat`
+- **API Endpoint**: `https://your-project.vercel.app/api/openrouter/chat`
 - **Test Pages**:
   - `https://your-project.vercel.app/test-date-wise-classes.html`
   - `https://your-project.vercel.app/test-expert-extraction.html`
@@ -142,7 +141,7 @@ After successful deployment:
 - Environment variables are secure on Vercel
 - API keys are not exposed to client-side code
 - CORS is properly configured for production use
-- Rate limiting is handled by Azure OpenAI
+- Rate limiting is subject to your OpenRouter plan
 
 ## 📊 Performance
 
@@ -163,7 +162,7 @@ After successful deployment:
 If you encounter issues:
 
 1. Check Vercel [documentation](https://vercel.com/docs)
-2. Review Azure OpenAI [API documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
+2. Review OpenRouter documentation (https://openrouter.ai)
 3. Check the GitHub repository for updates
 
 ---

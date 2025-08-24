@@ -45,7 +45,7 @@
           text items
         </li>
         <li>
-          <strong>API Connection</strong>: Started Azure OpenAI proxy server on
+          <strong>API Connection</strong>: Started OpenRouter proxy server on
           port 5174
         </li>
         <li>
@@ -63,9 +63,7 @@
       <h3>🎯 Test Status:</h3>
       <p><strong>✅ Server Status:</strong></p>
       <ul>
-        <li>
-          Azure OpenAI Proxy: <code>http://localhost:5174</code> ✅ Running
-        </li>
+        <li>OpenRouter Proxy: <code>http://localhost:5174</code> ✅ Running</li>
         <li>
           Development Server: <code>http://localhost:8082</code> ✅ Running
         </li>
@@ -91,7 +89,7 @@
           ✅ No more "Cannot read properties of undefined (reading 'trim')"
           errors
         </li>
-        <li>✅ Successful API calls to Azure OpenAI</li>
+        <li>✅ Successful API calls to OpenRouter</li>
         <li>
           ✅ Proper academic notes generation following your specifications
         </li>
@@ -114,8 +112,8 @@ Page URL: ${window.location.href}
 User Agent: ${navigator.userAgent}
 
 Expected Servers:
-- Development: http://localhost:8082 (Vite React App)
-- Proxy Server: http://localhost:5174 (Azure OpenAI Proxy)
+- Development: http://localhost:5173 (Vite React App)
+- Proxy Server: http://localhost:5174 (OpenRouter Proxy)
 
 Browser Console Check:
 - Open F12 Developer Tools
@@ -123,17 +121,15 @@ Browser Console Check:
 - Upload a PDF file
 - Should see successful processing messages instead of errors
 
-Environment Variables Expected:
-- VITE_OPENAI_API_BASE: Azure endpoint URL
-- VITE_AZURE_OPENAI_KEY: Your API key
-- VITE_AZURE_OPENAI_DEPLOYMENT: gpt-4o
-- VITE_AZURE_OPENAI_API_VERSION: 2025-01-01-preview
+Environment Variables Expected (server):
+- OPENROUTER_API_KEY: Your OpenRouter API key
+- OPENROUTER_MODEL: Optional model override (default gpt-oss-20b)
         `;
 
       debugInfo.textContent = info;
 
       // Test API connectivity
-      fetch("http://localhost:5174/api/azure-openai/chat", {
+      fetch("http://localhost:5174/api/openrouter/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
