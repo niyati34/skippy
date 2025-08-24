@@ -5,11 +5,17 @@ function verify(token, secret) {
   const parts = token.split(".");
   if (parts.length !== 2) return false;
   const [payload, sig] = parts;
-  const expected = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64url");
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)))
+    return false;
   // Optionally check expiry in payload
   try {
-    const { iat } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const { iat } = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8")
+    );
     if (!iat) return false;
     const ttl = Number(process.env.UNLOCK_SESSION_TTL || 86400);
     const now = Math.floor(Date.now() / 1000);

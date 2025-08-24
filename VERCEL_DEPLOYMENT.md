@@ -53,6 +53,10 @@ OPENROUTER_API_KEY=your-openrouter-api-key
 # optional
 OPENROUTER_MODEL=gpt-oss-20b
 OPENROUTER_API_BASE=https://openrouter.ai/api
+# restrict models the client can request (optional)
+OPENROUTER_ALLOWED_MODELS=gpt-oss-20b
+# tighten CORS to specific origins (optional, comma-separated)
+OPENROUTER_ALLOWED_ORIGINS=http://localhost:8080,https://your-project.vercel.app
 ```
 
 These are server-side environment variables used by the serverless function.
@@ -102,7 +106,7 @@ skippy-rakhi-verse-main/
 
 2. **CORS errors**
 
-   - Already handled in `/api/openrouter/chat.js`
+   - Configure `OPENROUTER_ALLOWED_ORIGINS` to include your dev and prod origins
    - Check browser console for specific errors
 
 3. **Build failures**

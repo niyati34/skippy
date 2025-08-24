@@ -28,7 +28,13 @@ function getAllowedPasswords() {
   const multi = process.env.UNLOCK_PASSWORDS;
   const single = process.env.UNLOCK_PASSWORD;
   const list = [];
-  if (multi) list.push(...multi.split(/[,;\n]/).map((s) => normalize(s)).filter(Boolean));
+  if (multi)
+    list.push(
+      ...multi
+        .split(/[,;\n]/)
+        .map((s) => normalize(s))
+        .filter(Boolean)
+    );
   if (single) list.push(normalize(single));
   return Array.from(new Set(list.filter(Boolean)));
 }
@@ -36,7 +42,10 @@ function getAllowedPasswords() {
 import crypto from "node:crypto";
 
 function signSession(payload, secret) {
-  const h = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+  const h = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64url");
   return `${payload}.${h}`;
 }
 
@@ -49,7 +58,8 @@ function makeCookie(name, value, maxAgeSeconds = 86400) {
     `Max-Age=${maxAgeSeconds}`,
   ];
   // In production on Vercel, use Secure
-  if (process.env.VERCEL || process.env.NODE_ENV === "production") parts.push("Secure");
+  if (process.env.VERCEL || process.env.NODE_ENV === "production")
+    parts.push("Secure");
   return parts.join("; ");
 }
 
@@ -100,7 +110,9 @@ export default async function handler(req, res) {
     const allowed = getAllowedPasswords();
     if (allowed.length === 0) {
       console.error("[unlock] No UNLOCK_PASSWORD(S) configured");
-      return res.status(500).json({ ok: false, error: "server_not_configured" });
+      return res
+        .status(500)
+        .json({ ok: false, error: "server_not_configured" });
     }
 
     const match = allowed.some((p) => candidate === p);
@@ -116,7 +128,9 @@ export default async function handler(req, res) {
         const token = signSession(payload, secret);
         res.setHeader("Set-Cookie", makeCookie("skippy_session", token, ttl));
       } else {
-        console.warn("[unlock] UNLOCK_SESSION_SECRET not set; session cookie skipped");
+        console.warn(
+          "[unlock] UNLOCK_SESSION_SECRET not set; session cookie skipped"
+        );
       }
       return res.status(200).json({ ok: true });
     }
