@@ -33,7 +33,7 @@ const Index = () => {
       <CyberGrid />
 
       {/* Main Content */}
-  {checking ? null : !isUnlocked ? (
+      {checking ? null : !isUnlocked ? (
         <SkippyAssistant
           onPasswordUnlock={handlePasswordUnlock}
           isUnlocked={isUnlocked}
