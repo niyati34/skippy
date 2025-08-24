@@ -43,6 +43,8 @@ import {
   generateNotesFromContent,
   extractTextFromImage,
 } from "@/services/openrouter";
+import { Orchestrator, BuddyAgent, NotesAgent, PlannerAgent, FlashcardAgent } from "@/lib/agent";
+import { parseIntent } from "@/lib/intent";
 import {
   processUploadedFile,
   FileProcessingResult,
@@ -124,6 +126,15 @@ const DashboardAI = ({
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const orchestrator = new Orchestrator([
+    new NotesAgent(),
+    new PlannerAgent(),
+    new FlashcardAgent(),
+    // handle fun learning before buddy fallback
+    // @ts-ignore FunAgent is exported from agent.ts
+    new (require("@/lib/agent").FunAgent)(),
+    new BuddyAgent(),
+  ]);
 
   const handleVoiceInput = async () => {
     if (
@@ -262,7 +273,50 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-      // 1) Intent detection: run generators directly when asked
+      // 1) Try centralized orchestrator (now wired to real tools)
+      try {
+        const result = await orchestrator.handle({ text: messageText });
+        const summary = result?.summary ? toPlainText(result.summary) : "";
+        const arts = result?.artifacts || {};
+        let consumed = false;
+
+        if (arts.notes && Array.isArray(arts.notes) && arts.notes.length) {
+          onNotesUpdate(arts.notes);
+          consumed = true;
+        }
+        if (arts.flashcards && Array.isArray(arts.flashcards) && arts.flashcards.length) {
+          onFlashcardsUpdate(
+            arts.flashcards.map((c: any) => ({
+              question: c.question || c.front || "Question",
+              answer: c.answer || c.back || "Answer",
+              category: c.category || "General",
+            }))
+          );
+          consumed = true;
+        }
+        if (arts.schedule && Array.isArray(arts.schedule) && arts.schedule.length) {
+          onScheduleUpdate(arts.schedule);
+          consumed = true;
+        }
+        if (arts.fun && arts.fun.content) {
+          onFunLearningUpdate(arts.fun.content, arts.fun.type || "story");
+          consumed = true;
+        }
+
+        if (summary) {
+          const a: ChatMessage = { role: "assistant", content: summary };
+          setMessages((p) => [...p, a]);
+          speakMessageWithElevenLabs(a.content);
+        }
+
+        if (consumed || summary) {
+          setIsLoading(false);
+          setInputText("");
+          return;
+        }
+      } catch {}
+
+  // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
       const intentHandled = await handleIntentCommand(messageText);
       if (intentHandled) {
         setIsLoading(false);
@@ -270,7 +324,7 @@ const DashboardAI = ({
         return;
       }
 
-      // 2) Otherwise, do a short general chat reply
+      // 3) Otherwise, do a short general chat reply
       const systemPrompt: ChatMessage = {
         role: "system",
         content:

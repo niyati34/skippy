@@ -1,15 +1,31 @@
-// Minimal agent skeleton for future multi-agent orchestration
+// Minimal agent skeleton for multi-agent orchestration wired to real tools
+import { parseIntent } from "@/lib/intent";
+import {
+  callOpenRouter,
+  generateNotesFromContent,
+  generateScheduleFromContent,
+  generateFlashcards,
+  generateFunLearning,
+  ChatMessage,
+} from "@/services/openrouter";
+
 export type AgentMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export interface AgentTaskInput {
-  intent?: string;
-  text?: string;
+  intent?: string; // optional hint
+  text?: string; // user freeform text
   files?: Array<{ name: string; type: string; content: string }>;
 }
 
 export interface AgentResult {
   summary: string;
-  artifacts?: Record<string, any>;
+  // Artifacts follow a stable shape so UI can apply updates
+  artifacts?: {
+    notes?: any[];
+    flashcards?: any[];
+    schedule?: any[];
+    fun?: { type: string; content: string };
+  };
 }
 
 export interface Agent {
@@ -21,47 +37,90 @@ export interface Agent {
 export class BuddyAgent implements Agent {
   name = "Buddy";
   canHandle() {
-    return true; // default router for now
+    return true; // final fallback
   }
   async run(input: AgentTaskInput): Promise<AgentResult> {
-    return { summary: `Buddy received: ${input.text?.slice(0, 100) || ""}` };
+    const prompt = (input.text || "").trim();
+    if (!prompt) return { summary: "How can I help with your studies today?" };
+    // Keep Buddy concise to avoid duplicating general chat elsewhere
+    const system: ChatMessage = {
+      role: "system",
+      content:
+        "You are Skippy, an AI study buddy. Reply in plain text only (no markdown). Be concise (2-4 short sentences).",
+    };
+    const reply = await callOpenRouter([system, { role: "user", content: prompt }]);
+    return { summary: reply || "" };
   }
 }
 
 export class NotesAgent implements Agent {
   name = "Notes";
   canHandle(i: AgentTaskInput) {
-    return /note|summar|study/i.test(i.intent || i.text || "");
+    const s = (i.intent || i.text || "").toLowerCase();
+    return /\bnotes?\b|summar|study/.test(s);
   }
   async run(input: AgentTaskInput): Promise<AgentResult> {
-    return { summary: "Notes agent stub; will generate structured notes." };
+    const raw = input.text || "";
+    const notes = await generateNotesFromContent(raw, "chat-input");
+    return {
+      summary: `Created ${Array.isArray(notes) ? notes.length : 0} structured notes from your prompt.`,
+      artifacts: { notes },
+    };
   }
 }
 
 export class PlannerAgent implements Agent {
   name = "Planner";
   canHandle(i: AgentTaskInput) {
-    return /plan|schedule|timetable|exam|assignment/i.test(i.intent || i.text || "");
+    const s = (i.intent || i.text || "").toLowerCase();
+    return /plan|schedule|timetable|calendar|exam|assignment/.test(s);
   }
-  async run(): Promise<AgentResult> {
-    return { summary: "Planner agent stub; will create schedule items." };
+  async run(input: AgentTaskInput): Promise<AgentResult> {
+    const raw = input.text || "";
+    const schedule = await generateScheduleFromContent(raw);
+    return {
+      summary: `Added ${Array.isArray(schedule) ? schedule.length : 0} schedule items from your prompt.`,
+      artifacts: { schedule },
+    };
   }
 }
 
 export class FlashcardAgent implements Agent {
   name = "Flashcard";
   canHandle(i: AgentTaskInput) {
-    return /flashcard|practice|quiz|revise/i.test(i.intent || i.text || "");
+    const s = (i.intent || i.text || "").toLowerCase();
+    return /flashcard|practice|quiz|revise|cards?/.test(s);
   }
-  async run(): Promise<AgentResult> {
-    return { summary: "Flashcard agent stub; will create practice cards." };
+  async run(input: AgentTaskInput): Promise<AgentResult> {
+    const raw = input.text || "";
+    const cards = await generateFlashcards(raw);
+    return {
+      summary: `Created ${Array.isArray(cards) ? cards.length : 0} flashcards from your prompt.`,
+      artifacts: { flashcards: cards },
+    };
+  }
+}
+
+export class FunAgent implements Agent {
+  name = "Fun";
+  canHandle(i: AgentTaskInput) {
+    const s = (i.intent || i.text || "").toLowerCase();
+    return /(story|quiz|poem|song|rap|riddle|game)/.test(s);
+  }
+  async run(input: AgentTaskInput): Promise<AgentResult> {
+    const { type, content, funKind } = parseIntent(input.text || "");
+    const kind = funKind || "story";
+    const out = await generateFunLearning(content || input.text || "", kind);
+    return { summary: `Generated a ${kind} for you.`, artifacts: { fun: { type: kind, content: out } } };
   }
 }
 
 export class Orchestrator {
   constructor(private agents: Agent[]) {}
   async handle(input: AgentTaskInput): Promise<AgentResult> {
-    const a = this.agents.find((ag) => ag.canHandle(input)) || this.agents[0];
-    return a.run(input);
+    const parsed = parseIntent(input.text || "");
+    const enriched: AgentTaskInput = { ...input, intent: parsed.type };
+    const agent = this.agents.find((ag) => ag.canHandle(enriched)) || this.agents[0];
+    return agent.run(enriched);
   }
 }
