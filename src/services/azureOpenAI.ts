@@ -1,8 +1,17 @@
 // AI client using OpenRouter only (via proxy)
 // Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
 
-const OPENROUTER_MODEL =
-  (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
+// Client model override (optional). If not set, the server decides.
+// At runtime, a user can set localStorage.clientModel to override without rebuild.
+const ENV_MODEL = (import.meta as any)?.env?.VITE_OPENROUTER_MODEL || "";
+function getRuntimeModel(): string {
+  try {
+    const ls = (window as any)?.localStorage?.getItem("clientModel") || "";
+    return (ls || ENV_MODEL || "").trim();
+  } catch {
+    return (ENV_MODEL || "").trim();
+  }
+}
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -11,10 +20,18 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+type CallOptions = { retries?: number; model?: string } | number | undefined;
+
 export async function callOpenRouter(
   messages: ChatMessage[],
-  retries = 2
+  optionsOrRetries?: CallOptions
 ): Promise<string> {
+  const retries =
+    typeof optionsOrRetries === "number"
+      ? optionsOrRetries
+      : optionsOrRetries && typeof optionsOrRetries === "object"
+      ? optionsOrRetries.retries ?? 2
+      : 2;
   // Determine candidate proxy URLs based on environment
   const isLocal =
     window.location.hostname === "localhost" ||
@@ -31,8 +48,22 @@ export async function callOpenRouter(
       : [prodRelative, prodAbsolute]
   ).filter(Boolean);
 
+  const RUNTIME_MODEL = ((): string => {
+    // Prefer explicit per-call model, else runtime override/env
+    if (
+      optionsOrRetries &&
+      typeof optionsOrRetries === "object" &&
+      optionsOrRetries.model &&
+      String(optionsOrRetries.model).trim()
+    ) {
+      return String(optionsOrRetries.model).trim();
+    }
+    return getRuntimeModel();
+  })();
   console.log(
-    `[AI] Endpoint candidates (model ${OPENROUTER_MODEL}):`,
+    `[AI] Endpoint candidates (client model override: ${
+      RUNTIME_MODEL || "<none>"
+    }):`,
     candidates
   );
 
@@ -46,7 +77,8 @@ export async function callOpenRouter(
           max_tokens: 3000,
           temperature: 0.1,
           top_p: 0.8,
-          model: OPENROUTER_MODEL,
+          // Only include model when explicitly configured
+          ...(RUNTIME_MODEL ? { model: RUNTIME_MODEL } : {}),
         },
       }),
     });
@@ -57,7 +89,13 @@ export async function callOpenRouter(
         resp.status,
         errorText
       );
-      throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
+      const hint =
+        resp.status === 401
+          ? "Hint: try a different model (set localStorage.clientModel) or check server logs."
+          : "";
+      throw new Error(
+        `Proxy error: ${resp.status} - ${errorText} ${hint}`.trim()
+      );
     }
     const data = await resp.json();
     return (
@@ -84,6 +122,64 @@ export async function callOpenRouter(
   }
   // Surface final error for visibility
   throw lastErr ?? new Error("All endpoints failed");
+}
+
+// -------- Automatic model routing --------
+// Note: Model IDs are best-effort; if unavailable under your key, server will fall back to default.
+function pickModel(kind: string, sample?: string): string {
+  const s = (sample || "").toLowerCase();
+  // Simple language hint for Indic scripts
+  const isIndic =
+    /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0D80-\u0DFF]/.test(
+      sample || ""
+    );
+
+  // Preferred free models mapping per task
+  const map: Record<string, string[]> = {
+    chat: [
+      "google/gemma-3-4b-it:free", // general chat, instruction following
+      "reka/flash-3:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    analyze: [
+      "google/gemma-3n-4b-it:free", // fast, low-latency analysis
+      "google/gemma-3-4b-it:free",
+      "reka/flash-3:free",
+    ],
+    notes: [
+      "featherless/qrwkv-72b:free", // long context, structured outputs
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+      "google/gemma-3-4b-it:free",
+    ],
+    schedule: [
+      "google/gemma-3-4b-it:free", // extraction-friendly, concise
+      "reka/flash-3:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    timetable: [
+      "google/gemma-3-4b-it:free",
+      "reka/flash-3:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    flashcards: [
+      "reka/flash-3:free", // instruction-tuned, clean JSON
+      "google/gemma-3-4b-it:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    fun: [
+      // language-aware choice
+      ...(isIndic
+        ? ["sarvam/sarvam-m:free", "google/gemma-3-4b-it:free"]
+        : ["google/gemma-3-4b-it:free", "reka/flash-3:free"]),
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+  };
+
+  const candidates = map[kind] || [];
+  const explicit = getRuntimeModel();
+  // Honor explicit override if set
+  if (explicit) return explicit;
+  return candidates[0] || ""; // empty -> server default
 }
 
 // ----------------- Helpers for fallback notes -----------------
@@ -1091,7 +1187,10 @@ async function condenseContentIfLarge(
     },
   ];
   try {
-    const out = await callOpenRouter(messages, 1); // Single attempt
+    const out = await callOpenRouter(messages, {
+      retries: 1,
+      model: pickModel("analyze", content),
+    });
     return out && out.trim().length > 50
       ? out.trim()
       : content.substring(0, 8000);
@@ -1446,7 +1545,10 @@ ${content}`;
   ];
 
   try {
-    const response = await callOpenRouter(messages, 3);
+    const response = await callOpenRouter(messages, {
+      retries: 3,
+      model: pickModel("notes", content),
+    });
 
     // Two-step JSON handling to avoid markdown conflicts
     let clean = (response || "").trim();
@@ -1599,7 +1701,10 @@ IMPORTANT:
       },
     ];
 
-    const response = await callOpenRouter(messages, 3);
+    const response = await callOpenRouter(messages, {
+      retries: 3,
+      model: pickModel("notes", content),
+    });
 
     // Enhanced JSON parsing to handle complex content
     let clean = (response || "").trim();
@@ -1955,7 +2060,10 @@ export async function analyzeFileContent(
     },
   ];
   try {
-    const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, {
+      retries: 2,
+      model: pickModel("schedule", content),
+    });
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -1996,7 +2104,10 @@ export async function generateScheduleFromContent(
     },
   ];
   try {
-    const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, {
+      retries: 2,
+      model: pickModel("timetable", content),
+    });
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     const parsed = JSON.parse(clean);
     const items = Array.isArray(parsed) ? parsed : [];
@@ -2068,7 +2179,10 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     console.log(
       "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
     );
-    const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, {
+      retries: 2,
+      model: pickModel("flashcards", content),
+    });
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
@@ -2392,7 +2506,10 @@ export async function generateFunLearning(
       content: `Create a ${type} from this educational content: ${content}`,
     },
   ];
-  return await callOpenRouter(messages, 2);
+  return await callOpenRouter(messages, {
+    retries: 2,
+    model: pickModel("fun", content),
+  });
 }
 
 export async function extractTextFromImage(imageFile: File): Promise<string> {
