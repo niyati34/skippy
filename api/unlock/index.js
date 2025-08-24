@@ -33,6 +33,26 @@ function getAllowedPasswords() {
   return Array.from(new Set(list.filter(Boolean)));
 }
 
+import crypto from "node:crypto";
+
+function signSession(payload, secret) {
+  const h = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+  return `${payload}.${h}`;
+}
+
+function makeCookie(name, value, maxAgeSeconds = 86400) {
+  const parts = [
+    `${name}=${value}`,
+    `Path=/`,
+    `HttpOnly`,
+    `SameSite=Lax`,
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  // In production on Vercel, use Secure
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") parts.push("Secure");
+  return parts.join("; ");
+}
+
 export default async function handler(req, res) {
   // CORS
   res.setHeader("Access-Control-Allow-Credentials", true);
@@ -86,6 +106,18 @@ export default async function handler(req, res) {
     const match = allowed.some((p) => candidate === p);
     if (match) {
       attempts.set(ip, { count: 0, lockoutUntil: 0 });
+      const secret = process.env.UNLOCK_SESSION_SECRET;
+      const ttl = Number(process.env.UNLOCK_SESSION_TTL || 86400);
+      if (secret) {
+        const now = Math.floor(Date.now() / 1000);
+        const payload = Buffer.from(JSON.stringify({ iat: now, ip })).toString(
+          "base64url"
+        );
+        const token = signSession(payload, secret);
+        res.setHeader("Set-Cookie", makeCookie("skippy_session", token, ttl));
+      } else {
+        console.warn("[unlock] UNLOCK_SESSION_SECRET not set; session cookie skipped");
+      }
       return res.status(200).json({ ok: true });
     }
 

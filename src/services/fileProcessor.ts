@@ -824,7 +824,6 @@ function extractScheduleFallback(
   date: string;
   type: "assignment" | "study" | "exam" | "note";
 }> {
-  console.log("🗓️ [SCHEDULE] Running fallback extraction...");
   const items: Array<{
     title: string;
     time: string;
@@ -913,8 +912,6 @@ function extractScheduleFallback(
 
   console.log(`🗓️ [SCHEDULE] Fallback extracted ${items.length} items`);
   return items.slice(0, 5); // Limit to 5 items
-
-  return items;
 }
 
 // Generate schedule items from content using AI - ENHANCED to only extract important events

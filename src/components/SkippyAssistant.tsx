@@ -206,20 +206,29 @@ const SkippyAssistant = ({
   };
 
   async function verifyPasswordServer(password: string) {
-    try {
-      const resp = await fetch("/api/unlock", {
+    const call = async (url: string) => {
+      const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
+        credentials: "include",
       });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        return { ok: false, data } as const;
-      }
-      const data = await resp.json().catch(() => ({}));
-      return { ok: Boolean((data as any)?.ok), data } as const;
+      if (!resp.ok) throw resp;
+      return await resp.json().catch(() => ({}));
+    };
+    try {
+      const data =
+        (await call("/api/unlock").catch(() => null)) ||
+        (await call("http://localhost:5174/api/unlock"));
+      return { ok: Boolean((data as any)?.ok), data: data || {} } as const;
     } catch (e) {
-      return { ok: false, data: { error: "network_error" } } as const;
+      const fallback = (e as any);
+      try {
+        const json = await fallback.json();
+        return { ok: false, data: json } as const;
+      } catch {
+        return { ok: false, data: { error: "network_error" } } as const;
+      }
     }
   }
 

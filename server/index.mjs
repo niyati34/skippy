@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import crypto from "node:crypto";
 
 // Load env from .env.local or .env (override to avoid empty system vars shadowing)
 dotenv.config({ path: ".env.local", override: true });
@@ -119,6 +120,42 @@ app.post("/api/unlock", (req, res) => {
     lockedOut: Boolean(newState.lockoutUntil && now < newState.lockoutUntil),
     retryAfterSeconds: newState.lockoutUntil ? Math.ceil((newState.lockoutUntil - now) / 1000) : undefined,
   });
+});
+
+// Verify session (local dev)
+app.get("/api/unlock/verify", (req, res) => {
+  const cookie = req.headers.cookie || "";
+  const match = cookie.match(/(?:^|;\s*)skippy_session=([^;]+)/);
+  const token = match ? match[1] : "";
+  const secret = process.env.UNLOCK_SESSION_SECRET || "";
+  const ok = (() => {
+    try {
+      if (!token || !secret) return false;
+      const [payload, sig] = token.split(".");
+      if (!payload || !sig) return false;
+      const expected = crypto
+        .createHmac("sha256", secret)
+        .update(payload)
+        .digest("base64url");
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+      const { iat } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      const ttl = Number(process.env.UNLOCK_SESSION_TTL || 86400);
+      const now = Math.floor(Date.now() / 1000);
+      return now - iat < ttl;
+    } catch {
+      return false;
+    }
+  })();
+  res.json({ ok });
+});
+
+// Logout (local dev)
+app.post("/api/unlock/logout", (req, res) => {
+  res.setHeader(
+    "Set-Cookie",
+    "skippy_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+  );
+  res.json({ ok: true });
 });
 
 const PORT = Number(process.env.PORT || 5174);
