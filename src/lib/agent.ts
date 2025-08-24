@@ -9,7 +9,10 @@ import {
   ChatMessage,
 } from "@/services/openrouter";
 
-export type AgentMessage = { role: "system" | "user" | "assistant"; content: string };
+export type AgentMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 export interface AgentTaskInput {
   intent?: string; // optional hint
@@ -48,7 +51,10 @@ export class BuddyAgent implements Agent {
       content:
         "You are Skippy, an AI study buddy. Reply in plain text only (no markdown). Be concise (2-4 short sentences).",
     };
-    const reply = await callOpenRouter([system, { role: "user", content: prompt }]);
+    const reply = await callOpenRouter([
+      system,
+      { role: "user", content: prompt },
+    ]);
     return { summary: reply || "" };
   }
 }
@@ -63,7 +69,9 @@ export class NotesAgent implements Agent {
     const raw = input.text || "";
     const notes = await generateNotesFromContent(raw, "chat-input");
     return {
-      summary: `Created ${Array.isArray(notes) ? notes.length : 0} structured notes from your prompt.`,
+      summary: `Created ${
+        Array.isArray(notes) ? notes.length : 0
+      } structured notes from your prompt.`,
       artifacts: { notes },
     };
   }
@@ -79,7 +87,9 @@ export class PlannerAgent implements Agent {
     const raw = input.text || "";
     const schedule = await generateScheduleFromContent(raw);
     return {
-      summary: `Added ${Array.isArray(schedule) ? schedule.length : 0} schedule items from your prompt.`,
+      summary: `Added ${
+        Array.isArray(schedule) ? schedule.length : 0
+      } schedule items from your prompt.`,
       artifacts: { schedule },
     };
   }
@@ -95,7 +105,9 @@ export class FlashcardAgent implements Agent {
     const raw = input.text || "";
     const cards = await generateFlashcards(raw);
     return {
-      summary: `Created ${Array.isArray(cards) ? cards.length : 0} flashcards from your prompt.`,
+      summary: `Created ${
+        Array.isArray(cards) ? cards.length : 0
+      } flashcards from your prompt.`,
       artifacts: { flashcards: cards },
     };
   }
@@ -104,14 +116,17 @@ export class FlashcardAgent implements Agent {
 export class FunAgent implements Agent {
   name = "Fun";
   canHandle(i: AgentTaskInput) {
-    const s = (i.intent || i.text || "").toLowerCase();
-    return /(story|quiz|poem|song|rap|riddle|game)/.test(s);
+  const parsed = parseIntent(i.text || "");
+  return parsed.type === "fun";
   }
   async run(input: AgentTaskInput): Promise<AgentResult> {
     const { type, content, funKind } = parseIntent(input.text || "");
     const kind = funKind || "story";
     const out = await generateFunLearning(content || input.text || "", kind);
-    return { summary: `Generated a ${kind} for you.`, artifacts: { fun: { type: kind, content: out } } };
+    return {
+      summary: `Generated a ${kind} for you.`,
+      artifacts: { fun: { type: kind, content: out } },
+    };
   }
 }
 
@@ -120,7 +135,8 @@ export class Orchestrator {
   async handle(input: AgentTaskInput): Promise<AgentResult> {
     const parsed = parseIntent(input.text || "");
     const enriched: AgentTaskInput = { ...input, intent: parsed.type };
-    const agent = this.agents.find((ag) => ag.canHandle(enriched)) || this.agents[0];
+    const agent =
+      this.agents.find((ag) => ag.canHandle(enriched)) || this.agents[0];
     return agent.run(enriched);
   }
 }
