@@ -24,6 +24,7 @@ import FlashCardMaker from "./FlashCardMaker";
 import FunLearning from "./FunLearning";
 import DashboardAI from "./DashboardAI";
 import NotesManager from "./NotesManager";
+import { verifySession } from "@/lib/session";
 
 interface StudyDashboardProps {
   userName?: string;
@@ -60,6 +61,29 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
       speakWelcomeMessage(welcomeMessage);
     }, 1000);
   }, [userName]);
+
+  // Lightweight session guard: verify on mount and periodically
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const ok = await verifySession();
+      if (!cancelled && !ok) {
+        // Minimal disruption: inform and reload to return to unlock screen
+        alert("Session expired. Redirecting to unlock.");
+        window.location.reload();
+      }
+    })();
+    const id = window.setInterval(async () => {
+      const ok = await verifySession();
+      if (!ok) {
+        window.location.reload();
+      }
+    }, 5 * 60 * 1000); // every 5 minutes
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background relative z-10">

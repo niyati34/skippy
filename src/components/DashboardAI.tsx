@@ -262,6 +262,15 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
+      // 1) Intent detection: run generators directly when asked
+      const intentHandled = await handleIntentCommand(messageText);
+      if (intentHandled) {
+        setIsLoading(false);
+        setInputText("");
+        return;
+      }
+
+      // 2) Otherwise, do a short general chat reply
       const systemPrompt: ChatMessage = {
         role: "system",
         content:
@@ -289,6 +298,137 @@ const DashboardAI = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Lightweight intent handler for quick actions from chat input
+  const handleIntentCommand = async (raw: string): Promise<boolean> => {
+    const s = raw.trim();
+    const lower = s.toLowerCase();
+
+    // helpers
+    const after = (re: RegExp) => (s.match(re)?.[1] || s).trim();
+
+    try {
+      // Flashcards
+      if (/(make|create|generate)\s+(some\s+)?flashcards?\b/i.test(s)) {
+        const content = after(/flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i);
+        if (content.length < 15) return false; // need some content
+        const cards = await generateFlashcards(content);
+        if (Array.isArray(cards) && cards.length > 0) {
+          onFlashcardsUpdate(
+            cards.map((c: any) => ({
+              question: c.question || c.front || "Question",
+              answer: c.answer || c.back || "Answer",
+              category: c.category || "General",
+            }))
+          );
+          const msg: ChatMessage = {
+            role: "assistant",
+            content: `Created ${cards.length} flashcards from your prompt. They’re in the Flash Cards tab.`,
+          };
+          setMessages((p) => [...p, { role: "user", content: s }, msg]);
+          speakMessageWithElevenLabs(
+            `I made ${cards.length} flashcards. Check the Flash Cards tab.`
+          );
+          return true;
+        }
+        const msg: ChatMessage = {
+          role: "assistant",
+          content: "I couldn’t extract enough content to make flashcards. Try adding more detail or paste text.",
+        };
+        setMessages((p) => [...p, { role: "user", content: s }, msg]);
+        return true;
+      }
+
+      // Notes
+      if (/(make|create|generate)\s+(study\s+)?notes?\b/i.test(s)) {
+        const content = after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+        if (content.length < 30) return false;
+        const notes = await generateNotesFromContent(content, "chat-input");
+        if (Array.isArray(notes) && notes.length > 0) {
+          onNotesUpdate(notes);
+          const msg: ChatMessage = {
+            role: "assistant",
+            content: `Created ${notes.length} structured notes. View them in Notes Manager.`,
+          };
+          setMessages((p) => [...p, { role: "user", content: s }, msg]);
+          speakMessageWithElevenLabs(
+            `Your notes are ready in the Notes Manager.`
+          );
+          return true;
+        }
+        setMessages((p) => [
+          ...p,
+          { role: "user", content: s },
+          {
+            role: "assistant",
+            content:
+              "I couldn’t create notes from that. Please paste the text or upload a file for best results.",
+          },
+        ]);
+        return true;
+      }
+
+      // Schedule / Timetable
+      if (/(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(s)) {
+        const content = after(/(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+        if (content.length < 20) return false;
+        const items = await generateScheduleFromContent(content);
+        if (Array.isArray(items) && items.length > 0) {
+          onScheduleUpdate(items);
+          const summary = items
+            .slice(0, 3)
+            .map((i: any) => `${i.title} - ${i.date}${i.time ? ` ${i.time}` : ""}`)
+            .join("; ");
+          setMessages((p) => [
+            ...p,
+            { role: "user", content: s },
+            {
+              role: "assistant",
+              content: `Added ${items.length} schedule items. Example: ${summary}${
+                items.length > 3 ? " …" : ""
+              }`,
+            },
+          ]);
+          speakMessageWithElevenLabs(
+            `I added ${items.length} schedule items to your calendar.`
+          );
+          return true;
+        }
+        setMessages((p) => [
+          ...p,
+          { role: "user", content: s },
+          {
+            role: "assistant",
+            content:
+              "I didn’t find clear dates or times. Add specific dates/times or upload a schedule file.",
+          },
+        ]);
+        return true;
+      }
+
+      // Fun learning (story/quiz/poem/etc.)
+      const funMatch = s.match(/(story|quiz|poem|song|rap|riddle|game)/i);
+      if (funMatch && /(make|create|generate)\b/i.test(s)) {
+        const kind = funMatch[1].toLowerCase();
+        const content = after(new RegExp(`${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`, "i")) || s;
+        if (content.length < 15) return false;
+        const out = await generateFunLearning(content, kind);
+        onFunLearningUpdate(out, kind);
+        setMessages((p) => [
+          ...p,
+          { role: "user", content: s },
+          { role: "assistant", content: `Created a ${kind}. See the Fun Learning tab.` },
+        ]);
+        speakMessageWithElevenLabs(`Your ${kind} is ready in Fun Learning.`);
+        return true;
+      }
+    } catch (e) {
+      console.warn("Intent handler failed:", e);
+      return false;
+    }
+
+    return false;
   };
 
   // Convert any AI output to concise plain text (no emojis, bullets, asterisks, markdown)
