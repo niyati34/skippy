@@ -35,6 +35,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { initSrs, isDue, review, SrsState } from "@/lib/srs";
 import {
   FlashcardStorage,
   StoredFlashcard,
@@ -66,6 +67,7 @@ const FlashCardMaker = ({
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [studyMode, setStudyMode] = useState(false);
+  const [dueOnly, setDueOnly] = useState(true);
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [availableNotes, setAvailableNotes] = useState<StoredNote[]>([]);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
@@ -81,6 +83,7 @@ const FlashCardMaker = ({
       question: card.question,
       answer: card.answer,
       category: card.category,
+      // keep SRS in memory via side-map if needed later
     }));
     setFlashCards(formattedCards);
   }, []);
@@ -157,12 +160,20 @@ const FlashCardMaker = ({
     setShowAnswer(false);
   };
 
-  const markAnswer = (correct: boolean) => {
+  const markAnswer = (quality: 0 | 2 | 3 | 4) => {
+    const current = FlashcardStorage.load().find(
+      (c) => c.id === currentCard.id
+    );
+    const now = new Date();
+    const prevSrs: SrsState = current?.srs || initSrs(now);
+    const updated = review(prevSrs, quality, now);
+    FlashcardStorage.upsertSrs(currentCard.id, updated);
+
     setScore((prev) => ({
-      correct: prev.correct + (correct ? 1 : 0),
+      correct: prev.correct + (quality >= 3 ? 1 : 0),
       total: prev.total + 1,
     }));
-    setTimeout(nextCard, 1000);
+    setTimeout(nextCard, 400);
   };
 
   const resetStudy = () => {
@@ -280,6 +291,20 @@ const FlashCardMaker = ({
   };
 
   const currentCard = flashCards[currentCardIndex];
+  const all = FlashcardStorage.load();
+  const visibleIndices = flashCards
+    .map((c, idx) => ({ c, idx }))
+    .filter(({ c }) => {
+      if (!dueOnly) return true;
+      const found = all.find((f) => f.id === c.id);
+      return !found?.srs || isDue(found.srs);
+    })
+    .map(({ idx }) => idx);
+  const isDeckEmpty = visibleIndices.length === 0;
+  const effectiveIndex = visibleIndices.includes(currentCardIndex)
+    ? currentCardIndex
+    : visibleIndices[0] ?? 0;
+  const effectiveCard = flashCards[effectiveIndex];
 
   return (
     <div className="space-y-6">
@@ -298,6 +323,13 @@ const FlashCardMaker = ({
               </Badge>
             </CardTitle>
             <div className="flex gap-2">
+              <Button
+                variant={dueOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDueOnly((v) => !v)}
+              >
+                {dueOnly ? "Due Only" : "All Cards"}
+              </Button>
               {/* Generate from Notes Dialog */}
               <Dialog open={showNotesDialog} onOpenChange={setShowNotesDialog}>
                 <DialogTrigger asChild>
@@ -475,109 +507,87 @@ const FlashCardMaker = ({
       {flashCards.length > 0 && (
         <Card className="cyber-glow animate-scale-in">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <CardTitle className="flex items-center gap-2">
+                <Shuffle className="w-5 h-5 text-primary" />
                 Study Mode
-                <Badge variant="outline">
+                <Badge variant="outline" className="ml-2">
                   {currentCardIndex + 1} / {flashCards.length}
                 </Badge>
               </CardTitle>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={shuffleCards}>
-                  <Shuffle className="w-4 h-4" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button onClick={() => setStudyMode(!studyMode)}>
+                  {studyMode ? "Exit Study" : "Start Study"}
                 </Button>
-                <Button variant="outline" size="sm" onClick={resetStudy}>
-                  <RotateCcw className="w-4 h-4" />
+                <Button variant="outline" onClick={shuffleCards}>
+                  Shuffle
                 </Button>
-                {currentCard && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete This Card?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete "
-                          {currentCard.question.substring(0, 50)}..."?
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => deleteFlashCard(currentCard.id)}
-                          className="bg-red-600 hover:bg-red-700"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
+                <Button variant="outline" onClick={resetStudy}>
+                  Reset
+                </Button>
+                <Badge variant="outline">
+                  Score: {score.correct}/{score.total}
+                </Badge>
+                <Badge variant="secondary">
+                  {dueOnly ? "Showing due" : "Showing all"}
+                </Badge>
               </div>
             </div>
-            {score.total > 0 && (
-              <div className="text-sm text-muted-foreground">
-                Score: {score.correct}/{score.total} (
-                {Math.round((score.correct / score.total) * 100)}%)
-              </div>
-            )}
           </CardHeader>
           <CardContent className="space-y-4">
-            {currentCard && (
+            {studyMode ? (
               <>
-                <div className="text-center">
-                  <Badge variant="secondary" className="mb-4">
-                    {currentCard.category}
-                  </Badge>
-                </div>
-
-                <div className="min-h-32 flex items-center justify-center p-6 rounded-lg bg-secondary/20 border-2 border-dashed">
-                  <div className="text-center">
-                    <h3 className="text-lg font-medium mb-4">
-                      {showAnswer ? "Answer:" : "Question:"}
-                    </h3>
-                    <p className="text-xl">
-                      {showAnswer ? currentCard.answer : currentCard.question}
-                    </p>
+                {isDeckEmpty ? (
+                  <div className="p-6 text-center text-muted-foreground border rounded-lg">
+                    No due cards. Great job! Switch to "All Cards" to keep
+                    practicing.
                   </div>
-                </div>
-
-                <div className="flex justify-center gap-3">
-                  {!showAnswer ? (
-                    <Button
-                      onClick={() => setShowAnswer(true)}
-                      className="flex-1 max-w-48"
-                    >
-                      Show Answer
-                    </Button>
-                  ) : (
-                    <>
+                ) : (
+                  <>
+                    <div className="p-4 border rounded-lg">
+                      <div className="text-sm text-muted-foreground">
+                        Question
+                      </div>
+                      <div className="text-lg font-medium">
+                        {effectiveCard.question}
+                      </div>
+                    </div>
+                    {showAnswer && (
+                      <div className="p-4 border rounded-lg bg-muted/40">
+                        <div className="text-sm text-muted-foreground">
+                          Answer
+                        </div>
+                        <div className="text-lg">{effectiveCard.answer}</div>
+                      </div>
+                    )}
+                    <div className="flex gap-2 flex-wrap">
                       <Button
                         variant="outline"
-                        onClick={() => markAnswer(false)}
-                        className="flex-1 max-w-32 text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => setShowAnswer(true)}
                       >
-                        <X className="w-4 h-4 mr-2" />
-                        Incorrect
+                        Show Answer
                       </Button>
                       <Button
-                        onClick={() => markAnswer(true)}
-                        className="flex-1 max-w-32 bg-green-600 hover:bg-green-700"
+                        variant="destructive"
+                        onClick={() => markAnswer(0)}
                       >
-                        <Check className="w-4 h-4 mr-2" />
-                        Correct
+                        Again
                       </Button>
-                    </>
-                  )}
-                </div>
+                      <Button variant="secondary" onClick={() => markAnswer(2)}>
+                        Hard
+                      </Button>
+                      <Button variant="secondary" onClick={() => markAnswer(3)}>
+                        Good
+                      </Button>
+                      <Button onClick={() => markAnswer(4)}>Easy</Button>
+                    </div>
+                  </>
+                )}
               </>
+            ) : (
+              <div className="text-muted-foreground">
+                Start study mode to practice your cards.
+              </div>
             )}
           </CardContent>
         </Card>
