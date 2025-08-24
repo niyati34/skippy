@@ -76,6 +76,51 @@ app.post("/api/openrouter/chat", async (req, res) => {
   }
 });
 
+// Simple in-memory unlock for local dev (parity with serverless)
+const attempts = new Map();
+app.post("/api/unlock", (req, res) => {
+  const getIp = () => req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+  const ip = getIp();
+  const MAX = Number(process.env.UNLOCK_MAX_ATTEMPTS || 5);
+  const LOCK_SECS = Number(process.env.UNLOCK_LOCKOUT_SECONDS || 300);
+  const allowed = [
+    ...(process.env.UNLOCK_PASSWORDS || "")
+      .split(/[,;\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ];
+  if (process.env.UNLOCK_PASSWORD) allowed.push(process.env.UNLOCK_PASSWORD.trim());
+  if (allowed.length === 0) {
+    return res.status(500).json({ ok: false, error: "server_not_configured" });
+  }
+
+  const now = Date.now();
+  const state = attempts.get(ip) || { count: 0, lockoutUntil: 0 };
+  if (state.lockoutUntil && now < state.lockoutUntil) {
+    const remaining = Math.ceil((state.lockoutUntil - now) / 1000);
+    return res.status(429).json({ ok: false, error: "locked_out", retryAfterSeconds: remaining });
+  }
+
+  const candidate = String(req.body?.password || "").trim();
+  if (!candidate) return res.status(400).json({ ok: false, error: "missing_password" });
+  const match = allowed.some((p) => p === candidate);
+  if (match) {
+    attempts.set(ip, { count: 0, lockoutUntil: 0 });
+    return res.json({ ok: true });
+  }
+  const next = (state.count || 0) + 1;
+  const newState = { count: next, lockoutUntil: 0 };
+  if (next >= MAX) newState.lockoutUntil = now + LOCK_SECS * 1000;
+  attempts.set(ip, newState);
+  return res.status(401).json({
+    ok: false,
+    error: "invalid_password",
+    remainingAttempts: Math.max(0, MAX - next),
+    lockedOut: Boolean(newState.lockoutUntil && now < newState.lockoutUntil),
+    retryAfterSeconds: newState.lockoutUntil ? Math.ceil((newState.lockoutUntil - now) / 1000) : undefined,
+  });
+});
+
 const PORT = Number(process.env.PORT || 5174);
 app.listen(PORT, () => {
   console.log(

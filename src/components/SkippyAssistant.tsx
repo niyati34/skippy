@@ -205,6 +205,24 @@ const SkippyAssistant = ({
     recognition.start();
   };
 
+  async function verifyPasswordServer(password: string) {
+    try {
+      const resp = await fetch("/api/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        return { ok: false, data } as const;
+      }
+      const data = await resp.json().catch(() => ({}));
+      return { ok: Boolean((data as any)?.ok), data } as const;
+    } catch (e) {
+      return { ok: false, data: { error: "network_error" } } as const;
+    }
+  }
+
   const handleUserInput = async (input: string) => {
     if (!input.trim()) return;
 
@@ -285,24 +303,37 @@ const SkippyAssistant = ({
     );
 
     if (isPasswordAttempt) {
-      console.log("✅ [Password Debug] Password accepted! Unlocking...");
+      // Verify on server for security
+      const candidate = explicitCandidate || input;
+      const result = await verifyPasswordServer(candidate);
+      if (result.ok) {
+        console.log("✅ [Password Debug] Server accepted password. Unlocking...");
+        const successMessage =
+          "Password accepted. Your study dashboard is now unlocked.";
+        setCurrentMessage(successMessage);
+        speakMessage(successMessage);
+        toast({ title: "Access granted", description: "Dashboard unlocked." });
+        setTimeout(() => onPasswordUnlock && onPasswordUnlock("unlocked"), 1200);
+        return;
+      }
 
-      const successMessage =
-        "Password accepted. Your study dashboard is now unlocked.";
-      setCurrentMessage(successMessage);
-      speakMessage(successMessage);
+      const remain = (result.data as any)?.remainingAttempts;
+      const locked = (result.data as any)?.lockedOut;
+      const retryAfter = (result.data as any)?.retryAfterSeconds;
 
-      toast({
-        title: "Access granted",
-        description: "Dashboard unlocked.",
-      });
+      if (locked) {
+        const msg = `Too many attempts. Try again after ${retryAfter}s.`;
+        setCurrentMessage(msg);
+        speakMessage(msg);
+        toast({ title: "Locked out", description: msg, variant: "destructive" });
+        return;
+      }
 
-      setTimeout(() => {
-        console.log("🚀 [Password Debug] Calling onPasswordUnlock...");
-        if (onPasswordUnlock) {
-          onPasswordUnlock("unlocked");
-        }
-      }, 2000);
+      const msg = remain >= 0 ? `Incorrect password. ${remain} attempts left.` : "Incorrect password.";
+      setCurrentMessage(msg);
+      speakMessage(msg);
+      toast({ title: "Access denied", description: msg, variant: "destructive" });
+      setWaitingForPassword(true);
       return;
     }
 

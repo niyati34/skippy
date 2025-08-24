@@ -211,6 +211,21 @@ vercel.json # Function config + rewrites
 - Never commit secrets; use `.env.local` for local and Vercel dashboard for production
 - The client uses only `VITE_*` variables; server and function support both `VITE_*` and generic names
 
+### Unlock API Environment
+
+Configure these on the server-side only (in `.env.local` for dev, or Vercel Project Settings → Environment Variables):
+
+- OPENROUTER_API_KEY = your_openrouter_key
+- OPENROUTER_MODEL = gpt-oss-20b (optional)
+- UNLOCK_PASSWORD = onestring7
+- UNLOCK_PASSWORDS = onestring7,another-secret
+- UNLOCK_MAX_ATTEMPTS = 5
+- UNLOCK_LOCKOUT_SECONDS = 300
+
+Endpoints:
+- Local: POST http://localhost:5174/api/unlock
+- Production: POST /api/unlock
+
 ## Contributing
 
 1. Create a feature branch
