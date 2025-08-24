@@ -222,7 +222,7 @@ const SkippyAssistant = ({
         (await call("http://localhost:5174/api/unlock"));
       return { ok: Boolean((data as any)?.ok), data: data || {} } as const;
     } catch (e) {
-      const fallback = (e as any);
+      const fallback = e as any;
       try {
         const json = await fallback.json();
         return { ok: false, data: json } as const;
@@ -240,7 +240,7 @@ const SkippyAssistant = ({
     console.log("🔍 [Password Debug] User input:", input);
     console.log("🔍 [Password Debug] Processed input:", lowerInput);
 
-  // Enhanced password detection and explicit phrase extraction
+    // Enhanced password detection and explicit phrase extraction
 
     const normalize = (s: string) =>
       s
@@ -252,7 +252,7 @@ const SkippyAssistant = ({
     const normalizedInput = normalize(lowerInput);
 
     // Exact match check (user typed only the password)
-  const exactMatch = false; // Disabled keyword-based acceptance; rely on server
+    const exactMatch = false; // Disabled keyword-based acceptance; rely on server
 
     // Explicit phrase extraction: "the password is ..." or "password: ..." or "pass: ..."
     let explicitCandidate: string | null = null;
@@ -267,7 +267,7 @@ const SkippyAssistant = ({
     const explicitCandidateNormalized = explicitCandidate
       ? normalize(explicitCandidate)
       : "";
-  const explicitCandidateMatches = Boolean(explicitCandidate);
+    const explicitCandidateMatches = Boolean(explicitCandidate);
 
     // If there are multiple codes mentioned, ask for clarification (keep this behaviour)
     if (
@@ -284,7 +284,7 @@ const SkippyAssistant = ({
 
     // Determine password attempt: require either exact match or an explicit phrase that includes the password.
     // IMPORTANT: Do NOT accept arbitrary input when waitingForPassword is true.
-  const isPasswordAttempt = waitingForPassword || explicitCandidateMatches;
+    const isPasswordAttempt = waitingForPassword || explicitCandidateMatches;
 
     console.log(
       "🔍 [Password Debug] exactMatch:",
@@ -299,16 +299,21 @@ const SkippyAssistant = ({
 
     if (isPasswordAttempt) {
       // Verify on server for security
-  const candidate = explicitCandidate || input;
+      const candidate = explicitCandidate || input;
       const result = await verifyPasswordServer(candidate);
       if (result.ok) {
-        console.log("✅ [Password Debug] Server accepted password. Unlocking...");
+        console.log(
+          "✅ [Password Debug] Server accepted password. Unlocking..."
+        );
         const successMessage =
           "Password accepted. Your study dashboard is now unlocked.";
         setCurrentMessage(successMessage);
         speakMessage(successMessage);
         toast({ title: "Access granted", description: "Dashboard unlocked." });
-        setTimeout(() => onPasswordUnlock && onPasswordUnlock("unlocked"), 1200);
+        setTimeout(
+          () => onPasswordUnlock && onPasswordUnlock("unlocked"),
+          1200
+        );
         return;
       }
 
@@ -320,14 +325,25 @@ const SkippyAssistant = ({
         const msg = `Too many attempts. Try again after ${retryAfter}s.`;
         setCurrentMessage(msg);
         speakMessage(msg);
-        toast({ title: "Locked out", description: msg, variant: "destructive" });
+        toast({
+          title: "Locked out",
+          description: msg,
+          variant: "destructive",
+        });
         return;
       }
 
-      const msg = remain >= 0 ? `Incorrect password. ${remain} attempts left.` : "Incorrect password.";
+      const msg =
+        remain >= 0
+          ? `Incorrect password. ${remain} attempts left.`
+          : "Incorrect password.";
       setCurrentMessage(msg);
       speakMessage(msg);
-      toast({ title: "Access denied", description: msg, variant: "destructive" });
+      toast({
+        title: "Access denied",
+        description: msg,
+        variant: "destructive",
+      });
       setWaitingForPassword(true);
       return;
     }
