@@ -3,6 +3,7 @@ import {
   ChatMessage,
   generateNotesFromContent as generateNotesFromContentAI,
 } from "./openrouter";
+import { AICache } from "../lib/storage";
 import { PerformanceTimer } from "../utils/performance";
 
 export interface FileProcessingResult {
@@ -508,8 +509,19 @@ export async function generateNotesFromContent(
     tags: string[];
   }>
 > {
-  // Use the high-quality notes generation from azureOpenAI.ts
-  return generateNotesFromContentAI(content, source);
+  // Cache by content hash + source
+  const key = AICache.hash(`${source}::${content}`);
+  const cached = AICache.get(key);
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    console.log("[AICache] notes cache hit", { source, key });
+    return cached as any[];
+  }
+
+  const notes = await generateNotesFromContentAI(content, source);
+  if (notes && Array.isArray(notes) && notes.length > 0) {
+    AICache.set(key, notes);
+  }
+  return notes;
 }
 
 // Clean note content from unwanted symbols and artifacts
