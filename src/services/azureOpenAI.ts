@@ -19,7 +19,10 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type CallOptions = { retries?: number; model?: string; timeoutMs?: number } | number | undefined;
+type CallOptions =
+  | { retries?: number; model?: string; timeoutMs?: number }
+  | number
+  | undefined;
 
 export async function callOpenRouter(
   messages: ChatMessage[],
@@ -67,7 +70,9 @@ export async function callOpenRouter(
   );
   // timeout resolution (env -> option -> default)
   const envTimeout = Number(
-    (window as any).VITE_AI_TIMEOUT_MS || (import.meta as any)?.env?.VITE_AI_TIMEOUT_MS || 0
+    (window as any).VITE_AI_TIMEOUT_MS ||
+      (import.meta as any)?.env?.VITE_AI_TIMEOUT_MS ||
+      0
   );
   const optTimeout =
     optionsOrRetries && typeof optionsOrRetries === "object"
@@ -2144,105 +2149,123 @@ export async function generateScheduleFromContent(
   }
 }
 
-// NEW: Enhanced timetable extraction for day-wise storage
+/**
+ * A highly robust function to extract timetable data using an advanced AI prompt.
+ * It preprocesses the text to remove noise and uses a "few-shot" prompt to guide the AI.
+ * @param content The raw text content from the timetable file.
+ * @param source The source file name for debugging
+ * @returns A promise that resolves to an array of timetable classes.
+ */
 export async function generateTimetableFromContent(
   content: string,
   source: string = "PDF Upload"
 ): Promise<any[]> {
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content: `You are an expert at extracting and organizing timetable data. I will give you raw text containing timetable details in a messy format. Your task is to:
+  console.log("🗓️ [TIMETABLE] Extracting timetable with expert-level parsing...");
 
-1. Extract all timetable entries with their exact times, subjects, labs/classrooms, and faculty names.
-2. Arrange them in a day-wise structure for Monday to Sunday.
-3. Return ONLY a JSON array with precise time ranges and subject details.
+  // 1. Aggressive Pre-processing to clean the input data
+  const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+  const cleanedContent = content
+    .split('\n')
+    // Remove irrelevant lines and headers/footers
+    .filter(line => {
+      const upperLine = line.toUpperCase();
+      const isDay = DAYS.some(day => upperLine.includes(day));
+      const hasTime = /\d{1,2}:\d{2}/.test(line);
+      const isSubjectLine = /[A-Z]{2,}/.test(line); // Heuristic for subject codes
+      return (isDay || hasTime || isSubjectLine) && !upperLine.includes("FACULTY") && !upperLine.includes("DEPARTMENT");
+    })
+    .map(line => line.replace(/\s+/g, ' ').trim()) // Normalize spacing
+    .join('\n');
 
-Each timetable class item must have:
-- id: unique identifier (uuid)
-- title: subject name (e.g., "Mathematics", "Physics Lab", "Computer Science")
-- day: exact day name ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-- time: start time in HH:MM format (24-hour, e.g., "09:00", "14:30")
-- endTime: end time in HH:MM format (optional, e.g., "10:30", "16:00")
-- room: lab/classroom/location (e.g., "MA201", "Lab A", "Hall B")
-- instructor: teacher/professor name (e.g., "Prof. Smith", "Dr. Johnson")
-- type: "class", "lab", "lecture", "tutorial", or "seminar"
-- recurring: true (for weekly recurring classes)
+  const systemPrompt = `
+You are an expert timetable parser. Your task is to analyze the user-provided text, which is often messy and poorly formatted, and extract all class schedules into a clean, structured JSON array.
 
-Look for patterns like:
-- "Monday 9:00 AM - Math Class - Room 101 - Prof. Smith"
-- "Tuesday: Computer Science Lab at 2:00 PM - 4:00 PM"
-- "Wed 10:30-12:00 Physics - Dr. Johnson - Hall B"
-- "Thursday - English Literature (Room 102) Prof. Brown"
-- "07:30-08:30 UI/UX – PS – MA201"
-- "09:00-10:30 BT – SKS – MA206"
+**CRITICAL INSTRUCTIONS:**
+1. **IGNORE ALL GARBAGE**: Discard any text that is not part of the main weekly schedule grid (e.g., headers, footers, subject lists, faculty names).
+2. **OUTPUT ONLY JSON**: Your entire response must be a single JSON array \`[]\`. Do not include any other text, explanations, or markdown.
+3. **ADHERE TO THE SCHEMA**: Each object in the array must follow this exact structure: \`{ "day": "Monday", "start_time": "HH:MM", "end_time": "HH:MM", "subject": "Subject Name", "faculty": "Faculty Initials", "room": "Room Code" }\`.
+4. **HANDLE RECURRENCE**: Assume all classes are weekly recurring events.
 
-Extract ALL timetable data - ensure no information is lost.
-If multiple activities occur at the same time, create separate entries.
-Convert all times to 24-hour format.
-Handle overlapping time slots correctly.
+**EXAMPLE:**
 
-Focus ONLY on recurring weekly classes, not one-time events like assignments or exams.`,
-    },
-    {
-      role: "user",
-      content: `Extract weekly timetable classes from this content in Google Calendar day-view style organization: ${content}`,
-    },
-  ];
+**messy input:**
+"TIME MONDAY TUESDAY
+07:30 to 09:00 UI/UX PS MA213-A BT SKS MB203
+DEV - WS - MA210
+LIBRARY"
+
+**desired JSON output:**
+[
+  {
+    "day": "Monday",
+    "start_time": "07:30",
+    "end_time": "09:00",
+    "subject": "UI/UX",
+    "faculty": "PS",
+    "room": "MA213-A"
+  },
+  {
+    "day": "Monday",
+    "start_time": "07:30",
+    "end_time": "09:00",
+    "subject": "DEV",
+    "faculty": "WS",
+    "room": "MA210"
+  },
+  {
+    "day": "Tuesday",
+    "start_time": "07:30",
+    "end_time": "09:00",
+    "subject": "BT",
+    "faculty": "SKS",
+    "room": "MB203"
+  },
+  {
+    "day": "Tuesday",
+    "start_time": "07:30",
+    "end_time": "09:00",
+    "subject": "LIBRARY",
+    "faculty": "N/A",
+    "room": "N/A"
+  }
+]
+`;
 
   try {
-    console.log(
-      "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
-    );
-    const response = await callOpenRouter(messages, {
+    const response = await callOpenRouter([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Here is the timetable text:\n\n${cleanedContent}` }
+    ], {
       retries: 2,
-      model: pickModel("flashcards", content),
+      model: pickModel("timetable", content),
     });
+
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
-    // Normalize various provider response shapes into a JSON array string
-    const normalizeToArrayJson = (text: string): string | null => {
-      if (!text) return null;
-      const clean = text.trim().replace(/```json\n?|\n?```/g, "");
-      // If it's already a JSON array, return as-is
-      if (clean.startsWith("[") && clean.endsWith("]")) return clean;
-      // Try to parse as object (OpenRouter wrapper) and extract content/text
-      try {
-        const obj = JSON.parse(clean);
-        const choice0 = obj?.choices?.[0] || {};
-        const content =
-          choice0?.message?.content ||
-          choice0?.text ||
-          obj?.output_text ||
-          obj?.content ||
-          "";
-        const embedded = (content || "").trim();
-        if (embedded) {
-          // If embedded contains an array, pull that out
-          const m = embedded.match(/\[[\s\S]*\]/);
-          if (m) return m[0];
-          // Sometimes providers return objects; accept an object array builder too
-          if (embedded.startsWith("[") && embedded.endsWith("]"))
-            return embedded;
-        }
-      } catch {
-        // Not an object; try to extract array from free text
-        const m = clean.match(/\[[\s\S]*\]/);
-        if (m) return m[0];
-      }
-      return null;
-    };
-
-    const arrJson = normalizeToArrayJson(response);
-    let items: any[] = [];
-    if (arrJson) {
-      try {
-        const parsed = JSON.parse(arrJson);
-        if (Array.isArray(parsed)) items = parsed;
-      } catch (e) {
-        console.warn("[TIMETABLE] Failed to parse normalized array JSON:", e);
-      }
+    // Extract the JSON array from the response string
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.error("🚨 [TIMETABLE] AI response did not contain a valid JSON array.");
+      return [];
     }
+
+    const rawClasses = JSON.parse(jsonMatch[0]);
+    console.log("🗓️ [TIMETABLE] Extracted raw classes:", rawClasses);
+
+    // Convert to our internal format
+    const items = rawClasses.map((cls: any, index: number) => ({
+      id: `timetable-${Date.now()}-${index}`,
+      title: cls.subject || cls.title || "Class",
+      day: cls.day || "Monday",
+      time: cls.start_time || cls.time || "09:00",
+      endTime: cls.end_time || cls.endTime,
+      room: cls.room || "",
+      instructor: cls.faculty || cls.instructor || "",
+      type: "class" as const,
+      source: source,
+      createdAt: new Date().toISOString(),
+      recurring: true,
+    }));
 
     const timetableClasses = items.map((item) => ({
       id: item.id || crypto.randomUUID(),
@@ -2546,20 +2569,58 @@ function normalizeTime(timeStr: string): string {
 }
 
 export async function generateFlashcards(content: string): Promise<any[]> {
-  const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content:
-        "Create flashcards from educational content. Return a JSON array where each item has: question, answer, difficulty (easy/medium/hard), category, hint (optional), explanation (optional).",
-    },
-    { role: "user", content: `Create educational flashcards from: ${content}` },
-  ];
+  console.log("[DEBUG] Flashcard Generation - Content Preview:", content.substring(0, 500));
+
+  // A simpler, more direct prompt
+  const systemPrompt = `
+You are an expert at creating study materials. Based on the provided text, generate a concise set of flashcards. Each flashcard should be a simple question-and-answer pair.
+
+**CRITICAL INSTRUCTIONS:**
+1. **Output ONLY a valid JSON array** of objects in your response. Do not include any other text or markdown.
+2. The structure must be: \`[{"question": "question text", "answer": "answer text", "category": "category"}]\`.
+3. If the text is not suitable for creating flashcards (e.g., it's just a timetable), return an empty array \`[]\`.
+4. Create between 3-8 flashcards maximum to avoid overwhelming the learner.
+5. Focus on key concepts, definitions, and important facts.
+`;
+
   try {
-    const response = await callOpenRouter(messages, 2);
-    const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
-    return JSON.parse(clean);
-  } catch {
-    return [];
+    const response = await callOpenRouter([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Create flashcards from this text:\n\n${content}` }
+    ], {
+      retries: 2,
+      model: pickModel("flashcards", content),
+    });
+
+    console.log("[DEBUG] AI Response:", response);
+
+    // Robust parsing to find the JSON array
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.warn("[DEBUG] AI response for flashcards was not a valid array. Returning empty.");
+      return [];
+    }
+
+    const flashcards = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(flashcards)) {
+      console.warn("[DEBUG] Parsed flashcard data is not an array. Returning empty.");
+      return [];
+    }
+
+    // Normalize the flashcard format
+    const normalizedCards = flashcards.map((card: any) => ({
+      question: card.question || card.front || card.q || "Question",
+      answer: card.answer || card.back || card.a || "Answer",
+      category: card.category || "General",
+      difficulty: card.difficulty || "medium",
+    }));
+
+    console.log("[DEBUG] Generated flashcards:", normalizedCards);
+    return normalizedCards;
+
+  } catch (error) {
+    console.error("Flashcard generation error:", error);
+    return []; // Return empty array on failure
   }
 }
 
