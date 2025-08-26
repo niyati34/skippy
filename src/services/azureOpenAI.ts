@@ -155,44 +155,44 @@ function pickModel(kind: string, sample?: string): string {
       sample || ""
     );
 
-  // Preferred free models mapping per task
+  // Preferred free models mapping per task (avoid Google AI Studio models for system prompts)
   const map: Record<string, string[]> = {
     chat: [
-      "google/gemma-3-4b-it:free", // general chat, instruction following
-      "reka/flash-3:free",
-      "deepseek/deepseek-r1-distill-qwen-14b:free",
+      "mistralai/mistral-7b-instruct:free", // supports system prompts well
+      "microsoft/wizardlm-2-8x22b:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
     analyze: [
-      "google/gemma-3n-4b-it:free", // fast, low-latency analysis
-      "google/gemma-3-4b-it:free",
-      "reka/flash-3:free",
+      "mistralai/mistral-7b-instruct:free", // fast, supports system prompts
+      "microsoft/wizardlm-2-8x22b:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
     notes: [
-      "featherless/qrwkv-72b:free", // long context, structured outputs
-      "deepseek/deepseek-r1-distill-qwen-14b:free",
-      "google/gemma-3-4b-it:free",
+      "microsoft/wizardlm-2-8x22b:free", // long context, structured outputs
+      "mistralai/mistral-7b-instruct:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
     schedule: [
-      "google/gemma-3-4b-it:free", // extraction-friendly, concise
-      "reka/flash-3:free",
-      "deepseek/deepseek-r1-distill-qwen-14b:free",
+      "mistralai/mistral-7b-instruct:free", // extraction-friendly, supports system prompts
+      "microsoft/wizardlm-2-8x22b:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
     timetable: [
-      "google/gemma-3-4b-it:free",
-      "reka/flash-3:free",
-      "deepseek/deepseek-r1-distill-qwen-14b:free",
+      "mistralai/mistral-7b-instruct:free", // best for structured parsing
+      "microsoft/wizardlm-2-8x22b:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
     flashcards: [
-      "reka/flash-3:free", // instruction-tuned, clean JSON
-      "google/gemma-3-4b-it:free",
-      "deepseek/deepseek-r1-distill-qwen-14b:free",
+      "mistralai/mistral-7b-instruct:free", // instruction-tuned, clean JSON, supports system prompts
+      "microsoft/wizardlm-2-8x22b:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
     fun: [
-      // language-aware choice
+      // language-aware choice (avoid Google models for system prompt compatibility)
       ...(isIndic
-        ? ["sarvam/sarvam-m:free", "google/gemma-3-4b-it:free"]
-        : ["google/gemma-3-4b-it:free", "reka/flash-3:free"]),
-      "deepseek/deepseek-r1-distill-qwen-14b:free",
+        ? ["mistralai/mistral-7b-instruct:free", "microsoft/wizardlm-2-8x22b:free"]
+        : ["mistralai/mistral-7b-instruct:free", "microsoft/wizardlm-2-8x22b:free"]),
+      "meta-llama/llama-3.1-8b-instruct:free",
     ],
   };
 
