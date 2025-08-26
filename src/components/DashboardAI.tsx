@@ -43,7 +43,15 @@ import {
   generateNotesFromContent,
   extractTextFromImage,
 } from "@/services/openrouter";
-import { Orchestrator, BuddyAgent, NotesAgent, PlannerAgent, FlashcardAgent, FunAgent, createDefaultOrchestrator } from "@/lib/agent";
+import {
+  Orchestrator,
+  BuddyAgent,
+  NotesAgent,
+  PlannerAgent,
+  FlashcardAgent,
+  FunAgent,
+  createDefaultOrchestrator,
+} from "@/lib/agent";
 import { parseIntent } from "@/lib/intent";
 import {
   processUploadedFile,
@@ -57,7 +65,6 @@ import {
   TimetableStorage,
   FileHistoryStorage,
 } from "@/lib/storage";
-import { createDefaultOrchestrator } from "@/lib/agent";
 import { BuddyMemoryStorage } from "@/lib/storage";
 
 interface DashboardAIProps {
@@ -266,7 +273,7 @@ const DashboardAI = ({
     setInputText("");
     setIsLoading(true);
 
-  try {
+    try {
       // 1) Try centralized orchestrator (now wired to real tools)
       try {
         const result = await orchestrator.handle({ text: messageText });
@@ -318,9 +325,9 @@ const DashboardAI = ({
         }
       } catch {}
 
-  // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
-  const intentHandled = await handleIntentCommand(messageText);
-  if (intentHandled) {
+      // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
+      const intentHandled = await handleIntentCommand(messageText);
+      if (intentHandled) {
         setIsLoading(false);
         setInputText("");
         return;
