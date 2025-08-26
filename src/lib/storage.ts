@@ -34,6 +34,12 @@ export const BuddyMemoryStorage = {
       console.warn("BuddyMemoryStorage.save failed", e);
     }
   },
+  clearActivity() {
+    const mem = this.load();
+    const next: BuddyMemory = { ...mem, lastTasks: [] };
+    this.save(next);
+    return next;
+  },
   addTopics(newTopics: string[]) {
     const mem = this.load();
     const set = new Set([...(mem.topics || [])]);

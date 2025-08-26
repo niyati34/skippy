@@ -8,7 +8,29 @@ dotenv.config({ path: ".env.local", override: true });
 dotenv.config({ override: true });
 
 const app = express();
-app.use(cors());
+// CORS: allow dev origins and credentials (cookies)
+const allowedOrigins = new Set(
+  [
+    "http://localhost:8080",
+    "http://localhost:8081",
+    "http://localhost:5173",
+    process.env.PUBLIC_URL || "",
+  ].filter(Boolean)
+);
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // non-browser or same-origin
+      const ok =
+        allowedOrigins.has(origin) ||
+        /^http:\/\/localhost:\d+$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) ||
+        /^http:\/\/192\.168\.[0-9.]+:\d+$/.test(origin);
+      return cb(null, ok);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "2mb" }));
 
 // OpenRouter chat proxy (only)
@@ -80,7 +102,8 @@ app.post("/api/openrouter/chat", async (req, res) => {
 // Simple in-memory unlock for local dev (parity with serverless)
 const attempts = new Map();
 app.post("/api/unlock", (req, res) => {
-  const getIp = () => req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+  const getIp = () =>
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
   const ip = getIp();
   const MAX = Number(process.env.UNLOCK_MAX_ATTEMPTS || 5);
   const LOCK_SECS = Number(process.env.UNLOCK_LOCKOUT_SECONDS || 300);
@@ -90,7 +113,8 @@ app.post("/api/unlock", (req, res) => {
       .map((s) => s.trim())
       .filter(Boolean),
   ];
-  if (process.env.UNLOCK_PASSWORD) allowed.push(process.env.UNLOCK_PASSWORD.trim());
+  if (process.env.UNLOCK_PASSWORD)
+    allowed.push(process.env.UNLOCK_PASSWORD.trim());
   if (allowed.length === 0) {
     return res.status(500).json({ ok: false, error: "server_not_configured" });
   }
@@ -99,14 +123,46 @@ app.post("/api/unlock", (req, res) => {
   const state = attempts.get(ip) || { count: 0, lockoutUntil: 0 };
   if (state.lockoutUntil && now < state.lockoutUntil) {
     const remaining = Math.ceil((state.lockoutUntil - now) / 1000);
-    return res.status(429).json({ ok: false, error: "locked_out", retryAfterSeconds: remaining });
+    return res
+      .status(429)
+      .json({ ok: false, error: "locked_out", retryAfterSeconds: remaining });
   }
 
   const candidate = String(req.body?.password || "").trim();
-  if (!candidate) return res.status(400).json({ ok: false, error: "missing_password" });
+  if (!candidate)
+    return res.status(400).json({ ok: false, error: "missing_password" });
   const match = allowed.some((p) => p === candidate);
   if (match) {
     attempts.set(ip, { count: 0, lockoutUntil: 0 });
+    // Issue a signed session cookie if secret configured
+    const secret = process.env.UNLOCK_SESSION_SECRET || "";
+    const ttl = Number(process.env.UNLOCK_SESSION_TTL || 86400);
+    if (secret) {
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const payload = Buffer.from(JSON.stringify({ iat: now, ip })).toString(
+          "base64url"
+        );
+        const sig = crypto
+          .createHmac("sha256", secret)
+          .update(payload)
+          .digest("base64url");
+        const token = `${payload}.${sig}`;
+        const cookieParts = [
+          `skippy_session=${token}`,
+          "Path=/",
+          "HttpOnly",
+          "SameSite=Lax",
+          `Max-Age=${ttl}`,
+        ];
+        if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+          cookieParts.push("Secure");
+        }
+        res.setHeader("Set-Cookie", cookieParts.join("; "));
+      } catch (e) {
+        console.warn("[unlock] failed to set session cookie:", e);
+      }
+    }
     return res.json({ ok: true });
   }
   const next = (state.count || 0) + 1;
@@ -118,7 +174,9 @@ app.post("/api/unlock", (req, res) => {
     error: "invalid_password",
     remainingAttempts: Math.max(0, MAX - next),
     lockedOut: Boolean(newState.lockoutUntil && now < newState.lockoutUntil),
-    retryAfterSeconds: newState.lockoutUntil ? Math.ceil((newState.lockoutUntil - now) / 1000) : undefined,
+    retryAfterSeconds: newState.lockoutUntil
+      ? Math.ceil((newState.lockoutUntil - now) / 1000)
+      : undefined,
   });
 });
 
@@ -137,8 +195,11 @@ app.get("/api/unlock/verify", (req, res) => {
         .createHmac("sha256", secret)
         .update(payload)
         .digest("base64url");
-      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
-      const { iat } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)))
+        return false;
+      const { iat } = JSON.parse(
+        Buffer.from(payload, "base64url").toString("utf8")
+      );
       const ttl = Number(process.env.UNLOCK_SESSION_TTL || 86400);
       const now = Math.floor(Date.now() / 1000);
       return now - iat < ttl;

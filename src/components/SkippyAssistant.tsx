@@ -1,5 +1,12 @@
-import { useState, useEffect, useCallback, memo } from "react";
-import Spline from "@splinetool/react-spline";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  memo,
+  lazy,
+  Suspense,
+  useMemo,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -12,6 +19,7 @@ import {
 import { Mic, RotateCcw, Send, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { callOpenRouter, ChatMessage } from "@/services/openrouter";
+import { createDefaultOrchestrator } from "@/lib/agent";
 
 interface SkippyAssistantProps {
   onPasswordUnlock?: (password: string) => void;
@@ -22,6 +30,7 @@ const SkippyAssistant = ({
   onPasswordUnlock,
   isUnlocked = false,
 }: SkippyAssistantProps) => {
+  const orchestrator = useMemo(() => createDefaultOrchestrator(), []);
   const [currentMessage, setCurrentMessage] = useState("");
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -34,7 +43,13 @@ const SkippyAssistant = ({
   const [showSpeechModal, setShowSpeechModal] = useState(false);
   const [splineLoaded, setSplineLoaded] = useState(false);
   const [splineError, setSplineError] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const { toast } = useToast();
+
+  const Spline = useMemo(
+    () => lazy(() => import("@splinetool/react-spline")),
+    []
+  );
 
   const messages = {
     greeting:
@@ -222,7 +237,7 @@ const SkippyAssistant = ({
         (await call("http://localhost:5174/api/unlock"));
       return { ok: Boolean((data as any)?.ok), data: data || {} } as const;
     } catch (e) {
-      const fallback = (e as any);
+      const fallback = e as any;
       try {
         const json = await fallback.json();
         return { ok: false, data: json } as const;
@@ -240,7 +255,7 @@ const SkippyAssistant = ({
     console.log("🔍 [Password Debug] User input:", input);
     console.log("🔍 [Password Debug] Processed input:", lowerInput);
 
-  // Enhanced password detection and explicit phrase extraction
+    // Enhanced password detection and explicit phrase extraction
 
     const normalize = (s: string) =>
       s
@@ -252,7 +267,7 @@ const SkippyAssistant = ({
     const normalizedInput = normalize(lowerInput);
 
     // Exact match check (user typed only the password)
-  const exactMatch = false; // Disabled keyword-based acceptance; rely on server
+    const exactMatch = false; // Disabled keyword-based acceptance; rely on server
 
     // Explicit phrase extraction: "the password is ..." or "password: ..." or "pass: ..."
     let explicitCandidate: string | null = null;
@@ -267,7 +282,7 @@ const SkippyAssistant = ({
     const explicitCandidateNormalized = explicitCandidate
       ? normalize(explicitCandidate)
       : "";
-  const explicitCandidateMatches = Boolean(explicitCandidate);
+    const explicitCandidateMatches = Boolean(explicitCandidate);
 
     // If there are multiple codes mentioned, ask for clarification (keep this behaviour)
     if (
@@ -284,7 +299,7 @@ const SkippyAssistant = ({
 
     // Determine password attempt: require either exact match or an explicit phrase that includes the password.
     // IMPORTANT: Do NOT accept arbitrary input when waitingForPassword is true.
-  const isPasswordAttempt = waitingForPassword || explicitCandidateMatches;
+    const isPasswordAttempt = waitingForPassword || explicitCandidateMatches;
 
     console.log(
       "🔍 [Password Debug] exactMatch:",
@@ -299,16 +314,21 @@ const SkippyAssistant = ({
 
     if (isPasswordAttempt) {
       // Verify on server for security
-  const candidate = explicitCandidate || input;
+      const candidate = explicitCandidate || input;
       const result = await verifyPasswordServer(candidate);
       if (result.ok) {
-        console.log("✅ [Password Debug] Server accepted password. Unlocking...");
+        console.log(
+          "✅ [Password Debug] Server accepted password. Unlocking..."
+        );
         const successMessage =
           "Password accepted. Your study dashboard is now unlocked.";
         setCurrentMessage(successMessage);
         speakMessage(successMessage);
         toast({ title: "Access granted", description: "Dashboard unlocked." });
-        setTimeout(() => onPasswordUnlock && onPasswordUnlock("unlocked"), 1200);
+        setTimeout(
+          () => onPasswordUnlock && onPasswordUnlock("unlocked"),
+          1200
+        );
         return;
       }
 
@@ -320,71 +340,134 @@ const SkippyAssistant = ({
         const msg = `Too many attempts. Try again after ${retryAfter}s.`;
         setCurrentMessage(msg);
         speakMessage(msg);
-        toast({ title: "Locked out", description: msg, variant: "destructive" });
+        toast({
+          title: "Locked out",
+          description: msg,
+          variant: "destructive",
+        });
         return;
       }
 
-      const msg = remain >= 0 ? `Incorrect password. ${remain} attempts left.` : "Incorrect password.";
+      const msg =
+        remain >= 0
+          ? `Incorrect password. ${remain} attempts left.`
+          : "Incorrect password.";
       setCurrentMessage(msg);
       speakMessage(msg);
-      toast({ title: "Access denied", description: msg, variant: "destructive" });
+      toast({
+        title: "Access denied",
+        description: msg,
+        variant: "destructive",
+      });
       setWaitingForPassword(true);
       return;
     }
 
-    // Add user message to chat history
-    const userMessage = { role: "user" as const, content: input };
-    setChatHistory((prev) => [...prev, userMessage]);
-
+    // Non-password flow: use advanced agentic orchestrator
     setIsLoading(true);
-
     try {
-      // AI conversation with concise, plain-text style
-      const conversationMessages = [
-        {
-          role: "system" as const,
-          content: `You are Skippy, an AI study assistant with a warm, playful tone suitable for Raksha Bandhan.
-Style and format:
-- Be concise and friendly.
-- Plain text only. No emojis, no markdown, no bullet points, no asterisks.
-- 2–4 short sentences per reply.
-- Ask at most one simple clarifying question when helpful.
-- Do not reveal or hint the password.
-Task context:
-The user is finding a password hidden in a gift box. Offer encouraging, practical steps (exterior, layers, tags, flaps, textures, light angles) in short sentences.`,
+      console.log("🚀 [ADVANCED AGENTIC] Processing with multi-model AI system...");
+      
+      // Import and initialize the advanced agentic orchestrator
+      const { createAdvancedAgenticOrchestrator } = await import('@/lib/advancedAgent');
+      
+      const orchestrator = createAdvancedAgenticOrchestrator({
+        models: {
+          primary: 'gemma-3-4b',
+          fast: 'gemma-3n-4b',
+          vision: 'gemma-3-4b',
+          reasoning: 'nemotron-ultra-253b'
         },
-        ...chatHistory.slice(-8), // Keep more context for better conversation
-        userMessage,
-      ];
+        contextWindow: 128000,
+        maxTokens: 4000
+      });
 
-      const response = await callOpenRouter(conversationMessages);
+      // Process with advanced agentic system
+      const result = await orchestrator.processInput(input, []);
 
-      const clean = toPlainText(response);
-
-      const assistantMessage = {
-        role: "assistant" as const,
-        content: clean,
-      };
-      setChatHistory((prev) => [...prev, assistantMessage]);
-
-      setCurrentMessage(clean);
-      speakMessage(clean);
+      if (result.success) {
+        const summary = toPlainText(result.response || "I've processed your request successfully!");
+        setCurrentMessage(summary);
+        speakMessage(summary);
+        
+        // Keep a tiny in-component transcript for continuity
+        const userMessage = { role: "user" as const, content: input };
+        const assistantMessage = { role: "assistant" as const, content: summary };
+        setChatHistory((prev) => [
+          ...prev.slice(-6),
+          userMessage,
+          assistantMessage,
+        ]);
+        
+        // Handle generated content for immediate UI updates
+        if (result.tasks && result.tasks.length > 0) {
+          console.log('📊 [TASKS] Completed tasks:', result.tasks);
+          
+          result.tasks.forEach(task => {
+            if (task.success && task.output) {
+              if (task.output.type === 'timetable' || task.output.classes) {
+                console.log('📅 [TIMETABLE] Schedule items ready for display');
+                // Schedule items are automatically integrated
+              } else if (task.output.type === 'notes' || task.output.includes('notes')) {
+                console.log('📝 [NOTES] Notes created and stored');
+                // Notes are automatically stored
+              } else if (task.output.type === 'flashcards' || task.output.cards) {
+                console.log('🃏 [FLASHCARDS] Flashcards created and stored');
+                // Flashcards are automatically stored
+              }
+            }
+          });
+        }
+      } else {
+        // Fallback to simple response
+        const fallbackResponse = result.fallbackResponse || "I understand your request. Let me help you with that!";
+        setCurrentMessage(fallbackResponse);
+        speakMessage(fallbackResponse);
+      }
+      
     } catch (error) {
-      console.error("Error getting AI response:", error);
-      const fallbackMessages = [
-        "Check the exterior, tags, and any cards. Look under flaps and inside folds. What detail stands out?",
-        "Scan each layer carefully. Read any notes. Try light at an angle to reveal embossing. What did you find?",
-        "Focus on corners, seams, and ribbons. If there are multiple codes, choose the one linked to the occasion.",
-      ];
-      const fallbackMessage =
-        fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
-      setCurrentMessage(fallbackMessage);
-      speakMessage(fallbackMessage);
+      console.error("❌ [ADVANCED AGENTIC] Error, using enhanced fallback:", error);
+      
+      // Enhanced fallback with better error handling
+      try {
+        const conversationMessages = [
+          {
+            role: "system" as const,
+            content:
+              "You are Skippy, an advanced AI study buddy. Be helpful, encouraging, and provide accurate information. If the user wants to make notes, flashcards, or schedules, guide them on how to do it.",
+          },
+          ...chatHistory.slice(-6),
+          { role: "user" as const, content: input },
+        ];
+        
+        const response = await callOpenRouter(conversationMessages);
+        const clean = toPlainText(response);
+        setCurrentMessage(clean);
+        speakMessage(clean);
+        setChatHistory((prev) => [
+          ...prev.slice(-6),
+          { role: "user" as const, content: input },
+          { role: "assistant" as const, content: clean },
+        ]);
+      } catch (err) {
+        console.error("❌ [FALLBACK] Chat failed:", err);
+        
+        // Final fallback with helpful suggestions
+        const fallbackMessages = [
+          "I'm here and ready to help! Try saying 'make flashcards from this' or 'create a schedule'.",
+          "I can help you create notes, flashcards, or schedules. Just tell me what you'd like to do!",
+          "Let's make studying fun! Ask me to create notes, flashcards, or plan your schedule.",
+          "I'm your study buddy! Try uploading a file and saying 'make notes from this' or 'create flashcards'."
+        ];
+        
+        const randomMessage = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
+        setCurrentMessage(randomMessage);
+        speakMessage(randomMessage);
+      }
     } finally {
       setIsLoading(false);
+      setInputText("");
     }
-
-    setInputText("");
   };
 
   // Convert any AI output to concise plain text (no emojis, bullets, asterisks, markdown)
@@ -692,7 +775,15 @@ The user is finding a password hidden in a gift box. Offer encouraging, practica
       {/* Spline 3D Character */}
       <div className="w-full h-[60vh] max-w-2xl flex justify-center items-center animate-scale-in">
         <div className="w-96 h-96 spline-container overflow-hidden">
-          <Spline scene="https://prod.spline.design/Pxtlv5bTXVOnPUX8/scene.splinecode" />
+          <Suspense
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
+                Loading 3D…
+              </div>
+            }
+          >
+            <Spline scene="https://prod.spline.design/Pxtlv5bTXVOnPUX8/scene.splinecode" />
+          </Suspense>
         </div>
       </div>
 

@@ -3,6 +3,11 @@
 
 const OPENROUTER_MODEL =
   (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
+// Optional DEV-ONLY direct call (avoid in production; proxy is preferred)
+const ALLOW_DIRECT =
+  ((import.meta as any)?.env?.VITE_ALLOW_DIRECT_OPENROUTER ?? "false") ===
+  "true";
+const DIRECT_KEY = (import.meta as any)?.env?.VITE_OPENROUTER_API_KEY || "";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -11,79 +16,141 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Enhanced AI service with better error handling and faster responses
 export async function callOpenRouter(
   messages: ChatMessage[],
-  retries = 2
+  retries = 1,
+  timeout = 20000 // default 20s; can be overridden via env
 ): Promise<string> {
-  // Determine candidate proxy URLs based on environment
-  const isLocal =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
-  const devPort = (import.meta as any)?.env?.VITE_PROXY_PORT || 5174;
-  const devProxy = `http://localhost:${devPort}/api/openrouter/chat`;
-  const prodRelative = `/api/openrouter/chat`;
-  const prodBase = (import.meta as any)?.env?.VITE_PROD_URL?.replace(/\/$/, "");
-  const prodAbsolute = prodBase ? `${prodBase}/api/openrouter/chat` : "";
+  const model =
+    (window as any).VITE_OPENROUTER_MODEL ||
+    import.meta.env.VITE_OPENROUTER_MODEL ||
+    "gpt-oss-20b";
 
-  const candidates = (
-    isLocal
-      ? [devProxy, prodAbsolute, prodRelative]
-      : [prodRelative, prodAbsolute]
-  ).filter(Boolean);
-
-  console.log(
-    `[AI] Endpoint candidates (model ${OPENROUTER_MODEL}):`,
-    candidates
+  // Allow overriding timeout via Vite env at runtime
+  const envTimeout = Number(
+    (window as any).VITE_AI_TIMEOUT_MS ||
+      import.meta.env.VITE_AI_TIMEOUT_MS ||
+      0
   );
+  const effectiveTimeout = envTimeout > 0 ? envTimeout : timeout;
 
-  const tryCall = async (url: string) => {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages,
-        options: {
-          max_tokens: 3000,
-          temperature: 0.1,
-          top_p: 0.8,
-          model: OPENROUTER_MODEL,
-        },
-      }),
-    });
-    if (!resp.ok) {
-      const errorText = await resp.text();
-      console.error(
-        `[OpenRouter] Proxy error @ ${url}:`,
-        resp.status,
-        errorText
-      );
-      throw new Error(`Proxy error: ${resp.status} - ${errorText}`);
-    }
-    const data = await resp.json();
-    return (
-      data?.choices?.[0]?.message?.content ||
-      data?.choices?.[0]?.delta?.content ||
-      ""
-    );
-  };
+  const endpoints = [
+    `http://localhost:${
+      (window as any).VITE_PROXY_PORT || import.meta.env.VITE_PROXY_PORT || 5174
+    }/api/openrouter/chat`,
+    (window as any).VITE_PROD_URL
+      ? `${(window as any).VITE_PROD_URL}/api/openrouter/chat`
+      : null, // Use prod URL if available
+    "/api/openrouter/chat",
+  ].filter(Boolean) as string[];
 
-  // Try each candidate with simple retries per endpoint
-  let lastErr: any = null;
-  for (const url of candidates) {
+  console.log(`[AI] Endpoint candidates (model ${model}):`, endpoints);
+
+  const payload = { model, messages };
+
+  for (const url of endpoints) {
     for (let i = 0; i < retries; i++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => {
+        controller.abort();
+      }, effectiveTimeout);
+
       try {
-        const out = await tryCall(url);
-        if (out) return out;
-        throw new Error("Empty response");
-      } catch (e) {
-        lastErr = e;
-        console.warn(`API call attempt ${i + 1} failed for ${url}:`, e);
-        if (i < retries - 1) await delay(200 * (i + 1));
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timer);
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          if (response.status === 429) {
+            console.warn(
+              `[AI] Rate limited on ${url}. Skipping this endpoint.`
+            );
+            break; // Stop retrying this endpoint
+          }
+          throw new Error(
+            `HTTP error ${response.status} from AI endpoint: ${errorBody}`
+          );
+        }
+
+        const text = await response.text();
+        if (!text) {
+          throw new Error("Empty response from AI");
+        }
+
+        // Debug preview of raw response (first 400 chars)
+        try {
+          console.debug("[AI] raw response preview:", text.slice(0, 400));
+        } catch {}
+
+        // Try to parse JSON and extract common fields across providers
+        let data: any = null;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          // Not JSON? Return raw text for upstream handlers to process
+          return text;
+        }
+
+        // Standard OpenRouter/Chat Completions shape
+        const choice0 = data?.choices?.[0] || {};
+        const msgContent = choice0?.message?.content;
+        if (typeof msgContent === "string" && msgContent.trim()) {
+          return msgContent;
+        }
+
+        // Some providers return plain text instead of message
+        const plainText = choice0?.text || data?.output_text || data?.content;
+        if (typeof plainText === "string" && plainText.trim()) {
+          return plainText;
+        }
+
+        // If an error payload is returned, surface it
+        if (data?.error) {
+          throw new Error(
+            `AI error: ${
+              typeof data.error === "string"
+                ? data.error
+                : JSON.stringify(data.error)
+            }`
+          );
+        }
+
+        // Fallback: return the raw text (upstream will attempt to parse/handle)
+        return text;
+      } catch (error: any) {
+        clearTimeout(timer);
+        if (error.name === "AbortError") {
+          console.error(
+            `API call to ${url} timed out after ${Math.round(
+              effectiveTimeout / 1000
+            )}s`
+          );
+        } else {
+          console.error(
+            `API call attempt ${i + 1} failed for ${url}:`,
+            error.message
+          );
+        }
       }
     }
   }
-  // Surface final error for visibility
-  throw lastErr ?? new Error("All endpoints failed");
+
+  console.error("All AI endpoints failed, using fallback response");
+  // Return a structured empty response based on the expected output
+  if (messages.some((m) => m.content.includes("flashcard"))) {
+    return "[]";
+  }
+  if (messages.some((m) => m.content.includes("notes"))) {
+    return "[]";
+  }
+  return ""; // Default empty response
 }
 
 // ----------------- Helpers for fallback notes -----------------
@@ -1234,7 +1301,6 @@ function extractSourceTopics(content: string): string[] {
       line.match(/[A-Z]/) && // Contains uppercase letters
       !line.endsWith(".")
     ) {
-      // Doesn't end with period
       topics.add(line);
     }
   }
@@ -2071,9 +2137,49 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     const response = await callOpenRouter(messages, 2);
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
-    const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
-    const parsed = JSON.parse(clean);
-    const items = Array.isArray(parsed) ? parsed : [];
+    // Normalize various provider response shapes into a JSON array string
+    const normalizeToArrayJson = (text: string): string | null => {
+      if (!text) return null;
+      const clean = text.trim().replace(/```json\n?|\n?```/g, "");
+      // If it's already a JSON array, return as-is
+      if (clean.startsWith("[") && clean.endsWith("]")) return clean;
+      // Try to parse as object (OpenRouter wrapper) and extract content/text
+      try {
+        const obj = JSON.parse(clean);
+        const choice0 = obj?.choices?.[0] || {};
+        const content =
+          choice0?.message?.content ||
+          choice0?.text ||
+          obj?.output_text ||
+          obj?.content ||
+          "";
+        const embedded = (content || "").trim();
+        if (embedded) {
+          // If embedded contains an array, pull that out
+          const m = embedded.match(/\[[\s\S]*\]/);
+          if (m) return m[0];
+          // Sometimes providers return objects; accept an object array builder too
+          if (embedded.startsWith("[") && embedded.endsWith("]"))
+            return embedded;
+        }
+      } catch {
+        // Not an object; try to extract array from free text
+        const m = clean.match(/\[[\s\S]*\]/);
+        if (m) return m[0];
+      }
+      return null;
+    };
+
+    const arrJson = normalizeToArrayJson(response);
+    let items: any[] = [];
+    if (arrJson) {
+      try {
+        const parsed = JSON.parse(arrJson);
+        if (Array.isArray(parsed)) items = parsed;
+      } catch (e) {
+        console.warn("[TIMETABLE] Failed to parse normalized array JSON:", e);
+      }
+    }
 
     const timetableClasses = items.map((item) => ({
       id: item.id || crypto.randomUUID(),
@@ -2088,6 +2194,22 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
       createdAt: new Date().toISOString(),
       recurring: true,
     }));
+
+    // If AI returned no items or empty, try manual enhanced fallback
+    if (!timetableClasses.length) {
+      console.warn(
+        "[TIMETABLE] AI returned 0 classes; running manual fallback parser..."
+      );
+      const fallbackClasses = extractTimetableManually(content, source);
+      if (fallbackClasses.length) {
+        console.log(
+          "🗓️ [TIMETABLE] Enhanced fallback extraction:",
+          fallbackClasses
+        );
+        generateTimetableSummary(fallbackClasses);
+        return fallbackClasses;
+      }
+    }
 
     console.log("🗓️ [TIMETABLE] Extracted classes:", timetableClasses);
 

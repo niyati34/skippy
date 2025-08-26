@@ -2,8 +2,92 @@ import {
   callOpenRouter,
   ChatMessage,
   generateNotesFromContent as generateNotesFromContentAI,
+  generateTimetableFromContent,
 } from "./openrouter";
-import { AICache } from "../lib/storage";
+import {
+  AICache,
+  TimetableStorage,
+  ScheduleStorage,
+  type TimetableClass,
+} from "../lib/storage";
+import { extractTimetable, TimetableParseResult } from "@/lib/timetableParser";
+
+// LLM-based timetable structuring using OpenRouter
+async function generateTimetableViaLLM(rawText: string, source: string) {
+  const system = {
+    role: "system",
+    content:
+      "You convert messy timetable text into clean JSON rows. Return ONLY a JSON array.",
+  } as ChatMessage;
+  const user = {
+    role: "user",
+    content: `Convert the following academic timetable into JSON array rows with:
+[{"day":"Monday","start_time":"07:30","end_time":"09:00","subject":"UI/UX","faculty":"PS","room":"MA213-A"}]
+
+Strict rules:
+- Day in English (Monday..Sunday)
+- 24h times HH:MM
+- Subject short name (e.g., AI, CD, NLP, BT, UI/UX)
+- Faculty initials if present (e.g., PS, SKS); else ""
+- Room code like MA210/MC316 if present; else ""
+- One object per class slot
+- No commentary, ONLY the JSON array.
+
+Text:\n${rawText.substring(0, 8000)}`,
+  } as ChatMessage;
+
+  const resp = await callOpenRouter([system, user]);
+  const clean = resp.trim().replace(/```json\n?|```/g, "");
+  try {
+    const arr = JSON.parse(clean);
+    if (Array.isArray(arr)) return arr;
+  } catch {
+    const m = clean.match(/\[[\s\S]*\]/);
+    if (m) {
+      try {
+        const arr = JSON.parse(m[0]);
+        if (Array.isArray(arr)) return arr;
+      } catch {}
+    }
+  }
+  return [];
+}
+
+function detectConflicts(classes: TimetableClass[]) {
+  const byDay: Record<string, TimetableClass[]> = {};
+  classes.forEach((c) => {
+    byDay[c.day] = byDay[c.day] || [];
+    byDay[c.day].push(c);
+  });
+  const conflicts: Array<{
+    day: string;
+    a: TimetableClass;
+    b: TimetableClass;
+  }> = [];
+  const toMinutes = (t?: string) => {
+    if (!t) return NaN;
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  Object.entries(byDay).forEach(([day, list]) => {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        const aStart = toMinutes(a.time);
+        const aEnd = toMinutes(a.endTime || a.time);
+        const bStart = toMinutes(b.time);
+        const bEnd = toMinutes(b.endTime || b.time);
+        if (!isNaN(aStart) && !isNaN(bStart)) {
+          if (Math.max(aStart, bStart) < Math.min(aEnd, bEnd)) {
+            conflicts.push({ day: day as any, a, b });
+          }
+        }
+      }
+    }
+  });
+  return conflicts;
+}
 import { PerformanceTimer } from "../utils/performance";
 
 export interface FileProcessingResult {
@@ -272,18 +356,23 @@ I can still create amazing flashcards and notes from any text you provide! 🎯`
   }
 }
 
-// Extract text from images - simplified fallback (no OCR for speed)
+// Extract text from images using Tesseract.js OCR (client-side)
 async function extractImageText(file: File): Promise<string> {
-  // For speed optimization, we skip OCR processing
-  // Images need to be converted to text first for fastest processing
-  throw new Error(`📷 Image processing temporarily simplified for speed.
-
-For fastest results like ChatGPT:
-• Convert images to text using another tool first
-• Upload PDF or text documents instead
-• Copy-paste text directly into the chat
-
-This ensures instant processing! ⚡`);
+  try {
+    const { createWorker } = await import("tesseract.js");
+    const worker = await createWorker("eng");
+    const { data } = await worker.recognize(file);
+    await worker.terminate();
+    const text = (data?.text || "")
+      .replace(/\s+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    if (!text) throw new Error("OCR returned empty text");
+    return text;
+  } catch (err) {
+    console.warn("[OCR] Tesseract failed, returning hint:", err);
+    return "[Image OCR failed or produced no text]";
+  }
 }
 
 // Fallback flashcard creation from any readable content
@@ -929,6 +1018,147 @@ export async function generateScheduleFromContent(
   console.log("🗓️ [SCHEDULE] Generating schedule from content:", source);
   console.log("🗓️ [SCHEDULE] Content preview:", content.substring(0, 200));
 
+  // Ultra-fast timetable grid detector & extractor (no AI)
+  const looksLikeTimetable =
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
+      content
+    );
+  if (looksLikeTimetable) {
+    try {
+      const dayIdx: Record<string, number> = {
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6,
+        sunday: 0,
+      };
+      const findNextDate = (weekday: number) => {
+        const d = new Date();
+        const current = d.getDay();
+        let diff = weekday - current;
+        if (diff <= 0) diff += 7; // next occurrence
+        d.setDate(d.getDate() + diff);
+        return d.toISOString().split("T")[0];
+      };
+      const timeRe = /(\d{1,2})[:\.]?(\d{2})\s*(AM|PM)?/i;
+      const normalizeTime = (s: string, def = "09:00") => {
+        const m = s.match(timeRe);
+        if (!m) return def;
+        let hh = parseInt(m[1], 10);
+        const mm = m[2];
+        const ap = (m[3] || "").toUpperCase();
+        if (ap === "PM" && hh < 12) hh += 12;
+        if (ap === "AM" && hh === 12) hh = 0;
+        return `${String(hh).padStart(2, "0")}:${mm}`;
+      };
+
+      const items: any[] = [];
+
+      // Special handling for TC4 format with "X:XX to Y:YY" time slots
+      const tc4TimeSlotRegex = /(\d{1,2}:\d{2})\s+to\s+(\d{1,2}:\d{2})/g;
+      let tc4Match;
+      while ((tc4Match = tc4TimeSlotRegex.exec(content)) !== null) {
+        const startTime = tc4Match[1];
+        const endTime = tc4Match[2];
+
+        // Look for subjects in the same context
+        const contextStart = Math.max(0, tc4Match.index - 100);
+        const contextEnd = Math.min(content.length, tc4Match.index + 300);
+        const context = content.substring(contextStart, contextEnd);
+
+        // Extract subjects from context - improved pattern for TC4
+        const subjectPattern =
+          /\b(UI\/UX|BT|NLP|DEV|AI|CD|MP1|DWDM|LIBRARY)\b/g;
+        let subjectMatch;
+        const foundSubjects = [];
+        while ((subjectMatch = subjectPattern.exec(context)) !== null) {
+          foundSubjects.push(subjectMatch[1]);
+        }
+
+        // Create schedule items for each subject found
+        foundSubjects.forEach((subject, idx) => {
+          const dayNames = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+          ];
+          if (idx < dayNames.length) {
+            const day = dayNames[idx];
+            const date = findNextDate(dayIdx[day.toLowerCase()]);
+            items.push({
+              title:
+                subject === "UI/UX"
+                  ? "UI and UX Design"
+                  : subject === "BT"
+                  ? "Blockchain Technology"
+                  : subject === "NLP"
+                  ? "Natural Language Processing"
+                  : subject === "DEV"
+                  ? "DevOps Essentials"
+                  : subject === "AI"
+                  ? "Artificial Intelligence"
+                  : subject === "CD"
+                  ? "Compiler Design"
+                  : subject === "MP1"
+                  ? "Major Project - 1"
+                  : subject === "DWDM"
+                  ? "Data Warehousing & Data Mining"
+                  : subject === "LIBRARY"
+                  ? "Library Session"
+                  : subject,
+              time: startTime,
+              date,
+              type: "class" as const,
+            });
+          }
+        });
+      }
+
+      // Fallback to original parsing if TC4 didn't work
+      if (items.length === 0) {
+        const lines = content.split(/\n+/);
+        for (const raw of lines) {
+          const line = raw.replace(/\s+/g, " ").trim();
+          if (!line) continue;
+          const dayMatch = line.match(
+            /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+          );
+          const timeMatch = line.match(
+            /\b(\d{1,2}[:\.]?\d{2}\s*(?:AM|PM)?)\b/i
+          );
+          if (dayMatch && timeMatch) {
+            const day = dayMatch[1].toLowerCase();
+            const date = findNextDate(dayIdx[day]);
+            const time = normalizeTime(timeMatch[1]);
+            // Title heuristics: remove day/time fragments
+            let title = line
+              .replace(dayMatch[0], "")
+              .replace(timeMatch[0], "")
+              .replace(/\b(MA\d{3}|MC\d{3}|MB\d{3}|MC\d{2,})\b/g, "")
+              .replace(/[-–]{1,}/g, " ")
+              .replace(/\s{2,}/g, " ")
+              .trim();
+            if (!title || title.length < 3) title = "Class";
+            items.push({ title, time, date, type: "class" });
+          }
+        }
+      }
+
+      if (items.length) {
+        console.log(
+          `🗓️ [SCHEDULE] Fast timetable extracted ${items.length} items`
+        );
+        return items.slice(0, 20);
+      }
+    } catch (e) {
+      console.warn("[SCHEDULE] Fast timetable parser failed:", e);
+    }
+  }
+
   // First, check if content actually contains schedule-worthy information
   const hasScheduleContent = detectScheduleWorthyContent(content);
   if (!hasScheduleContent) {
@@ -1437,15 +1667,131 @@ export async function processUploadedFile(
 
     console.log("Extracted content length:", content.length);
 
-    // Generate flashcards, notes, and schedule items in parallel
-    const [flashcards, notes, scheduleItems] = await Promise.all([
+    // First: try the new hybrid parser
+    let timetableResult = await extractTimetable(content, file.name);
+
+    // If rule-based parser found nothing, fall back to AI timetable extraction
+    if (timetableResult.method === "none") {
+      console.warn(
+        "🧠 [TIMETABLE] Rule-based parser found 0 classes. Falling back to AI extraction..."
+      );
+      try {
+        const aiClasses = await generateTimetableFromContent(
+          content,
+          file.name
+        );
+        if (aiClasses && aiClasses.length > 0) {
+          // Map AI classes into TimetableClass shape for downstream handling
+          timetableResult = {
+            classes: aiClasses.map((c: any) => ({
+              id: c.id || crypto.randomUUID(),
+              title: c.title || "Class",
+              day: c.day || "Monday",
+              time: c.time || "09:00",
+              endTime: c.endTime,
+              room: c.room,
+              instructor: c.instructor,
+              type: (c.type || "class") as any,
+              source: c.source || "AI Timetable",
+              createdAt: c.createdAt || new Date().toISOString(),
+              recurring: true,
+            })),
+            confidence: 0.8,
+            method: "ai",
+            summary: `AI extracted ${aiClasses.length} classes`,
+          } as any;
+          console.log(
+            `✅ [TIMETABLE] AI fallback successful. Extracted ${aiClasses.length} classes.`
+          );
+        }
+      } catch (err) {
+        console.error("🚨 [TIMETABLE] AI fallback failed:", err);
+      }
+    }
+
+    // Persist classes to TimetableStorage and also prepare schedule items for UI
+    let scheduleItems: {
+      title: string;
+      time: string;
+      date: string;
+      type: "assignment" | "study" | "exam" | "note";
+    }[] = [];
+    if (timetableResult.classes && timetableResult.classes.length > 0) {
+      const classes: TimetableClass[] = timetableResult.classes.map((c) => ({
+        id: c.id,
+        title: c.title,
+        time: c.time,
+        endTime: c.endTime,
+        room: c.room,
+        instructor: c.instructor,
+        day: c.day,
+        type: c.type,
+        source: c.source,
+        createdAt: c.createdAt,
+        recurring: true,
+      }));
+      TimetableStorage.addClasses(classes);
+
+      // Also create next-occurrence schedule items for immediate view
+      const dayIdx: Record<string, number> = {
+        Sunday: 0,
+        Monday: 1,
+        Tuesday: 2,
+        Wednesday: 3,
+        Thursday: 4,
+        Friday: 5,
+        Saturday: 6,
+      };
+      const nextDateFor = (weekday: number) => {
+        const now = new Date();
+        const cur = now.getDay();
+        let d = weekday - cur;
+        if (d <= 0) d += 7;
+        const dt = new Date(now);
+        dt.setDate(now.getDate() + d);
+        return dt.toISOString().split("T")[0];
+      };
+
+      scheduleItems = classes.map((c) => ({
+        title: `${c.title}${c.room ? ` (${c.room})` : ""}`,
+        time: c.time,
+        date: nextDateFor(dayIdx[c.day as keyof typeof dayIdx]),
+        type: "study", // Use 'study' for recurring classes to match StoredScheduleItem type
+      }));
+      // Save these preview items without duplication pressure
+      if (scheduleItems.length) {
+        ScheduleStorage.addBatch(
+          scheduleItems.map((i) => ({ ...i, source: file.name })) as any
+        );
+      }
+    }
+
+    // Kick off AI-derived flashcards/notes in parallel; also detect non-recurring deadlines
+    const [flashcards, notes, aiSchedule] = await Promise.all([
       generateFlashcardsFromContent(content, file.name),
       generateNotesFromContent(content, file.name),
       generateScheduleFromContent(content, file.name),
     ]);
 
+    // Merge non-recurring items (assignments/exams) with timetable previews
+    if (aiSchedule && aiSchedule.length) {
+      const nonRecurring = aiSchedule.filter(
+        (i) => i.type === "assignment" || i.type === "exam"
+      );
+      if (nonRecurring.length) {
+        ScheduleStorage.addBatch(
+          nonRecurring.map((i) => ({ ...i, source: file.name })) as any
+        );
+        scheduleItems.push(...nonRecurring);
+      }
+    }
+
     // Generate a summary
-    const summary = `Processed ${file.name}: Generated ${flashcards.length} flashcards, ${notes.length} notes, ${scheduleItems.length} schedule items.`;
+    const summary = `Processed ${file.name}: Parsed ${
+      timetableResult.classes?.length || 0
+    } classes, generated ${flashcards.length} flashcards, ${
+      notes.length
+    } notes, ${scheduleItems.length} schedule items.`;
 
     return {
       success: true,

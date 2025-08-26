@@ -25,6 +25,7 @@ import FunLearning from "./FunLearning";
 import DashboardAI from "./DashboardAI";
 import NotesManager from "./NotesManager";
 import { verifySession } from "@/lib/session";
+import BuddyPreferences from "./BuddyPreferences";
 
 interface StudyDashboardProps {
   userName?: string;
@@ -87,6 +88,7 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
 
   return (
     <div className="min-h-screen bg-background relative z-10">
+      <BuddyPreferences />
       <div className="flex">
         {/* Mobile Hamburger Menu */}
         <Sheet>

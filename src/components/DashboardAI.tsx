@@ -55,6 +55,8 @@ import {
   TimetableStorage,
   FileHistoryStorage,
 } from "@/lib/storage";
+import { createDefaultOrchestrator } from "@/lib/agent";
+import { BuddyMemoryStorage } from "@/lib/storage";
 
 interface DashboardAIProps {
   onScheduleUpdate: (items: any[]) => void;
@@ -69,6 +71,7 @@ const DashboardAI = ({
   onFunLearningUpdate,
   onNotesUpdate,
 }: DashboardAIProps) => {
+  const orchestrator = createDefaultOrchestrator();
   // Generate day-wise summary for Google Calendar style display
   const generateDayWiseSummary = (classes: any[]): string => {
     const days = [
@@ -262,15 +265,42 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-      // 1) Intent detection: run generators directly when asked
-      const intentHandled = await handleIntentCommand(messageText);
-      if (intentHandled) {
+      // 1) Try orchestrator (auto-acts on commands, persists and returns artifacts)
+      const result = await orchestrator.handle({ text: messageText });
+      if (result && (result.artifacts || result.summary)) {
+        // Route artifacts to UI
+        const arts: any = result.artifacts || {};
+        if (Array.isArray(arts.notes) && arts.notes.length)
+          onNotesUpdate(arts.notes);
+        if (Array.isArray(arts.flashcards) && arts.flashcards.length)
+          onFlashcardsUpdate(arts.flashcards);
+        if (Array.isArray(arts.schedule) && arts.schedule.length)
+          onScheduleUpdate(arts.schedule);
+        if (arts.fun && typeof arts.fun.content === "string")
+          onFunLearningUpdate(arts.fun.content, arts.fun.type || "story");
+
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: toPlainText(result.summary || "Done."),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+        // Activity panel removed per request
+        speakMessageWithElevenLabs(assistantMessage.content);
         setIsLoading(false);
         setInputText("");
         return;
       }
 
-      // 2) Otherwise, do a short general chat reply
+      // 2) Fallback lightweight intent handler (legacy direct generators)
+      const intentHandled = await handleIntentCommand(messageText);
+      if (intentHandled) {
+        // Activity panel removed per request
+        setIsLoading(false);
+        setInputText("");
+        return;
+      }
+
+      // 3) Otherwise, do a short general chat reply
       const systemPrompt: ChatMessage = {
         role: "system",
         content:
@@ -288,6 +318,7 @@ const DashboardAI = ({
         content: clean,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+      // Activity panel removed per request
       speakMessageWithElevenLabs(clean);
     } catch (error) {
       toast({
@@ -311,7 +342,9 @@ const DashboardAI = ({
     try {
       // Flashcards
       if (/(make|create|generate)\s+(some\s+)?flashcards?\b/i.test(s)) {
-        const content = after(/flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i);
+        const content = after(
+          /flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+        );
         if (content.length < 15) return false; // need some content
         const cards = await generateFlashcards(content);
         if (Array.isArray(cards) && cards.length > 0) {
@@ -334,7 +367,8 @@ const DashboardAI = ({
         }
         const msg: ChatMessage = {
           role: "assistant",
-          content: "I couldn’t extract enough content to make flashcards. Try adding more detail or paste text.",
+          content:
+            "I couldn’t extract enough content to make flashcards. Try adding more detail or paste text.",
         };
         setMessages((p) => [...p, { role: "user", content: s }, msg]);
         return true;
@@ -342,7 +376,8 @@ const DashboardAI = ({
 
       // Notes
       if (/(make|create|generate)\s+(study\s+)?notes?\b/i.test(s)) {
-        const content = after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+        const content =
+          after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
         if (content.length < 30) return false;
         const notes = await generateNotesFromContent(content, "chat-input");
         if (Array.isArray(notes) && notes.length > 0) {
@@ -370,22 +405,33 @@ const DashboardAI = ({
       }
 
       // Schedule / Timetable
-      if (/(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(s)) {
-        const content = after(/(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
+      if (
+        /(make|create|generate|build)\s+.*(schedule|timetable|calendar)\b/i.test(
+          s
+        )
+      ) {
+        const content =
+          after(
+            /(?:schedule|timetable|calendar)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+          ) || s;
         if (content.length < 20) return false;
         const items = await generateScheduleFromContent(content);
         if (Array.isArray(items) && items.length > 0) {
           onScheduleUpdate(items);
           const summary = items
             .slice(0, 3)
-            .map((i: any) => `${i.title} - ${i.date}${i.time ? ` ${i.time}` : ""}`)
+            .map(
+              (i: any) => `${i.title} - ${i.date}${i.time ? ` ${i.time}` : ""}`
+            )
             .join("; ");
           setMessages((p) => [
             ...p,
             { role: "user", content: s },
             {
               role: "assistant",
-              content: `Added ${items.length} schedule items. Example: ${summary}${
+              content: `Added ${
+                items.length
+              } schedule items. Example: ${summary}${
                 items.length > 3 ? " …" : ""
               }`,
             },
@@ -411,14 +457,23 @@ const DashboardAI = ({
       const funMatch = s.match(/(story|quiz|poem|song|rap|riddle|game)/i);
       if (funMatch && /(make|create|generate)\b/i.test(s)) {
         const kind = funMatch[1].toLowerCase();
-        const content = after(new RegExp(`${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`, "i")) || s;
+        const content =
+          after(
+            new RegExp(
+              `${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`,
+              "i"
+            )
+          ) || s;
         if (content.length < 15) return false;
         const out = await generateFunLearning(content, kind);
         onFunLearningUpdate(out, kind);
         setMessages((p) => [
           ...p,
           { role: "user", content: s },
-          { role: "assistant", content: `Created a ${kind}. See the Fun Learning tab.` },
+          {
+            role: "assistant",
+            content: `Created a ${kind}. See the Fun Learning tab.`,
+          },
         ]);
         speakMessageWithElevenLabs(`Your ${kind} is ready in Fun Learning.`);
         return true;
@@ -1186,6 +1241,7 @@ const DashboardAI = ({
 
       {/* Input Controls */}
       <div className="p-4 border-t">
+        {/* Activity panel removed per request */}
         <div className="flex gap-2 mb-2">
           <Input
             value={inputText}
