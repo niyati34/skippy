@@ -43,6 +43,8 @@ import {
   generateNotesFromContent,
   extractTextFromImage,
 } from "@/services/openrouter";
+import { Orchestrator, BuddyAgent, NotesAgent, PlannerAgent, FlashcardAgent, FunAgent, createDefaultOrchestrator } from "@/lib/agent";
+import { parseIntent } from "@/lib/intent";
 import {
   processUploadedFile,
   FileProcessingResult,
@@ -264,37 +266,61 @@ const DashboardAI = ({
     setInputText("");
     setIsLoading(true);
 
-    try {
-      // 1) Try orchestrator (auto-acts on commands, persists and returns artifacts)
-      const result = await orchestrator.handle({ text: messageText });
-      if (result && (result.artifacts || result.summary)) {
-        // Route artifacts to UI
-        const arts: any = result.artifacts || {};
-        if (Array.isArray(arts.notes) && arts.notes.length)
+  try {
+      // 1) Try centralized orchestrator (now wired to real tools)
+      try {
+        const result = await orchestrator.handle({ text: messageText });
+        const summary = result?.summary ? toPlainText(result.summary) : "";
+        const arts = result?.artifacts || {};
+        let consumed = false;
+
+        if (arts.notes && Array.isArray(arts.notes) && arts.notes.length) {
           onNotesUpdate(arts.notes);
-        if (Array.isArray(arts.flashcards) && arts.flashcards.length)
-          onFlashcardsUpdate(arts.flashcards);
-        if (Array.isArray(arts.schedule) && arts.schedule.length)
+          consumed = true;
+        }
+        if (
+          arts.flashcards &&
+          Array.isArray(arts.flashcards) &&
+          arts.flashcards.length
+        ) {
+          onFlashcardsUpdate(
+            arts.flashcards.map((c: any) => ({
+              question: c.question || c.front || "Question",
+              answer: c.answer || c.back || "Answer",
+              category: c.category || "General",
+            }))
+          );
+          consumed = true;
+        }
+        if (
+          arts.schedule &&
+          Array.isArray(arts.schedule) &&
+          arts.schedule.length
+        ) {
           onScheduleUpdate(arts.schedule);
-        if (arts.fun && typeof arts.fun.content === "string")
+          consumed = true;
+        }
+        if (arts.fun && arts.fun.content) {
           onFunLearningUpdate(arts.fun.content, arts.fun.type || "story");
+          consumed = true;
+        }
 
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: toPlainText(result.summary || "Done."),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-        // Activity panel removed per request
-        speakMessageWithElevenLabs(assistantMessage.content);
-        setIsLoading(false);
-        setInputText("");
-        return;
-      }
+        if (summary) {
+          const a: ChatMessage = { role: "assistant", content: summary };
+          setMessages((p) => [...p, a]);
+          speakMessageWithElevenLabs(a.content);
+        }
 
-      // 2) Fallback lightweight intent handler (legacy direct generators)
-      const intentHandled = await handleIntentCommand(messageText);
-      if (intentHandled) {
-        // Activity panel removed per request
+        if (consumed || summary) {
+          setIsLoading(false);
+          setInputText("");
+          return;
+        }
+      } catch {}
+
+  // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
+  const intentHandled = await handleIntentCommand(messageText);
+  if (intentHandled) {
         setIsLoading(false);
         setInputText("");
         return;

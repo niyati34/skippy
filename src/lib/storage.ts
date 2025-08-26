@@ -8,6 +8,9 @@ export interface BuddyMemory {
   messageCount: number;
   lastSeen?: string;
   lastTasks?: Array<{ when: string; type: string; summary: string }>; // light activity log
+  preferences?: {
+    studyTimes?: string[];
+  };
 }
 
 export const BuddyMemoryStorage = {
@@ -33,6 +36,25 @@ export const BuddyMemoryStorage = {
     } catch (e) {
       console.warn("BuddyMemoryStorage.save failed", e);
     }
+  },
+  update(delta: Partial<BuddyMemory>) {
+    const current = this.load();
+    const next: BuddyMemory = {
+      ...current,
+      ...delta,
+      topics: Array.from(
+        new Set([...(current.topics || []), ...((delta.topics as string[]) || [])])
+      ).slice(0, 50),
+      messageCount:
+        (current.messageCount || 0) + (delta.messageCount ? delta.messageCount : 0),
+      lastSeen: new Date().toISOString(),
+      preferences: {
+        ...(current.preferences || {}),
+        ...((delta.preferences as any) || {}),
+      },
+    };
+    this.save(next);
+    return next;
   },
   clearActivity() {
     const mem = this.load();
@@ -78,7 +100,7 @@ export interface StoredFlashcard {
   category: string;
   createdAt: string;
   source?: string;
-  srs?: import("./srs").SrsState;
+  srs?: import("./srs").SrsState; // spaced repetition state
 }
 
 export interface StoredNote {
@@ -133,6 +155,8 @@ export interface DayWiseTimetable {
   Sunday: TimetableClass[];
 }
 
+// Buddy memory and preferences (see BuddyMemory interface above)
+
 // Flashcards Storage
 export const FlashcardStorage = {
   save: (flashcards: StoredFlashcard[]) => {
@@ -159,6 +183,7 @@ export const FlashcardStorage = {
       ...flashcard,
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
+      srs: flashcard.srs, // optional
     };
     existing.push(newCard);
     FlashcardStorage.save(existing);
@@ -173,6 +198,7 @@ export const FlashcardStorage = {
       ...card,
       id: (Date.now() + Math.random()).toString(),
       createdAt: new Date().toISOString(),
+      srs: card.srs,
     }));
     existing.push(...newCards);
     FlashcardStorage.save(existing);
@@ -516,3 +542,80 @@ export const TimetableStorage = {
     return Object.values(timetable).flat();
   },
 };
+
+// BuddyMemoryStorage methods defined above
+
+// Calendar utils: detect time overlaps within a single day
+export type CalendarConflict = {
+  aId: string;
+  bId: string;
+  titleA: string;
+  titleB: string;
+  date: string;
+  startA: string;
+  endA?: string;
+  startB: string;
+  endB?: string;
+};
+
+function toMinutes(hhmm: string | undefined) {
+  if (!hhmm) return undefined;
+  const t = hhmm.replace(/[^\d:]/g, "");
+  const [h, m] = t.split(":").map((n) => parseInt(n || "0", 10));
+  return (h || 0) * 60 + (m || 0);
+}
+
+export function detectConflicts(
+  items: Array<{
+    id: string;
+    title: string;
+    date: string;
+    time?: string;
+    endTime?: string;
+  }>
+): CalendarConflict[] {
+  const conflicts: CalendarConflict[] = [];
+  // group by date
+  const byDate = new Map<string, typeof items>();
+  for (const it of items) {
+    const k = it.date;
+    const arr = byDate.get(k) || [];
+    arr.push(it);
+    byDate.set(k, arr);
+  }
+
+  for (const [date, dayItems] of byDate.entries()) {
+    // sort by start time
+    const sorted = [...dayItems].sort(
+      (a, b) => (toMinutes(a.time) || 0) - (toMinutes(b.time) || 0)
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const A = sorted[i];
+        const B = sorted[j];
+        const aStart = toMinutes(A.time) || 0;
+        const aEnd = toMinutes(A.endTime) ?? aStart + 60; // assume 1h if missing
+        const bStart = toMinutes(B.time) || 0;
+        const bEnd = toMinutes(B.endTime) ?? bStart + 60;
+        const overlap = Math.max(
+          0,
+          Math.min(aEnd, bEnd) - Math.max(aStart, bStart)
+        );
+        if (overlap > 0) {
+          conflicts.push({
+            aId: A.id,
+            bId: B.id,
+            titleA: A.title,
+            titleB: B.title,
+            date,
+            startA: A.time || "",
+            endA: A.endTime,
+            startB: B.time || "",
+            endB: B.endTime,
+          });
+        }
+      }
+    }
+  }
+  return conflicts;
+}

@@ -20,5 +20,7 @@ export async function logoutSession(): Promise<void> {
   const call = async (url: string) => {
     await fetch(url, { method: "POST", credentials: "include" });
   };
-  await call("/api/unlock/logout").catch(() => call("http://localhost:5174/api/unlock/logout"));
+  await call("/api/unlock/logout").catch(() =>
+    call("http://localhost:5174/api/unlock/logout")
+  );
 }

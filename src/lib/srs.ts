@@ -1,56 +1,82 @@
-// Minimal SRS helpers used by FlashCardMaker
-// Simple SM-2 inspired algorithm
+// Minimal spaced repetition utilities (SM-2 inspired)
+// Quality: 0(Again), 2(Hard), 3(Good), 4(Easy)
 
 export interface SrsState {
-  ef: number; // easiness factor
-  interval: number; // days
-  repetitions: number;
-  due: string; // ISO date
+  reps: number; // successful repetitions count
+  intervalDays: number; // next interval in days
+  ease: number; // ease factor
+  dueAt: string; // ISO datetime for next review
+  lastReviewedAt?: string; // ISO datetime of last review
+  lapses?: number; // times failed
 }
 
-export function initSrs(now = new Date()): SrsState {
+export const DEFAULT_EASE = 2.5;
+
+export function initSrs(now: Date = new Date()): SrsState {
   return {
-    ef: 2.5,
-    interval: 0,
-    repetitions: 0,
-    due: now.toISOString(),
+    reps: 0,
+    intervalDays: 0,
+    ease: DEFAULT_EASE,
+    dueAt: now.toISOString(),
+    lastReviewedAt: undefined,
+    lapses: 0,
   };
 }
 
-export function isDue(s: SrsState, at: Date = new Date()): boolean {
+export function isDue(s: SrsState, now: Date = new Date()): boolean {
   try {
-    return new Date(s.due).getTime() <= at.getTime();
+    return new Date(s.dueAt).getTime() <= now.getTime();
   } catch {
     return true;
   }
 }
 
-// quality: 0 (again), 2 (hard), 3 (good), 4 (easy)
+export function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + Math.max(0, Math.round(days)));
+  return d;
+}
+
 export function review(
   prev: SrsState,
-  quality: 0 | 2 | 3 | 4,
-  now = new Date()
+  quality: 0 | 1 | 2 | 3 | 4,
+  now: Date = new Date()
 ): SrsState {
-  let { ef, interval, repetitions } = prev;
+  // Map 1 -> 0 (treat as Again)
+  const q = quality === 1 ? 0 : quality;
+  let { reps, intervalDays, ease, lapses = 0 } = prev;
 
-  // Map to SM-2 quality (0..5)
-  const q = quality === 0 ? 1 : quality === 2 ? 3 : quality === 3 ? 4 : 5;
-
-  if (q < 3) {
-    repetitions = 0;
-    interval = 1;
+  if (q < 2) {
+    // Failure resets reps and sets short interval
+    reps = 0;
+    lapses += 1;
+    intervalDays = 1; // immediate next day
   } else {
-    repetitions += 1;
-    if (repetitions === 1) interval = 1;
-    else if (repetitions === 2) interval = 6;
-    else interval = Math.round(interval * ef);
+    // Success
+    if (reps === 0) {
+      intervalDays = 1;
+    } else if (reps === 1) {
+      intervalDays = 3;
+    } else {
+      intervalDays = Math.max(1, Math.round(intervalDays * ease));
+    }
+    reps += 1;
 
-    ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-    if (ef < 1.3) ef = 1.3;
+    // Ease factor update (SM-2 inspired)
+    // easy: +0.15, good: +0.0, hard: -0.15
+    if (q === 4) ease += 0.15;
+    if (q === 3) ease += 0.0;
+    if (q === 2) ease -= 0.15;
+    ease = Math.max(1.3, Math.min(2.8, Number(ease.toFixed(2))));
   }
 
-  const due = new Date(
-    now.getTime() + interval * 24 * 60 * 60 * 1000
-  ).toISOString();
-  return { ef, interval, repetitions, due };
+  const dueAt = addDays(now, intervalDays).toISOString();
+  return {
+    reps,
+    intervalDays,
+    ease,
+    dueAt,
+    lastReviewedAt: now.toISOString(),
+    lapses,
+  };
 }

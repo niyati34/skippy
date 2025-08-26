@@ -7,24 +7,23 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Calendar,
   BookOpen,
-  Target,
   Gamepad2,
   Menu,
   MessageCircle,
   FileText,
 } from "lucide-react";
-import CalendarView from "./CalendarView";
 import WeeklyTimetableView from "./WeeklyTimetableView";
-import ScheduleChart from "./ScheduleChart";
 import FlashCardMaker from "./FlashCardMaker";
 import FunLearning from "./FunLearning";
 import DashboardAI from "./DashboardAI";
 import NotesManager from "./NotesManager";
 import { verifySession } from "@/lib/session";
+import SessionBanner from "./SessionBanner";
 import BuddyPreferences from "./BuddyPreferences";
 
 interface StudyDashboardProps {
@@ -37,11 +36,15 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
   const [flashcards, setFlashcards] = useState<any[]>([]);
   const [funLearningContent, setFunLearningContent] = useState<string>("");
   const [notes, setNotes] = useState<any[]>([]);
+  const [newCounts, setNewCounts] = useState({
+    schedule: 0,
+    flashcards: 0,
+    notes: 0,
+    fun: false,
+  });
 
   const speakWelcomeMessage = async (message: string) => {
     try {
-      // For now, use built-in speech synthesis as fallback
-      // In production, you would integrate with ElevenLabs API here
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(message);
@@ -56,30 +59,44 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
   };
 
   useEffect(() => {
-    // Welcome message when dashboard opens
-    const welcomeMessage = `Hey there, ${userName}! I'm Skippy! 🐰 I can help you generate schedules, flashcards, and even fun stories! What do you want to do today?`;
-    setTimeout(() => {
-      speakWelcomeMessage(welcomeMessage);
-    }, 1000);
+    const welcomeMessage = `Hey there, ${userName}! I'm Skippy! I can help you generate schedules, flashcards, and even fun stories! What do you want to do today?`;
+    const t = setTimeout(() => speakWelcomeMessage(welcomeMessage), 1000);
+    return () => clearTimeout(t);
   }, [userName]);
 
-  // Lightweight session guard: verify on mount and periodically
+  // Load persisted counters on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("skippy:newCounts");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          typeof parsed === "object" &&
+          parsed &&
+          ["schedule", "flashcards", "notes", "fun"].every((k) => k in parsed)
+        ) {
+          setNewCounts((c) => ({ ...c, ...parsed }));
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Persist counters whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem("skippy:newCounts", JSON.stringify(newCounts));
+    } catch {}
+  }, [newCounts]);
+
+  // Verify session in background
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ok = await verifySession();
-      if (!cancelled && !ok) {
-        // Minimal disruption: inform and reload to return to unlock screen
-        alert("Session expired. Redirecting to unlock.");
-        window.location.reload();
-      }
+      await verifySession();
     })();
     const id = window.setInterval(async () => {
-      const ok = await verifySession();
-      if (!ok) {
-        window.location.reload();
-      }
-    }, 5 * 60 * 1000); // every 5 minutes
+      if (!cancelled) await verifySession();
+    }, 5 * 60 * 1000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -88,6 +105,7 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
 
   return (
     <div className="min-h-screen bg-background relative z-10">
+      <SessionBanner />
       <BuddyPreferences />
       <div className="flex">
         {/* Mobile Hamburger Menu */}
@@ -112,43 +130,75 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
               <nav className="space-y-2">
                 <Button
                   variant={activeTab === "ai-chat" ? "default" : "ghost"}
-                  className="w-full justify-start"
+                  className="w-full justify-between"
                   onClick={() => setActiveTab("ai-chat")}
                 >
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  Chat with Skippy
+                  <span className="flex items-center">
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Chat with Skippy
+                  </span>
                 </Button>
                 <Button
                   variant={activeTab === "schedule" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("schedule")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("schedule");
+                    setNewCounts((c) => ({ ...c, schedule: 0 }));
+                  }}
                 >
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Schedule Manager
+                  <span className="flex items-center">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Schedule Manager
+                  </span>
+                  {newCounts.schedule > 0 && (
+                    <Badge variant="secondary">{newCounts.schedule}</Badge>
+                  )}
                 </Button>
                 <Button
                   variant={activeTab === "flashcards" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("flashcards")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("flashcards");
+                    setNewCounts((c) => ({ ...c, flashcards: 0 }));
+                  }}
                 >
-                  <BookOpen className="w-4 h-4 mr-2" />
-                  Flash Cards
+                  <span className="flex items-center">
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    Flash Cards
+                  </span>
+                  {newCounts.flashcards > 0 && (
+                    <Badge variant="secondary">{newCounts.flashcards}</Badge>
+                  )}
                 </Button>
                 <Button
                   variant={activeTab === "fun" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("fun")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("fun");
+                    setNewCounts((c) => ({ ...c, fun: false }));
+                  }}
                 >
-                  <Gamepad2 className="w-4 h-4 mr-2" />
-                  Fun Learning
+                  <span className="flex items-center">
+                    <Gamepad2 className="w-4 h-4 mr-2" />
+                    Fun Learning
+                  </span>
+                  {newCounts.fun && <Badge variant="secondary">NEW</Badge>}
                 </Button>
                 <Button
                   variant={activeTab === "notes" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("notes")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("notes");
+                    setNewCounts((c) => ({ ...c, notes: 0 }));
+                  }}
                 >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Notes Manager
+                  <span className="flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Notes Manager
+                  </span>
+                  {newCounts.notes > 0 && (
+                    <Badge variant="secondary">{newCounts.notes}</Badge>
+                  )}
                 </Button>
               </nav>
             </div>
@@ -172,43 +222,75 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
               <nav className="flex-1 px-4 space-y-2">
                 <Button
                   variant={activeTab === "ai-chat" ? "default" : "ghost"}
-                  className="w-full justify-start"
+                  className="w-full justify-between"
                   onClick={() => setActiveTab("ai-chat")}
                 >
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  Chat with Skippy
+                  <span className="flex items-center">
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Chat with Skippy
+                  </span>
                 </Button>
                 <Button
                   variant={activeTab === "schedule" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("schedule")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("schedule");
+                    setNewCounts((c) => ({ ...c, schedule: 0 }));
+                  }}
                 >
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Schedule Manager
+                  <span className="flex items-center">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Schedule Manager
+                  </span>
+                  {newCounts.schedule > 0 && (
+                    <Badge variant="secondary">{newCounts.schedule}</Badge>
+                  )}
                 </Button>
                 <Button
                   variant={activeTab === "flashcards" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("flashcards")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("flashcards");
+                    setNewCounts((c) => ({ ...c, flashcards: 0 }));
+                  }}
                 >
-                  <BookOpen className="w-4 h-4 mr-2" />
-                  Flash Cards
+                  <span className="flex items-center">
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    Flash Cards
+                  </span>
+                  {newCounts.flashcards > 0 && (
+                    <Badge variant="secondary">{newCounts.flashcards}</Badge>
+                  )}
                 </Button>
                 <Button
                   variant={activeTab === "fun" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("fun")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("fun");
+                    setNewCounts((c) => ({ ...c, fun: false }));
+                  }}
                 >
-                  <Gamepad2 className="w-4 h-4 mr-2" />
-                  Fun Learning
+                  <span className="flex items-center">
+                    <Gamepad2 className="w-4 h-4 mr-2" />
+                    Fun Learning
+                  </span>
+                  {newCounts.fun && <Badge variant="secondary">NEW</Badge>}
                 </Button>
                 <Button
                   variant={activeTab === "notes" ? "default" : "ghost"}
-                  className="w-full justify-start"
-                  onClick={() => setActiveTab("notes")}
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setActiveTab("notes");
+                    setNewCounts((c) => ({ ...c, notes: 0 }));
+                  }}
                 >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Notes Manager
+                  <span className="flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Notes Manager
+                  </span>
+                  {newCounts.notes > 0 && (
+                    <Badge variant="secondary">{newCounts.notes}</Badge>
+                  )}
                 </Button>
               </nav>
             </div>
@@ -233,18 +315,31 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
                   </CardHeader>
                   <CardContent className="h-[calc(100%-6rem)] p-0">
                     <DashboardAI
-                      onScheduleUpdate={(items) =>
-                        setScheduleItems((prev) => [...prev, ...items])
-                      }
-                      onFlashcardsUpdate={(cards) =>
-                        setFlashcards((prev) => [...prev, ...cards])
-                      }
-                      onFunLearningUpdate={(content, type) =>
-                        setFunLearningContent(content)
-                      }
-                      onNotesUpdate={(newNotes) =>
-                        setNotes((prev) => [...prev, ...newNotes])
-                      }
+                      onScheduleUpdate={(items) => {
+                        setScheduleItems((prev) => [...prev, ...items]);
+                        setNewCounts((c) => ({
+                          ...c,
+                          schedule: c.schedule + (items?.length || 0),
+                        }));
+                      }}
+                      onFlashcardsUpdate={(cards) => {
+                        setFlashcards((prev) => [...prev, ...cards]);
+                        setNewCounts((c) => ({
+                          ...c,
+                          flashcards: c.flashcards + (cards?.length || 0),
+                        }));
+                      }}
+                      onFunLearningUpdate={(content, type) => {
+                        setFunLearningContent(content);
+                        setNewCounts((c) => ({ ...c, fun: true }));
+                      }}
+                      onNotesUpdate={(newNotes) => {
+                        setNotes((prev) => [...prev, ...newNotes]);
+                        setNewCounts((c) => ({
+                          ...c,
+                          notes: c.notes + (newNotes?.length || 0),
+                        }));
+                      }}
                     />
                   </CardContent>
                 </Card>

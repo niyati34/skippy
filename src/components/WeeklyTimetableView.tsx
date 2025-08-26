@@ -35,6 +35,7 @@ import {
   ScheduleStorage,
   TimetableStorage,
   TimetableClass,
+  detectConflicts,
 } from "@/lib/storage";
 
 interface CalendarItem {
@@ -73,6 +74,8 @@ const WeeklyTimetableView = ({
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [viewMode, setViewMode] = useState<"week" | "day">("week");
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [showConflictBanner, setShowConflictBanner] = useState(true);
   const { toast } = useToast();
 
   // Time slots for the weekly view
@@ -141,6 +144,10 @@ const WeeklyTimetableView = ({
 
     console.log("📅 Total calendar items loaded:", uniqueItems.length);
     setCalendarItems(uniqueItems);
+
+    // Detect conflicts for the week
+    const weekConflicts = detectConflicts(uniqueItems);
+    setConflicts(weekConflicts);
   }, [items, currentWeek]); // Re-generate when week changes
 
   // Save to storage when items update
@@ -620,6 +627,25 @@ const WeeklyTimetableView = ({
 
   return (
     <div className="space-y-6">
+      {/* Conflict banner */}
+      {showConflictBanner && conflicts.length > 0 && (
+        <Card className="border-red-300 bg-red-50">
+          <CardContent className="p-3 flex items-center justify-between">
+            <div className="text-sm text-red-800">
+              ⚠️ {conflicts.length} time conflict
+              {conflicts.length > 1 ? "s" : ""} detected this week. Overlapping
+              items share the same time.
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowConflictBanner(false)}
+            >
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       {/* Debug Section - Remove in production */}
       {false && ( // Temporarily disabled
         <Card className="border-yellow-500/50 bg-yellow-500/5">
@@ -837,6 +863,9 @@ const WeeklyTimetableView = ({
                   {weekDates.map((date) => {
                     const { dayName, dayNumber, isToday } =
                       formatDateForDisplay(date);
+                    const dayConflicts = conflicts.filter(
+                      (c) => c.date === date.toISOString().split("T")[0]
+                    );
                     return (
                       <th
                         key={dayName}
@@ -853,6 +882,12 @@ const WeeklyTimetableView = ({
                         <div>
                           <div className="font-semibold">{dayName}</div>
                           <div className="text-sm opacity-75">{dayNumber}</div>
+                          {dayConflicts.length > 0 && (
+                            <div className="mt-1 text-xs text-red-700">
+                              {dayConflicts.length} conflict
+                              {dayConflicts.length > 1 ? "s" : ""}
+                            </div>
+                          )}
                         </div>
                       </th>
                     );

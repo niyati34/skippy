@@ -26,14 +26,21 @@ export type AgentMessage = {
 };
 
 export interface AgentTaskInput {
-  intent?: string;
-  text?: string;
+  intent?: string; // optional hint
+  text?: string; // user freeform text
   files?: Array<{ name: string; type: string; content: string }>;
 }
 
 export interface AgentResult {
   summary: string;
-  artifacts?: Record<string, any>;
+  // Artifacts follow a stable shape so UI can apply updates
+  artifacts?: {
+    notes?: any[];
+    flashcards?: any[];
+    schedule?: any[];
+    fun?: { type: string; content: string };
+  timetable?: any[];
+  };
 }
 
 export interface Agent {

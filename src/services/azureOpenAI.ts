@@ -1,13 +1,16 @@
 // AI client using OpenRouter only (via proxy)
 // Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
-
-const OPENROUTER_MODEL =
-  (import.meta as any)?.env?.OPENROUTER_MODEL || "gpt-oss-20b";
-// Optional DEV-ONLY direct call (avoid in production; proxy is preferred)
-const ALLOW_DIRECT =
-  ((import.meta as any)?.env?.VITE_ALLOW_DIRECT_OPENROUTER ?? "false") ===
-  "true";
-const DIRECT_KEY = (import.meta as any)?.env?.VITE_OPENROUTER_API_KEY || "";
+// Client model override (optional). If not set, the server decides.
+// At runtime, a user can set localStorage.clientModel to override without rebuild.
+const ENV_MODEL = (import.meta as any)?.env?.VITE_OPENROUTER_MODEL || "";
+function getRuntimeModel(): string {
+  try {
+    const ls = (window as any)?.localStorage?.getItem("clientModel") || "";
+    return (ls || ENV_MODEL || "").trim();
+  } catch {
+    return (ENV_MODEL || "").trim();
+  }
+}
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -16,128 +19,112 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Enhanced AI service with better error handling and faster responses
+type CallOptions = { retries?: number; model?: string; timeoutMs?: number } | number | undefined;
+
 export async function callOpenRouter(
   messages: ChatMessage[],
-  retries = 1,
-  timeout = 20000 // default 20s; can be overridden via env
+  optionsOrRetries?: CallOptions
 ): Promise<string> {
-  const model =
-    (window as any).VITE_OPENROUTER_MODEL ||
-    import.meta.env.VITE_OPENROUTER_MODEL ||
-    "gpt-oss-20b";
+  const retries =
+    typeof optionsOrRetries === "number"
+      ? optionsOrRetries
+      : optionsOrRetries && typeof optionsOrRetries === "object"
+      ? optionsOrRetries.retries ?? 2
+      : 2;
+  // Determine candidate proxy URLs based on environment
+  const isLocal =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+  const devPort = (import.meta as any)?.env?.VITE_PROXY_PORT || 5174;
+  const devProxy = `http://localhost:${devPort}/api/openrouter/chat`;
+  const prodRelative = `/api/openrouter/chat`;
+  const prodBase = (import.meta as any)?.env?.VITE_PROD_URL?.replace(/\/$/, "");
+  const prodAbsolute = prodBase ? `${prodBase}/api/openrouter/chat` : "";
 
-  // Allow overriding timeout via Vite env at runtime
-  const envTimeout = Number(
-    (window as any).VITE_AI_TIMEOUT_MS ||
-      import.meta.env.VITE_AI_TIMEOUT_MS ||
-      0
+  const candidates = (
+    isLocal
+      ? [devProxy, prodAbsolute, prodRelative]
+      : [prodRelative, prodAbsolute]
+  ).filter(Boolean);
+
+  const RUNTIME_MODEL = ((): string => {
+    // Prefer explicit per-call model, else runtime override/env
+    if (
+      optionsOrRetries &&
+      typeof optionsOrRetries === "object" &&
+      optionsOrRetries.model &&
+      String(optionsOrRetries.model).trim()
+    ) {
+      return String(optionsOrRetries.model).trim();
+    }
+    return getRuntimeModel();
+  })();
+  console.log(
+    `[AI] Endpoint candidates (client model override: ${
+      RUNTIME_MODEL || "<none>"
+    }):`,
+    candidates
   );
-  const effectiveTimeout = envTimeout > 0 ? envTimeout : timeout;
+  // timeout resolution (env -> option -> default)
+  const envTimeout = Number(
+    (window as any).VITE_AI_TIMEOUT_MS || (import.meta as any)?.env?.VITE_AI_TIMEOUT_MS || 0
+  );
+  const optTimeout =
+    optionsOrRetries && typeof optionsOrRetries === "object"
+      ? Number((optionsOrRetries as any).timeoutMs || 0)
+      : 0;
+  const effectiveTimeout = (optTimeout || envTimeout || 20000) as number;
 
-  const endpoints = [
-    `http://localhost:${
-      (window as any).VITE_PROXY_PORT || import.meta.env.VITE_PROXY_PORT || 5174
-    }/api/openrouter/chat`,
-    (window as any).VITE_PROD_URL
-      ? `${(window as any).VITE_PROD_URL}/api/openrouter/chat`
-      : null, // Use prod URL if available
-    "/api/openrouter/chat",
-  ].filter(Boolean) as string[];
-
-  console.log(`[AI] Endpoint candidates (model ${model}):`, endpoints);
-
-  const payload = { model, messages };
-
-  for (const url of endpoints) {
+  const tryCall = async (url: string) => {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        options: {
+          max_tokens: 3000,
+          temperature: 0.1,
+          top_p: 0.8,
+          // Only include model when explicitly configured
+          ...(RUNTIME_MODEL ? { model: RUNTIME_MODEL } : {}),
+        },
+      }),
+    });
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error(
+        `[OpenRouter] Proxy error @ ${url}:`,
+        resp.status,
+        errorText
+      );
+      const hint =
+        resp.status === 401
+          ? "Hint: try a different model (set localStorage.clientModel) or check server logs."
+          : "";
+      throw new Error(
+        `Proxy error: ${resp.status} - ${errorText} ${hint}`.trim()
+      );
+    }
+    const data = await resp.json();
+    return (
+      data?.choices?.[0]?.message?.content ||
+      data?.choices?.[0]?.delta?.content ||
+      ""
+    );
+  };
+  // Try each candidate with simple timeout at fetch-level via AbortController
+  for (const url of candidates) {
     for (let i = 0; i < retries; i++) {
       const controller = new AbortController();
-      const timer = setTimeout(() => {
-        controller.abort();
-      }, effectiveTimeout);
-
+      const timer = setTimeout(() => controller.abort(), effectiveTimeout);
       try {
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-
+        const result = await tryCall(url);
         clearTimeout(timer);
-
-        if (!response.ok) {
-          const errorBody = await response.text();
-          if (response.status === 429) {
-            console.warn(
-              `[AI] Rate limited on ${url}. Skipping this endpoint.`
-            );
-            break; // Stop retrying this endpoint
-          }
-          throw new Error(
-            `HTTP error ${response.status} from AI endpoint: ${errorBody}`
-          );
-        }
-
-        const text = await response.text();
-        if (!text) {
-          throw new Error("Empty response from AI");
-        }
-
-        // Debug preview of raw response (first 400 chars)
-        try {
-          console.debug("[AI] raw response preview:", text.slice(0, 400));
-        } catch {}
-
-        // Try to parse JSON and extract common fields across providers
-        let data: any = null;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          // Not JSON? Return raw text for upstream handlers to process
-          return text;
-        }
-
-        // Standard OpenRouter/Chat Completions shape
-        const choice0 = data?.choices?.[0] || {};
-        const msgContent = choice0?.message?.content;
-        if (typeof msgContent === "string" && msgContent.trim()) {
-          return msgContent;
-        }
-
-        // Some providers return plain text instead of message
-        const plainText = choice0?.text || data?.output_text || data?.content;
-        if (typeof plainText === "string" && plainText.trim()) {
-          return plainText;
-        }
-
-        // If an error payload is returned, surface it
-        if (data?.error) {
-          throw new Error(
-            `AI error: ${
-              typeof data.error === "string"
-                ? data.error
-                : JSON.stringify(data.error)
-            }`
-          );
-        }
-
-        // Fallback: return the raw text (upstream will attempt to parse/handle)
-        return text;
-      } catch (error: any) {
+        if (result && typeof result === "string") return result;
+      } catch (err) {
         clearTimeout(timer);
-        if (error.name === "AbortError") {
-          console.error(
-            `API call to ${url} timed out after ${Math.round(
-              effectiveTimeout / 1000
-            )}s`
-          );
-        } else {
-          console.error(
-            `API call attempt ${i + 1} failed for ${url}:`,
-            error.message
-          );
-        }
+        console.warn(`[AI] attempt ${i + 1} failed @ ${url}:`, err);
+        await delay(200);
       }
     }
   }
@@ -151,6 +138,64 @@ export async function callOpenRouter(
     return "[]";
   }
   return ""; // Default empty response
+}
+
+// -------- Automatic model routing --------
+// Note: Model IDs are best-effort; if unavailable under your key, server will fall back to default.
+function pickModel(kind: string, sample?: string): string {
+  const s = (sample || "").toLowerCase();
+  // Simple language hint for Indic scripts
+  const isIndic =
+    /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0D80-\u0DFF]/.test(
+      sample || ""
+    );
+
+  // Preferred free models mapping per task
+  const map: Record<string, string[]> = {
+    chat: [
+      "google/gemma-3-4b-it:free", // general chat, instruction following
+      "reka/flash-3:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    analyze: [
+      "google/gemma-3n-4b-it:free", // fast, low-latency analysis
+      "google/gemma-3-4b-it:free",
+      "reka/flash-3:free",
+    ],
+    notes: [
+      "featherless/qrwkv-72b:free", // long context, structured outputs
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+      "google/gemma-3-4b-it:free",
+    ],
+    schedule: [
+      "google/gemma-3-4b-it:free", // extraction-friendly, concise
+      "reka/flash-3:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    timetable: [
+      "google/gemma-3-4b-it:free",
+      "reka/flash-3:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    flashcards: [
+      "reka/flash-3:free", // instruction-tuned, clean JSON
+      "google/gemma-3-4b-it:free",
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+    fun: [
+      // language-aware choice
+      ...(isIndic
+        ? ["sarvam/sarvam-m:free", "google/gemma-3-4b-it:free"]
+        : ["google/gemma-3-4b-it:free", "reka/flash-3:free"]),
+      "deepseek/deepseek-r1-distill-qwen-14b:free",
+    ],
+  };
+
+  const candidates = map[kind] || [];
+  const explicit = getRuntimeModel();
+  // Honor explicit override if set
+  if (explicit) return explicit;
+  return candidates[0] || ""; // empty -> server default
 }
 
 // ----------------- Helpers for fallback notes -----------------
@@ -1158,7 +1203,10 @@ async function condenseContentIfLarge(
     },
   ];
   try {
-    const out = await callOpenRouter(messages, 1); // Single attempt
+    const out = await callOpenRouter(messages, {
+      retries: 1,
+      model: pickModel("analyze", content),
+    });
     return out && out.trim().length > 50
       ? out.trim()
       : content.substring(0, 8000);
@@ -1512,7 +1560,10 @@ ${content}`;
   ];
 
   try {
-    const response = await callOpenRouter(messages, 3);
+    const response = await callOpenRouter(messages, {
+      retries: 3,
+      model: pickModel("notes", content),
+    });
 
     // Two-step JSON handling to avoid markdown conflicts
     let clean = (response || "").trim();
@@ -1665,7 +1716,10 @@ IMPORTANT:
       },
     ];
 
-    const response = await callOpenRouter(messages, 3);
+    const response = await callOpenRouter(messages, {
+      retries: 3,
+      model: pickModel("notes", content),
+    });
 
     // Enhanced JSON parsing to handle complex content
     let clean = (response || "").trim();
@@ -2021,7 +2075,10 @@ export async function analyzeFileContent(
     },
   ];
   try {
-    const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, {
+      retries: 2,
+      model: pickModel("schedule", content),
+    });
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     return JSON.parse(clean);
   } catch {
@@ -2062,7 +2119,10 @@ export async function generateScheduleFromContent(
     },
   ];
   try {
-    const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, {
+      retries: 2,
+      model: pickModel("timetable", content),
+    });
     const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
     const parsed = JSON.parse(clean);
     const items = Array.isArray(parsed) ? parsed : [];
@@ -2134,7 +2194,10 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     console.log(
       "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
     );
-    const response = await callOpenRouter(messages, 2);
+    const response = await callOpenRouter(messages, {
+      retries: 2,
+      model: pickModel("flashcards", content),
+    });
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
     // Normalize various provider response shapes into a JSON array string
@@ -2514,7 +2577,10 @@ export async function generateFunLearning(
       content: `Create a ${type} from this educational content: ${content}`,
     },
   ];
-  return await callOpenRouter(messages, 2);
+  return await callOpenRouter(messages, {
+    retries: 2,
+    model: pickModel("fun", content),
+  });
 }
 
 export async function extractTextFromImage(imageFile: File): Promise<string> {

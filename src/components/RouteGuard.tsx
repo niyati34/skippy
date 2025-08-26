@@ -6,7 +6,10 @@ interface RouteGuardProps {
   redirect?: string; // optional path to redirect if not authenticated
 }
 
-export default function RouteGuard({ children, redirect = "/" }: RouteGuardProps) {
+export default function RouteGuard({
+  children,
+  redirect = "/",
+}: RouteGuardProps) {
   const [allowed, setAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
