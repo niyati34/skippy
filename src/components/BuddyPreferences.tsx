@@ -44,6 +44,15 @@ export default function BuddyPreferences() {
     BuddyMemoryStorage.save(next);
   };
 
+  const clearActivity = () => {
+    const next = BuddyMemoryStorage.clearActivity();
+    setMem(next);
+    toast({
+      title: "Activity cleared",
+      description: "Recent agent actions removed.",
+    });
+  };
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -109,6 +118,30 @@ export default function BuddyPreferences() {
                   <Badge key={t} variant="secondary">
                     {t}
                   </Badge>
+                ))
+              )}
+            </div>
+          </div>
+          <div className="pt-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Recent activity</label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearActivity}
+                className="text-red-600"
+              >
+                <Trash2 className="w-4 h-4 mr-1" /> Clear
+              </Button>
+            </div>
+            <div className="mt-2 space-y-1 text-xs text-muted-foreground max-h-40 overflow-y-auto">
+              {!(mem.lastTasks && mem.lastTasks.length) ? (
+                <span>No recent actions.</span>
+              ) : (
+                mem.lastTasks!.slice(0, 12).map((t, i) => (
+                  <div key={i}>
+                    {new Date(t.when).toLocaleString()} [{t.type}] {t.summary}
+                  </div>
                 ))
               )}
             </div>

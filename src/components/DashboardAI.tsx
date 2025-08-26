@@ -43,14 +43,7 @@ import {
   generateNotesFromContent,
   extractTextFromImage,
 } from "@/services/openrouter";
-import {
-  Orchestrator,
-  BuddyAgent,
-  NotesAgent,
-  PlannerAgent,
-  FlashcardAgent,
-  FunAgent,
-} from "@/lib/agent";
+import { Orchestrator, BuddyAgent, NotesAgent, PlannerAgent, FlashcardAgent, FunAgent, createDefaultOrchestrator } from "@/lib/agent";
 import { parseIntent } from "@/lib/intent";
 import {
   processUploadedFile,
@@ -64,6 +57,8 @@ import {
   TimetableStorage,
   FileHistoryStorage,
 } from "@/lib/storage";
+import { createDefaultOrchestrator } from "@/lib/agent";
+import { BuddyMemoryStorage } from "@/lib/storage";
 
 interface DashboardAIProps {
   onScheduleUpdate: (items: any[]) => void;
@@ -78,6 +73,7 @@ const DashboardAI = ({
   onFunLearningUpdate,
   onNotesUpdate,
 }: DashboardAIProps) => {
+  const orchestrator = createDefaultOrchestrator();
   // Generate day-wise summary for Google Calendar style display
   const generateDayWiseSummary = (classes: any[]): string => {
     const days = [
@@ -133,14 +129,6 @@ const DashboardAI = ({
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const orchestrator = new Orchestrator([
-    new NotesAgent(),
-    new PlannerAgent(),
-    new FlashcardAgent(),
-    // handle fun learning before buddy fallback
-    new FunAgent(),
-    new BuddyAgent(),
-  ]);
 
   const handleVoiceInput = async () => {
     if (
@@ -278,7 +266,7 @@ const DashboardAI = ({
     setInputText("");
     setIsLoading(true);
 
-    try {
+  try {
       // 1) Try centralized orchestrator (now wired to real tools)
       try {
         const result = await orchestrator.handle({ text: messageText });
@@ -330,9 +318,9 @@ const DashboardAI = ({
         }
       } catch {}
 
-      // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
-      const intentHandled = await handleIntentCommand(messageText);
-      if (intentHandled) {
+  // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
+  const intentHandled = await handleIntentCommand(messageText);
+  if (intentHandled) {
         setIsLoading(false);
         setInputText("");
         return;
@@ -356,6 +344,7 @@ const DashboardAI = ({
         content: clean,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+      // Activity panel removed per request
       speakMessageWithElevenLabs(clean);
     } catch (error) {
       toast({
@@ -1278,6 +1267,7 @@ const DashboardAI = ({
 
       {/* Input Controls */}
       <div className="p-4 border-t">
+        {/* Activity panel removed per request */}
         <div className="flex gap-2 mb-2">
           <Input
             value={inputText}

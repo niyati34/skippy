@@ -8,10 +8,26 @@ dotenv.config({ path: ".env.local", override: true });
 dotenv.config({ override: true });
 
 const app = express();
-// Allow frontend to send/receive cookies via proxy or direct
+// CORS: allow specific dev origins and credentials (cookies)
+const allowedOrigins = new Set(
+  [
+    "http://localhost:8080",
+    "http://localhost:8081",
+    "http://localhost:5173",
+    process.env.PUBLIC_URL || "",
+  ].filter(Boolean)
+);
 app.use(
   cors({
-    origin: (origin, cb) => cb(null, true),
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // non-browser or same-origin
+      const ok =
+        allowedOrigins.has(origin) ||
+        /^http:\/\/localhost:\d+$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) ||
+        /^http:\/\/192\.168\.[0-9.]+:\d+$/.test(origin);
+      return cb(null, ok);
+    },
     credentials: true,
   })
 );
@@ -354,20 +370,24 @@ app.post("/api/unlock", (req, res) => {
   const match = allowed.some((p) => p === candidate);
   if (match) {
     attempts.set(ip, { count: 0, lockoutUntil: 0 });
-    // Set signed session cookie if secret configured (parity with serverless fn)
+    // Set signed session cookie if secret configured
     const secret = process.env.UNLOCK_SESSION_SECRET || "";
     const ttl = Number(process.env.UNLOCK_SESSION_TTL || 86400);
     if (secret) {
-      const now = Math.floor(Date.now() / 1000);
-      const payload = Buffer.from(JSON.stringify({ iat: now, ip })).toString(
-        "base64url"
-      );
-      const h = crypto
-        .createHmac("sha256", secret)
-        .update(payload)
-        .digest("base64url");
-      const token = `${payload}.${h}`;
-      res.setHeader("Set-Cookie", makeCookie("skippy_session", token, ttl));
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const payload = Buffer.from(JSON.stringify({ iat: now, ip })).toString(
+          "base64url"
+        );
+        const sig = crypto
+          .createHmac("sha256", secret)
+          .update(payload)
+          .digest("base64url");
+        const token = `${payload}.${sig}`;
+        res.setHeader("Set-Cookie", makeCookie("skippy_session", token, ttl));
+      } catch (e) {
+        console.warn("[unlock] failed to set session cookie:", e);
+      }
     }
     return res.json({ ok: true });
   }

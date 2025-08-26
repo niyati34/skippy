@@ -1,6 +1,5 @@
 // AI client using OpenRouter only (via proxy)
 // Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
-
 // Client model override (optional). If not set, the server decides.
 // At runtime, a user can set localStorage.clientModel to override without rebuild.
 const ENV_MODEL = (import.meta as any)?.env?.VITE_OPENROUTER_MODEL || "";
@@ -20,7 +19,7 @@ export interface ChatMessage {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type CallOptions = { retries?: number; model?: string } | number | undefined;
+type CallOptions = { retries?: number; model?: string; timeoutMs?: number } | number | undefined;
 
 export async function callOpenRouter(
   messages: ChatMessage[],
@@ -66,6 +65,15 @@ export async function callOpenRouter(
     }):`,
     candidates
   );
+  // timeout resolution (env -> option -> default)
+  const envTimeout = Number(
+    (window as any).VITE_AI_TIMEOUT_MS || (import.meta as any)?.env?.VITE_AI_TIMEOUT_MS || 0
+  );
+  const optTimeout =
+    optionsOrRetries && typeof optionsOrRetries === "object"
+      ? Number((optionsOrRetries as any).timeoutMs || 0)
+      : 0;
+  const effectiveTimeout = (optTimeout || envTimeout || 20000) as number;
 
   const tryCall = async (url: string) => {
     const resp = await fetch(url, {
@@ -104,24 +112,32 @@ export async function callOpenRouter(
       ""
     );
   };
-
-  // Try each candidate with simple retries per endpoint
-  let lastErr: any = null;
+  // Try each candidate with simple timeout at fetch-level via AbortController
   for (const url of candidates) {
     for (let i = 0; i < retries; i++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), effectiveTimeout);
       try {
-        const out = await tryCall(url);
-        if (out) return out;
-        throw new Error("Empty response");
-      } catch (e) {
-        lastErr = e;
-        console.warn(`API call attempt ${i + 1} failed for ${url}:`, e);
-        if (i < retries - 1) await delay(200 * (i + 1));
+        const result = await tryCall(url);
+        clearTimeout(timer);
+        if (result && typeof result === "string") return result;
+      } catch (err) {
+        clearTimeout(timer);
+        console.warn(`[AI] attempt ${i + 1} failed @ ${url}:`, err);
+        await delay(200);
       }
     }
   }
-  // Surface final error for visibility
-  throw lastErr ?? new Error("All endpoints failed");
+
+  console.error("All AI endpoints failed, using fallback response");
+  // Return a structured empty response based on the expected output
+  if (messages.some((m) => m.content.includes("flashcard"))) {
+    return "[]";
+  }
+  if (messages.some((m) => m.content.includes("notes"))) {
+    return "[]";
+  }
+  return ""; // Default empty response
 }
 
 // -------- Automatic model routing --------
@@ -1333,7 +1349,6 @@ function extractSourceTopics(content: string): string[] {
       line.match(/[A-Z]/) && // Contains uppercase letters
       !line.endsWith(".")
     ) {
-      // Doesn't end with period
       topics.add(line);
     }
   }
@@ -2185,9 +2200,49 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
     });
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
-    const clean = (response || "").trim().replace(/```json\n?|\n?```/g, "");
-    const parsed = JSON.parse(clean);
-    const items = Array.isArray(parsed) ? parsed : [];
+    // Normalize various provider response shapes into a JSON array string
+    const normalizeToArrayJson = (text: string): string | null => {
+      if (!text) return null;
+      const clean = text.trim().replace(/```json\n?|\n?```/g, "");
+      // If it's already a JSON array, return as-is
+      if (clean.startsWith("[") && clean.endsWith("]")) return clean;
+      // Try to parse as object (OpenRouter wrapper) and extract content/text
+      try {
+        const obj = JSON.parse(clean);
+        const choice0 = obj?.choices?.[0] || {};
+        const content =
+          choice0?.message?.content ||
+          choice0?.text ||
+          obj?.output_text ||
+          obj?.content ||
+          "";
+        const embedded = (content || "").trim();
+        if (embedded) {
+          // If embedded contains an array, pull that out
+          const m = embedded.match(/\[[\s\S]*\]/);
+          if (m) return m[0];
+          // Sometimes providers return objects; accept an object array builder too
+          if (embedded.startsWith("[") && embedded.endsWith("]"))
+            return embedded;
+        }
+      } catch {
+        // Not an object; try to extract array from free text
+        const m = clean.match(/\[[\s\S]*\]/);
+        if (m) return m[0];
+      }
+      return null;
+    };
+
+    const arrJson = normalizeToArrayJson(response);
+    let items: any[] = [];
+    if (arrJson) {
+      try {
+        const parsed = JSON.parse(arrJson);
+        if (Array.isArray(parsed)) items = parsed;
+      } catch (e) {
+        console.warn("[TIMETABLE] Failed to parse normalized array JSON:", e);
+      }
+    }
 
     const timetableClasses = items.map((item) => ({
       id: item.id || crypto.randomUUID(),
@@ -2202,6 +2257,22 @@ Focus ONLY on recurring weekly classes, not one-time events like assignments or 
       createdAt: new Date().toISOString(),
       recurring: true,
     }));
+
+    // If AI returned no items or empty, try manual enhanced fallback
+    if (!timetableClasses.length) {
+      console.warn(
+        "[TIMETABLE] AI returned 0 classes; running manual fallback parser..."
+      );
+      const fallbackClasses = extractTimetableManually(content, source);
+      if (fallbackClasses.length) {
+        console.log(
+          "🗓️ [TIMETABLE] Enhanced fallback extraction:",
+          fallbackClasses
+        );
+        generateTimetableSummary(fallbackClasses);
+        return fallbackClasses;
+      }
+    }
 
     console.log("🗓️ [TIMETABLE] Extracted classes:", timetableClasses);
 

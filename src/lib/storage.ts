@@ -1,5 +1,98 @@
 // Local Storage utilities for persistent data
 
+// ---------- Buddy memory ----------
+export interface BuddyMemory {
+  name?: string;
+  tone?: "friendly" | "formal";
+  topics: string[];
+  messageCount: number;
+  lastSeen?: string;
+  lastTasks?: Array<{ when: string; type: string; summary: string }>; // light activity log
+  preferences?: {
+    studyTimes?: string[];
+  };
+}
+
+export const BuddyMemoryStorage = {
+  load(): BuddyMemory {
+    try {
+      const raw = localStorage.getItem("skippy-buddy-memory");
+      if (!raw) return { topics: [], messageCount: 0 };
+      const parsed: any = JSON.parse(raw) || {};
+      const topics = Array.isArray(parsed.topics) ? parsed.topics : [];
+      const messageCount = Number(parsed.messageCount) || 0;
+      const base: BuddyMemory = { topics: [], messageCount: 0 };
+      const merged = { ...base, ...parsed } as BuddyMemory;
+      merged.topics = topics;
+      merged.messageCount = messageCount;
+      return merged;
+    } catch {
+      return { topics: [], messageCount: 0 };
+    }
+  },
+  save(mem: BuddyMemory) {
+    try {
+      localStorage.setItem("skippy-buddy-memory", JSON.stringify(mem));
+    } catch (e) {
+      console.warn("BuddyMemoryStorage.save failed", e);
+    }
+  },
+  update(delta: Partial<BuddyMemory>) {
+    const current = this.load();
+    const next: BuddyMemory = {
+      ...current,
+      ...delta,
+      topics: Array.from(
+        new Set([...(current.topics || []), ...((delta.topics as string[]) || [])])
+      ).slice(0, 50),
+      messageCount:
+        (current.messageCount || 0) + (delta.messageCount ? delta.messageCount : 0),
+      lastSeen: new Date().toISOString(),
+      preferences: {
+        ...(current.preferences || {}),
+        ...((delta.preferences as any) || {}),
+      },
+    };
+    this.save(next);
+    return next;
+  },
+  clearActivity() {
+    const mem = this.load();
+    const next: BuddyMemory = { ...mem, lastTasks: [] };
+    this.save(next);
+    return next;
+  },
+  addTopics(newTopics: string[]) {
+    const mem = this.load();
+    const set = new Set([...(mem.topics || [])]);
+    newTopics
+      .map((t) =>
+        String(t || "")
+          .trim()
+          .toLowerCase()
+      )
+      .filter(Boolean)
+      .slice(0, 20)
+      .forEach((t) => set.add(t));
+    const next: BuddyMemory = { ...mem, topics: Array.from(set).slice(0, 50) };
+    this.save(next);
+    return next;
+  },
+  logTask(type: string, summary: string) {
+    const mem = this.load();
+    const log = mem.lastTasks ? [...mem.lastTasks] : [];
+    log.unshift({ when: new Date().toISOString(), type, summary });
+    const next: BuddyMemory = {
+      ...mem,
+      lastSeen: new Date().toISOString(),
+      messageCount: (mem.messageCount || 0) + 1,
+      lastTasks: log.slice(0, 20),
+    };
+    this.save(next);
+    return next;
+  },
+};
+
 export interface StoredFlashcard {
   id: string;
   question: string;
@@ -62,17 +155,7 @@ export interface DayWiseTimetable {
   Sunday: TimetableClass[];
 }
 
-// Buddy memory and preferences
-export interface BuddyMemory {
-  name?: string; // how the user prefers to be addressed
-  tone?: "friendly" | "formal"; // preferred tone
-  topics: string[]; // known interests/subjects
-  messageCount: number; // total interactions
-  lastSeen?: string; // ISO timestamp
-  preferences?: {
-    studyTimes?: string[]; // e.g., ["morning", "evening"]
-  };
-}
+// Buddy memory and preferences (see BuddyMemory interface above)
 
 // Flashcards Storage
 export const FlashcardStorage = {
@@ -129,12 +212,14 @@ export const FlashcardStorage = {
   },
 
   upsertSrs: (id: string, srs: import("./srs").SrsState) => {
-    const all = FlashcardStorage.load();
-    const idx = all.findIndex((c) => c.id === id);
+    const existing = FlashcardStorage.load();
+    const idx = existing.findIndex((c) => c.id === id);
     if (idx >= 0) {
-      all[idx] = { ...all[idx], srs };
-      FlashcardStorage.save(all);
+      existing[idx] = { ...existing[idx], srs };
+      FlashcardStorage.save(existing);
+      return existing[idx];
     }
+    return null;
   },
 };
 
@@ -458,42 +543,7 @@ export const TimetableStorage = {
   },
 };
 
-// Buddy Memory Storage
-export const BuddyMemoryStorage = {
-  load(): BuddyMemory {
-    try {
-      const raw = localStorage.getItem("skippy-buddy-memory");
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return { topics: [], messageCount: 0 };
-  },
-  save(mem: BuddyMemory) {
-    try {
-      localStorage.setItem("skippy-buddy-memory", JSON.stringify(mem));
-    } catch (e) {
-      console.warn("BuddyMemory save failed", e);
-    }
-  },
-  update(delta: Partial<BuddyMemory>) {
-    const current = BuddyMemoryStorage.load();
-    const next: BuddyMemory = {
-      ...current,
-      ...delta,
-      topics: Array.from(
-        new Set([
-          ...(current.topics || []),
-          ...((delta.topics as string[]) || []),
-        ])
-      ),
-      messageCount:
-        (current.messageCount || 0) +
-        (delta.messageCount ? delta.messageCount : 0),
-      lastSeen: new Date().toISOString(),
-    };
-    BuddyMemoryStorage.save(next);
-    return next;
-  },
-};
+// BuddyMemoryStorage methods defined above
 
 // Calendar utils: detect time overlaps within a single day
 export type CalendarConflict = {

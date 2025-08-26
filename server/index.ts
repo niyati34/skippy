@@ -7,7 +7,29 @@ dotenv.config({ path: ".env.local" });
 dotenv.config();
 
 const app = (express as any)();
-app.use(cors());
+// CORS: allow dev origins and credentials (cookies)
+const allowedOrigins = new Set(
+  [
+    "http://localhost:8080",
+    "http://localhost:8081",
+    "http://localhost:5173",
+    process.env.PUBLIC_URL || "",
+  ].filter(Boolean)
+);
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      const ok =
+        allowedOrigins.has(origin) ||
+        /^http:\/\/localhost:\d+$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) ||
+        /^http:\/\/192\.168\.[0-9.]+:\d+$/.test(origin);
+      return cb(null, ok);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "2mb" }));
 
 // OpenRouter configuration
