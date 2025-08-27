@@ -435,12 +435,20 @@ export class FlashcardAgent implements Agent {
       console.log("✨ [FlashcardAgent] Enhanced content:", content);
     }
 
+    // Extract optional difficulty and target count from text
+    const difficulty = (text.match(/\b(beginner|easy|intermediate|advanced|hard)\b/i) || [])[1]?.toLowerCase();
+    const countStr = (text.match(/\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i) || [])[1];
+    const targetCount = countStr ? Math.max(1, Math.min(100, Number(countStr))) : undefined;
+
     try {
       console.log(
         "🔄 [FlashcardAgent] Calling generateFlashcards with content length:",
         content.length
       );
-      const cards = await generateFlashcards(content);
+      const cards = await generateFlashcards(content, {
+        count: targetCount,
+        difficulty,
+      });
       console.log("📋 [FlashcardAgent] Generated cards:", cards?.length || 0);
       let mapped = (cards || []).map((c: any) => ({
         question: c.question || c.front || "Question",
@@ -484,6 +492,22 @@ export class FlashcardAgent implements Agent {
             category: cat || "General",
           },
         ];
+      }
+
+      // If a target count was requested and we have fewer cards, pad heuristically
+      if (targetCount && mapped.length < targetCount) {
+        const topic =
+          (content.match(/about\s+([^\n.,;]+)/i) || [])[1] ||
+          (text || "the topic").trim();
+        const base = topic.replace(/\s+/g, " ").trim();
+        const padCount = Math.min(100, targetCount) - mapped.length;
+        for (let i = 1; i <= padCount; i++) {
+          mapped.push({
+            question: `Advanced check ${i}: A key concept about ${base}?`,
+            answer: `A concise, accurate point about ${base}.`,
+            category: (base.split(" ")[0] || "General").replace(/[^A-Za-z0-9]/g, ""),
+          });
+        }
       }
       const saved = FlashcardStorage.addBatch(
         mapped as Omit<StoredFlashcard, "id" | "createdAt">[]
@@ -596,8 +620,44 @@ export class CommandAgent implements Agent {
   private parseCommands(
     text: string
   ): Array<{ action: string; target: string; params: any }> {
-  const commands: Array<{ action: string; target: string; params: any }> = [];
-  const seenActions = new Set<string>();
+    const commands: Array<{ action: string; target: string; params: any }> = [];
+    const seenActions = new Set<string>();
+
+    // JSON-first parsing: if input contains a JSON object/array describing commands
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          const actionRaw = (item.action || item.type || "").toString().toLowerCase();
+          const target = (item.target || "content").toString();
+          const content =
+            item.content || item.topic || item.text || item.query || "";
+          const actionMap: Record<string, string> = {
+            flashcards: "create_flashcards",
+            notes: "create_notes",
+            schedule: "create_schedule",
+            create: "create_notes",
+            make: "create_notes",
+            generate: "create_notes",
+          };
+          const action = actionMap[actionRaw] || actionRaw || "";
+          if (!action) continue;
+          const key = `${action}`;
+          if (seenActions.has(key)) continue;
+          seenActions.add(key);
+          const params: any = { content };
+          if (item.count) params.count = Number(item.count);
+          if (item.difficulty)
+            params.difficulty = String(item.difficulty).toLowerCase();
+          commands.push({ action, target, params });
+        }
+      }
+    } catch (e) {
+      console.warn("[CommandAgent] JSON parse failed, falling back to regex.");
+    }
 
     // Multi-step command patterns
     const patterns = [
@@ -679,15 +739,15 @@ export class CommandAgent implements Agent {
       },
     ];
 
-  for (const pattern of patterns) {
+    for (const pattern of patterns) {
       const match = text.match(pattern.regex);
       if (match) {
         // Prefer the last capture group as primary content/topic
         const content = (match[match.length - 1] || "").trim();
-    const key = `${pattern.action}`;
-    if (seenActions.has(key)) continue;
-    seenActions.add(key);
-    commands.push({
+        const key = `${pattern.action}`;
+        if (seenActions.has(key)) continue;
+        seenActions.add(key);
+        commands.push({
           action: pattern.action,
           target: pattern.target,
           params: { content },
@@ -697,8 +757,13 @@ export class CommandAgent implements Agent {
 
     // If nothing matched but the user mentioned flashcards, create a default command
     if (commands.length === 0 && /flashcards?/i.test(text)) {
-      const topic = (text.match(/(?:from|about|on|for)\s+([^,.;\n]+)/i) || [])[1] || "";
-      commands.push({ action: "create_flashcards", target: "content", params: { content: topic } });
+      const topic =
+        (text.match(/(?:from|about|on|for)\s+([^,.;\n]+)/i) || [])[1] || "";
+      commands.push({
+        action: "create_flashcards",
+        target: "content",
+        params: { content: topic },
+      });
     }
     return commands;
   }
@@ -746,13 +811,17 @@ export class CommandAgent implements Agent {
         }
         let enhancedInput = { ...input };
 
-        if (topic && topic.length < 80) {
-          // Preserve user modifiers like difficulty and count
-          const diff = (input.text || "").match(/\b(beginner|easy|intermediate|advanced|hard)\b/i)?.[1];
-          const cnt = (input.text || "").match(/\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i)?.[1];
+        if (topic && topic.length < 120) {
+          // Preserve user modifiers like difficulty and count (from text or structured params)
+          const diff =
+            command.params.difficulty ||
+            (input.text || "").match(/\b(beginner|easy|intermediate|advanced|hard)\b/i)?.[1];
+          const cnt =
+            command.params.count ||
+            (input.text || "").match(/\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i)?.[1];
           const mods = [
-            diff ? ` Make it ${diff.toLowerCase()}.` : "",
-            cnt ? ` Aim for around ${cnt} cards.` : "",
+            diff ? ` Make it ${String(diff).toLowerCase()}.` : "",
+            cnt ? ` Create exactly ${cnt} cards.` : "",
           ].join("");
           enhancedInput.text = `Please create flashcards about ${topic}. Include key concepts, definitions, and important information about ${topic}.${mods}`;
         }

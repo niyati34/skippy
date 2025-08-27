@@ -2756,14 +2756,15 @@ export async function generateFlashcards(
   );
 
   // A simpler, more direct prompt
-  const targetCount = Math.min(Math.max(Number(options?.count || 0) || 0, 0), 100) || undefined;
+  const targetCount =
+    Math.min(Math.max(Number(options?.count || 0) || 0, 0), 100) || undefined;
   const difficulty = (options?.difficulty || "").toString().toLowerCase();
   const difficultyHint = difficulty
     ? `Aim for ${difficulty} difficulty in phrasing and depth.`
     : "";
 
   const countHint = targetCount
-    ? `Target around ${targetCount} flashcards. If that many is too long for the response, return as many as possible in a clean array.`
+    ? `Return exactly ${targetCount} flashcards. Do not return fewer than this number. If the answer risks being cut off, still ensure the JSON is valid and contains exactly ${targetCount} items.`
     : `Create a focused set of 6-12 flashcards to cover the essentials.`;
 
   const systemPrompt = `
@@ -2788,7 +2789,7 @@ CRITICAL INSTRUCTIONS:
       ],
       {
         retries: 2,
-  model: pickModel("flashcards", content),
+        model: pickModel("flashcards", content),
       }
     );
 
