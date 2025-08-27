@@ -443,11 +443,24 @@ export class FlashcardAgent implements Agent {
       );
       const cards = await generateFlashcards(content);
       console.log("📋 [FlashcardAgent] Generated cards:", cards?.length || 0);
-      const mapped = (cards || []).map((c: any) => ({
+      let mapped = (cards || []).map((c: any) => ({
         question: c.question || c.front || "Question",
         answer: c.answer || c.back || "Answer",
         category: c.category || "General",
       }));
+      if (!mapped.length) {
+        const topicMatch = (content.match(/about\s+([^\n.,;]+)/i) || [])[1] || (text || "the topic").trim();
+        const t = topicMatch.replace(/\s+/g, " ").trim();
+        const cat = t.split(" ")[0].replace(/[^A-Za-z0-9]/g, "");
+        console.warn("⚠️ [FlashcardAgent] AI returned no cards, using heuristic fallback for:", t);
+        mapped = [
+          { question: `What is ${t}?`, answer: `${t} in one sentence with a simple example.`, category: cat || "General" },
+          { question: `List 2-3 applications of ${t}.`, answer: `e.g., A, B, and sometimes C.`, category: cat || "General" },
+          { question: `Give a basic example of ${t}.`, answer: `Describe a small real-world use case showing ${t}.`, category: cat || "General" },
+          { question: `One key benefit of ${t}?`, answer: `Improved efficiency/accuracy vs. traditional methods (context-dependent).`, category: cat || "General" },
+          { question: `One limitation of ${t}?`, answer: `Data quality, cost, or interpretability can be issues.`, category: cat || "General" },
+        ];
+      }
       const saved = FlashcardStorage.addBatch(
         mapped as Omit<StoredFlashcard, "id" | "createdAt">[]
       );
@@ -482,19 +495,23 @@ export class FunAgent implements Agent {
     const match =
       (text.match(/(story|quiz|poem|song|rap|riddle|game)/i) || [])[1] ||
       "story";
+    const kind = match.toLowerCase();
 
     try {
-      const out = await generateFunLearning(text, match.toLowerCase());
-      BuddyMemoryStorage.logTask("fun", `Created ${match}`);
+      const out = await generateFunLearning(
+        text || "Make it educational",
+        kind
+      );
+      BuddyMemoryStorage.logTask("fun", `Created ${kind}`);
       return {
-        summary: `Created a fun ${match} for you! Check the Fun Learning section to enjoy it.`,
-        artifacts: { fun: { type: match.toLowerCase(), content: out } },
+        summary: `Created a fun ${kind} for you! Check the Fun Learning section to enjoy it.`,
+        artifacts: { fun: { type: kind, content: out } },
       };
     } catch (error) {
       console.error("Fun content generation failed:", error);
       return {
         summary:
-          "I had trouble creating that fun content. Let me try something else or you can ask for a different type of learning activity.",
+          "I had trouble creating that fun content. Try another type (story, quiz, poem) or provide a short topic.",
       };
     }
   }
