@@ -421,7 +421,15 @@ export class FlashcardAgent implements Agent {
 
     // If text is too short, try to expand it with basic topic context
     let content = text;
-    if (content.length < 20 && content.trim()) {
+    // If command-like phrase present, extract the topic and enrich
+    const cmdMatch = content.match(
+      /(?:make|create|generate)\s+flashcards?\s+(?:from|about|on|for)\s+([^\n.,;]+)/i
+    );
+    if (cmdMatch) {
+      const topic = cmdMatch[1].trim();
+      content = `Please create flashcards about ${topic}. Include key concepts, definitions, and important information about ${topic}.`;
+      console.log("✨ [FlashcardAgent] Enriched from command phrase:", content);
+    } else if (content.length < 20 && content.trim()) {
       // Enhance short topics like "AI" with some context
       const topic = content.trim();
       content = `Please create flashcards about ${topic}. Include key concepts, definitions, and important information about ${topic}.`;
@@ -621,10 +629,12 @@ export class CommandAgent implements Agent {
     for (const pattern of patterns) {
       const match = text.match(pattern.regex);
       if (match) {
+        // Prefer the last capture group as primary content/topic
+        const content = (match[match.length - 1] || "").trim();
         commands.push({
           action: pattern.action,
           target: pattern.target,
-          params: { content: match.slice(1).join(" ") },
+          params: { content },
         });
       }
     }
@@ -665,16 +675,17 @@ export class CommandAgent implements Agent {
         };
       }
       case "create_flashcards": {
-        // Extract topic from the command and enhance if needed
-        const topic = command.params.content
-          ?.replace(
-            /^(make|create)\s+(flashcards?)\s+(?:from|about|on)\s+/i,
-            ""
-          )
-          .trim();
+        // Extract topic from params or fallback to parsing input text
+        let topic = (command.params.content || "").trim();
+        if (!topic || /\b(make|create|generate)\b/i.test(topic)) {
+          const m = (input.text || "").match(
+            /(?:from|about|on|for)\s+([^,.;\n]+)/i
+          );
+          if (m) topic = m[1].trim();
+        }
         let enhancedInput = { ...input };
 
-        if (topic && topic.length < 50) {
+        if (topic && topic.length < 80) {
           // Enhance short topics with AI-friendly content
           enhancedInput.text = `Please create flashcards about ${topic}. Include key concepts, definitions, and important information about ${topic}.`;
         }
