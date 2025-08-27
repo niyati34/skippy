@@ -43,7 +43,15 @@ import {
   generateNotesFromContent,
   extractTextFromImage,
 } from "@/services/openrouter";
-import { Orchestrator, BuddyAgent, NotesAgent, PlannerAgent, FlashcardAgent, FunAgent, createDefaultOrchestrator } from "@/lib/agent";
+import {
+  Orchestrator,
+  BuddyAgent,
+  NotesAgent,
+  PlannerAgent,
+  FlashcardAgent,
+  FunAgent,
+  createDefaultOrchestrator,
+} from "@/lib/agent";
 import { parseIntent } from "@/lib/intent";
 import {
   processUploadedFile,
@@ -57,7 +65,6 @@ import {
   TimetableStorage,
   FileHistoryStorage,
 } from "@/lib/storage";
-import { createDefaultOrchestrator } from "@/lib/agent";
 import { BuddyMemoryStorage } from "@/lib/storage";
 
 interface DashboardAIProps {
@@ -127,6 +134,8 @@ const DashboardAI = ({
   const [contentAnalysis, setContentAnalysis] = useState<any>(null);
   const [fileAnalysis, setFileAnalysis] = useState<any>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [useIntentMode, setUseIntentMode] = useState<boolean>(true); // New: toggle for intent-based processing
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -264,9 +273,110 @@ const DashboardAI = ({
     const userMessage: ChatMessage = { role: "user", content: messageText };
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
+
+    // Check if there's a pending file and if the message contains intent
+    if (pendingFile && useIntentMode) {
+      const lowerText = messageText.toLowerCase();
+      if (
+        lowerText.includes("flashcard") ||
+        lowerText.includes("cards") ||
+        lowerText.includes("notes") ||
+        lowerText.includes("note") ||
+        lowerText.includes("schedule") ||
+        lowerText.includes("timetable") ||
+        lowerText.includes("class")
+      ) {
+        setIsLoading(true);
+        // Process with simple logic here directly without external function
+        try {
+          const { extractFileContent } = await import(
+            "@/services/fileProcessor"
+          );
+          const content = await extractFileContent(pendingFile);
+
+          if (content && content.trim()) {
+            let message = "";
+            if (
+              lowerText.includes("flashcard") ||
+              lowerText.includes("cards")
+            ) {
+              message = `🎯 Creating flashcards from "${pendingFile.name}"...`;
+            } else if (
+              lowerText.includes("notes") ||
+              lowerText.includes("note")
+            ) {
+              message = `📝 Creating notes from "${pendingFile.name}"...`;
+            } else {
+              message = `📅 Extracting schedule from "${pendingFile.name}"...`;
+            }
+
+            const processingMessage: ChatMessage = {
+              role: "assistant",
+              content: message,
+            };
+            setMessages((prev) => [...prev, processingMessage]);
+
+            // Use the existing automatic processing but the user chose the intent
+            const { processUploadedFile } = await import(
+              "@/services/fileProcessor"
+            );
+            const result = await processUploadedFile(pendingFile);
+
+            if (result.success) {
+              // Filter results based on intent
+              if (
+                lowerText.includes("flashcard") ||
+                lowerText.includes("cards")
+              ) {
+                if (result.flashcards.length > 0) {
+                  onFlashcardsUpdate(result.flashcards);
+                  const successMsg: ChatMessage = {
+                    role: "assistant",
+                    content: `✅ Created ${result.flashcards.length} flashcards from "${pendingFile.name}"!`,
+                  };
+                  setMessages((prev) => [...prev, successMsg]);
+                }
+              } else if (
+                lowerText.includes("notes") ||
+                lowerText.includes("note")
+              ) {
+                if (result.notes.length > 0) {
+                  onNotesUpdate(result.notes);
+                  const successMsg: ChatMessage = {
+                    role: "assistant",
+                    content: `✅ Created ${result.notes.length} notes from "${pendingFile.name}"!`,
+                  };
+                  setMessages((prev) => [...prev, successMsg]);
+                }
+              } else {
+                if (result.scheduleItems.length > 0) {
+                  onScheduleUpdate(result.scheduleItems);
+                  const successMsg: ChatMessage = {
+                    role: "assistant",
+                    content: `✅ Created ${result.scheduleItems.length} schedule items from "${pendingFile.name}"!`,
+                  };
+                  setMessages((prev) => [...prev, successMsg]);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          const errorMsg: ChatMessage = {
+            role: "assistant",
+            content: `❌ Sorry, I couldn't process "${pendingFile.name}". Please try again.`,
+          };
+          setMessages((prev) => [...prev, errorMsg]);
+        } finally {
+          setPendingFile(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+    }
+
     setIsLoading(true);
 
-  try {
+    try {
       // 1) Try centralized orchestrator (now wired to real tools)
       try {
         const result = await orchestrator.handle({ text: messageText });
@@ -318,9 +428,9 @@ const DashboardAI = ({
         }
       } catch {}
 
-  // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
-  const intentHandled = await handleIntentCommand(messageText);
-  if (intentHandled) {
+      // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
+      const intentHandled = await handleIntentCommand(messageText);
+      if (intentHandled) {
         setIsLoading(false);
         setInputText("");
         return;
@@ -941,7 +1051,25 @@ const DashboardAI = ({
     };
     setMessages((prev) => [...prev, userMessage]);
 
-    // Start processing with new service
+    // Check if we're in intent mode
+    if (useIntentMode) {
+      // Store file for pending processing and ask for intent
+      setPendingFile(file);
+
+      // Ask for intent instead of processing automatically
+      const intentMessage: ChatMessage = {
+        role: "assistant",
+        content: `📁 I've received "${file.name}"! What would you like me to do with it?\n\nPlease tell me:\n• "create flashcards" - to generate study cards\n• "make notes" - to create organized notes\n• "extract schedule" - to get timetable/calendar info\n\nJust type your choice and I'll process the file accordingly! 🎯`,
+      };
+      setMessages((prev) => [...prev, intentMessage]);
+
+      speakMessageWithElevenLabs(
+        "I've received your file! Please tell me what you'd like me to do with it - create flashcards, make notes, or extract schedule information."
+      );
+      return; // Exit early, don't process automatically
+    }
+
+    // Original automatic processing (when intent mode is off)
     setIsLoading(true);
     speakMessageWithElevenLabs(
       "I'll analyze this file and create flashcards and notes for you! Give me a moment..."
