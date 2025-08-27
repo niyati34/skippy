@@ -73,7 +73,6 @@ function plain(text: string): string {
 function extractTopics(text?: string): string[] {
   if (!text) return [];
   const words = (text.toLowerCase().match(/[a-z]{5,}/g) || []).slice(0, 12);
-  // de-dupe and keep first N
   return Array.from(new Set(words)).slice(0, 8);
 }
 
@@ -449,16 +448,41 @@ export class FlashcardAgent implements Agent {
         category: c.category || "General",
       }));
       if (!mapped.length) {
-        const topicMatch = (content.match(/about\s+([^\n.,;]+)/i) || [])[1] || (text || "the topic").trim();
+        const topicMatch =
+          (content.match(/about\s+([^\n.,;]+)/i) || [])[1] ||
+          (text || "the topic").trim();
         const t = topicMatch.replace(/\s+/g, " ").trim();
         const cat = t.split(" ")[0].replace(/[^A-Za-z0-9]/g, "");
-        console.warn("⚠️ [FlashcardAgent] AI returned no cards, using heuristic fallback for:", t);
+        console.warn(
+          "⚠️ [FlashcardAgent] AI returned no cards, using heuristic fallback for:",
+          t
+        );
         mapped = [
-          { question: `What is ${t}?`, answer: `${t} in one sentence with a simple example.`, category: cat || "General" },
-          { question: `List 2-3 applications of ${t}.`, answer: `e.g., A, B, and sometimes C.`, category: cat || "General" },
-          { question: `Give a basic example of ${t}.`, answer: `Describe a small real-world use case showing ${t}.`, category: cat || "General" },
-          { question: `One key benefit of ${t}?`, answer: `Improved efficiency/accuracy vs. traditional methods (context-dependent).`, category: cat || "General" },
-          { question: `One limitation of ${t}?`, answer: `Data quality, cost, or interpretability can be issues.`, category: cat || "General" },
+          {
+            question: `What is ${t}?`,
+            answer: `${t} in one sentence with a simple example.`,
+            category: cat || "General",
+          },
+          {
+            question: `List 2-3 applications of ${t}.`,
+            answer: `e.g., A, B, and sometimes C.`,
+            category: cat || "General",
+          },
+          {
+            question: `Give a basic example of ${t}.`,
+            answer: `Describe a small real-world use case showing ${t}.`,
+            category: cat || "General",
+          },
+          {
+            question: `One key benefit of ${t}?`,
+            answer: `Improved efficiency/accuracy vs. traditional methods (context-dependent).`,
+            category: cat || "General",
+          },
+          {
+            question: `One limitation of ${t}?`,
+            answer: `Data quality, cost, or interpretability can be issues.`,
+            category: cat || "General",
+          },
         ];
       }
       const saved = FlashcardStorage.addBatch(
@@ -572,7 +596,8 @@ export class CommandAgent implements Agent {
   private parseCommands(
     text: string
   ): Array<{ action: string; target: string; params: any }> {
-    const commands: Array<{ action: string; target: string; params: any }> = [];
+  const commands: Array<{ action: string; target: string; params: any }> = [];
+  const seenActions = new Set<string>();
 
     // Multi-step command patterns
     const patterns = [
@@ -599,6 +624,17 @@ export class CommandAgent implements Agent {
         regex:
           /(make|create|generate)\s+(notes?)\s+(?:from|about|on|for)\s+(.+)/i,
         action: "create_notes",
+        target: "content",
+      },
+      // Bare flashcards phrases like "advanced flashcards from blockchain" or "40 flashcards"
+      {
+        regex: /flashcards?\s+(?:from|about|on|for)\s+(.+)/i,
+        action: "create_flashcards",
+        target: "content",
+      },
+      {
+        regex: /\b(\d{1,3})\s*flashcards?\b/i,
+        action: "create_flashcards",
         target: "content",
       },
       {
@@ -643,12 +679,15 @@ export class CommandAgent implements Agent {
       },
     ];
 
-    for (const pattern of patterns) {
+  for (const pattern of patterns) {
       const match = text.match(pattern.regex);
       if (match) {
         // Prefer the last capture group as primary content/topic
         const content = (match[match.length - 1] || "").trim();
-        commands.push({
+    const key = `${pattern.action}`;
+    if (seenActions.has(key)) continue;
+    seenActions.add(key);
+    commands.push({
           action: pattern.action,
           target: pattern.target,
           params: { content },
@@ -656,6 +695,11 @@ export class CommandAgent implements Agent {
       }
     }
 
+    // If nothing matched but the user mentioned flashcards, create a default command
+    if (commands.length === 0 && /flashcards?/i.test(text)) {
+      const topic = (text.match(/(?:from|about|on|for)\s+([^,.;\n]+)/i) || [])[1] || "";
+      commands.push({ action: "create_flashcards", target: "content", params: { content: topic } });
+    }
     return commands;
   }
 
@@ -703,8 +747,14 @@ export class CommandAgent implements Agent {
         let enhancedInput = { ...input };
 
         if (topic && topic.length < 80) {
-          // Enhance short topics with AI-friendly content
-          enhancedInput.text = `Please create flashcards about ${topic}. Include key concepts, definitions, and important information about ${topic}.`;
+          // Preserve user modifiers like difficulty and count
+          const diff = (input.text || "").match(/\b(beginner|easy|intermediate|advanced|hard)\b/i)?.[1];
+          const cnt = (input.text || "").match(/\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i)?.[1];
+          const mods = [
+            diff ? ` Make it ${diff.toLowerCase()}.` : "",
+            cnt ? ` Aim for around ${cnt} cards.` : "",
+          ].join("");
+          enhancedInput.text = `Please create flashcards about ${topic}. Include key concepts, definitions, and important information about ${topic}.${mods}`;
         }
 
         return await new FlashcardAgent().run(enhancedInput);

@@ -2746,22 +2746,35 @@ function normalizeTime(timeStr: string): string {
   return timeStr.replace(/[^\d:]/g, "") || "09:00";
 }
 
-export async function generateFlashcards(content: string): Promise<any[]> {
+export async function generateFlashcards(
+  content: string,
+  options?: { count?: number; difficulty?: string }
+): Promise<any[]> {
   console.log(
     "[DEBUG] Flashcard Generation - Content Preview:",
     content.substring(0, 500)
   );
 
   // A simpler, more direct prompt
-  const systemPrompt = `
-You are an expert at creating study materials. Based on the provided text, generate a concise set of flashcards. Each flashcard should be a simple question-and-answer pair.
+  const targetCount = Math.min(Math.max(Number(options?.count || 0) || 0, 0), 100) || undefined;
+  const difficulty = (options?.difficulty || "").toString().toLowerCase();
+  const difficultyHint = difficulty
+    ? `Aim for ${difficulty} difficulty in phrasing and depth.`
+    : "";
 
-**CRITICAL INSTRUCTIONS:**
-1. **Output ONLY a valid JSON array** of objects in your response. Do not include any other text or markdown.
-2. The structure must be: \`[{"question": "question text", "answer": "answer text", "category": "category"}]\`.
-3. If the text is not suitable for creating flashcards (e.g., it's just a timetable), return an empty array \`[]\`.
-4. Create between 3-8 flashcards maximum to avoid overwhelming the learner.
-5. Focus on key concepts, definitions, and important facts.
+  const countHint = targetCount
+    ? `Target around ${targetCount} flashcards. If that many is too long for the response, return as many as possible in a clean array.`
+    : `Create a focused set of 6-12 flashcards to cover the essentials.`;
+
+  const systemPrompt = `
+You are an expert at creating study materials. Based on the provided text, generate a set of flashcards. Each flashcard must be a simple question-and-answer pair.
+
+CRITICAL INSTRUCTIONS:
+1. Output ONLY a valid JSON array of objects in your response. Do not include any other text or markdown.
+2. The structure must be: [{"question": "question text", "answer": "answer text", "category": "category"}].
+3. If the text is not suitable for creating flashcards (e.g., it's just a timetable), return an empty array [].
+4. ${countHint}
+5. Focus on key concepts, definitions, and important facts. ${difficultyHint}
 `;
 
   try {
@@ -2775,7 +2788,7 @@ You are an expert at creating study materials. Based on the provided text, gener
       ],
       {
         retries: 2,
-        model: pickModel("flashcards", content),
+  model: pickModel("flashcards", content),
       }
     );
 
