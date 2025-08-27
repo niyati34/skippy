@@ -808,7 +808,7 @@ export class Orchestrator {
     const wantsFlash = parsed.type === "flashcards" || /flashcards?/.test(text);
     const wantsNotes = parsed.type === "notes" || /notes?/.test(text);
     const wantsSchedule =
-      parsed.type === "schedule" || 
+      parsed.type === "schedule" ||
       /(schedule|calendar|timetable|chedule|shedule|scedule)/.test(text);
     const wantsFun =
       parsed.type === "fun" ||
@@ -819,9 +819,15 @@ export class Orchestrator {
       );
     // Enhanced schedule Q&A detection - should go to BuddyAgent first
     const isScheduleQA =
-      (/\b(do\s+i\s+have|what\s+do\s+i\s+have|when\s+is|is\s+there|any\s+exam|what.*exam|exam.*when)\b/i.test(text) &&
-      /(exam|class|assignment|event|test|quiz|tomorrow|today|next|this|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(text)) ||
-      /\b(exam.*tomorrow|exam.*today|class.*tomorrow|class.*today|test.*tomorrow|test.*today)\b/i.test(text);
+      (/\b(do\s+i\s+have|what\s+do\s+i\s+have|when\s+is|is\s+there|any\s+exam|what.*exam|exam.*when)\b/i.test(
+        text
+      ) &&
+        /(exam|class|assignment|event|test|quiz|tomorrow|today|next|this|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(
+          text
+        )) ||
+      /\b(exam.*tomorrow|exam.*today|class.*tomorrow|class.*today|test.*tomorrow|test.*today)\b/i.test(
+        text
+      );
 
     // Multi-action: run selected tools in sequence and aggregate summaries
     const results: AgentResult[] = [];
