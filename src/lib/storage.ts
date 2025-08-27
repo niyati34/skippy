@@ -43,10 +43,14 @@ export const BuddyMemoryStorage = {
       ...current,
       ...delta,
       topics: Array.from(
-        new Set([...(current.topics || []), ...((delta.topics as string[]) || [])])
+        new Set([
+          ...(current.topics || []),
+          ...((delta.topics as string[]) || []),
+        ])
       ).slice(0, 50),
       messageCount:
-        (current.messageCount || 0) + (delta.messageCount ? delta.messageCount : 0),
+        (current.messageCount || 0) +
+        (delta.messageCount ? delta.messageCount : 0),
       lastSeen: new Date().toISOString(),
       preferences: {
         ...(current.preferences || {}),

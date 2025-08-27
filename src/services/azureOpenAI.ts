@@ -1,7 +1,12 @@
-// AI client using OpenRouter only (via proxy)
+// AI client using OpenRouter (via proxy) with Gemini fallback
 // Env vars (Vite): OPENROUTER_MODEL (optional; API key is server-side only)
 // Client model override (optional). If not set, the server decides.
 // At runtime, a user can set localStorage.clientModel to override without rebuild.
+import {
+  generateTimetableWithGemini,
+  generateFlashcardsWithGemini,
+} from "./geminiAI.js";
+
 const ENV_MODEL = (import.meta as any)?.env?.VITE_OPENROUTER_MODEL || "";
 function getRuntimeModel(): string {
   try {
@@ -28,6 +33,18 @@ export async function callOpenRouter(
   messages: ChatMessage[],
   optionsOrRetries?: CallOptions
 ): Promise<string> {
+  // 🚫 TEMPORARY DISABLE: Force skip OpenRouter for testing
+  const DISABLE_OPENROUTER =
+    import.meta.env.VITE_DISABLE_OPENROUTER === "true" ||
+    localStorage.getItem("disableOpenRouter") === "true";
+
+  if (DISABLE_OPENROUTER) {
+    console.log(
+      "🚫 [OPENROUTER] Temporarily disabled - skipping to force Gemini usage"
+    );
+    throw new Error("OpenRouter temporarily disabled for testing");
+  }
+
   const retries =
     typeof optionsOrRetries === "number"
       ? optionsOrRetries
@@ -129,12 +146,31 @@ export async function callOpenRouter(
       } catch (err) {
         clearTimeout(timer);
         console.warn(`[AI] attempt ${i + 1} failed @ ${url}:`, err);
+
+        // Check if this is a rate limit error and store it
+        if (
+          err instanceof Error &&
+          (err.message.includes("Rate limit exceeded") ||
+            err.message.includes("rate-limited") ||
+            err.message.includes("429") ||
+            err.message.includes("Too Many Requests"))
+        ) {
+          console.log("🚨 [AI] Rate limit detected, will try Gemini fallback");
+          throw err; // Let the calling function handle Gemini fallback
+        }
+
         await delay(200);
       }
     }
   }
 
+  // Check if any attempt had rate limit errors
+  console.error("All AI endpoints failed, checking for rate limits...");
+
+  // If we're here, all attempts failed. Check if it was due to rate limits
+  // The error would have been thrown above if it was a rate limit issue
   console.error("All AI endpoints failed, using fallback response");
+
   // Return a structured empty response based on the expected output
   if (messages.some((m) => m.content.includes("flashcard"))) {
     return "[]";
@@ -178,9 +214,10 @@ function pickModel(kind: string, sample?: string): string {
       "meta-llama/llama-3.1-8b-instruct:free",
     ],
     timetable: [
-      "mistralai/mistral-7b-instruct:free", // best for structured parsing
-      "microsoft/wizardlm-2-8x22b:free",
-      "meta-llama/llama-3.1-8b-instruct:free",
+      "deepseek/deepseek-r1-0528:free", // Match your .env.local setting
+      "qwen/qwen3-coder:free", // Good for structured parsing
+      "mistralai/mistral-7b-instruct:free", // Reliable fallback
+      "meta-llama/llama-3.1-8b-instruct:free", // Backup option
     ],
     flashcards: [
       "mistralai/mistral-7b-instruct:free", // instruction-tuned, clean JSON, supports system prompts
@@ -190,8 +227,14 @@ function pickModel(kind: string, sample?: string): string {
     fun: [
       // language-aware choice (avoid Google models for system prompt compatibility)
       ...(isIndic
-        ? ["mistralai/mistral-7b-instruct:free", "microsoft/wizardlm-2-8x22b:free"]
-        : ["mistralai/mistral-7b-instruct:free", "microsoft/wizardlm-2-8x22b:free"]),
+        ? [
+            "mistralai/mistral-7b-instruct:free",
+            "microsoft/wizardlm-2-8x22b:free",
+          ]
+        : [
+            "mistralai/mistral-7b-instruct:free",
+            "microsoft/wizardlm-2-8x22b:free",
+          ]),
       "meta-llama/llama-3.1-8b-instruct:free",
     ],
   };
@@ -2160,102 +2203,178 @@ export async function generateTimetableFromContent(
   content: string,
   source: string = "PDF Upload"
 ): Promise<any[]> {
-  console.log("🗓️ [TIMETABLE] Extracting timetable with expert-level parsing...");
+  console.log(
+    "🗓️ [TIMETABLE] Extracting timetable with expert-level parsing..."
+  );
 
   // 1. Aggressive Pre-processing to clean the input data
-  const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
-  const cleanedContent = content
-    .split('\n')
-    // Remove irrelevant lines and headers/footers
-    .filter(line => {
+  const DAYS = [
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "SUNDAY",
+  ];
+  // Step A: remove common header phrases without dropping entire lines
+  const headerStripped = (content || "")
+    .replace(/FACULTY OF [^\n]+/gi, "")
+    .replace(/DEPARTMENT OF [^\n]+/gi, "")
+    .replace(/CLASS\s*ROOM[:-]\s*[^\n]+/gi, "")
+    .replace(/WITH\s*EFFECT\s*FROM[^\n]*/gi, "")
+    .replace(/CLASS COORDINATOR[^\n]*/gi, "")
+    .replace(/\bTEA\s*BREAK\b/gi, "")
+    .replace(/\bALL\b/gi, "");
+
+  // Step B: inject boundaries before known day names and time ranges so we can split reliably
+  const withBoundaries = headerStripped
+    .replace(
+      /\b(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\b/gi,
+      "\n$1\n"
+    )
+    .replace(/(\d{1,2}:\d{2}\s*(?:to|-|–|—|~)\s*\d{1,2}:\d{2})/gi, "\n$1\n")
+    .replace(/\s+\n/g, "\n");
+
+  // Step C: split and keep relevant fragments; avoid over-filtering single long lines
+  let cleanedContent = withBoundaries
+    .split(/\n+/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((line) => {
+      if (!line) return false;
       const upperLine = line.toUpperCase();
-      const isDay = DAYS.some(day => upperLine.includes(day));
+      const isDay = DAYS.some((day) => upperLine.includes(day));
       const hasTime = /\d{1,2}:\d{2}/.test(line);
-      const isSubjectLine = /[A-Z]{2,}/.test(line); // Heuristic for subject codes
-      return (isDay || hasTime || isSubjectLine) && !upperLine.includes("FACULTY") && !upperLine.includes("DEPARTMENT");
+      const isSubjectLike =
+        /(UI\/?UX|BT|NLP|DEV|AI|CD|DWDM|MP1|LAB|LECTURE)/i.test(line);
+      const isRoomLike = /\bM[ABC]\d{3}(?:-[A-Z])?\b/i.test(line);
+      // do not exclude lines just because they still contain leftover headers; we already stripped most above
+      return isDay || hasTime || isSubjectLike || isRoomLike || line.length > 6;
     })
-    .map(line => line.replace(/\s+/g, ' ').trim()) // Normalize spacing
-    .join('\n');
+    .join("\n");
+
+  // Step D: rescue fallback — if too short, extract windows around time ranges from original content
+  if (!cleanedContent || cleanedContent.length < 50) {
+    console.warn(
+      "[TIMETABLE] Cleaned content too short; applying rescue segmentation"
+    );
+    const windows: string[] = [];
+    const src = content || "";
+    const timeRe = /(\d{1,2}:\d{2}\s*(?:to|-|–|—|~)\s*\d{1,2}:\d{2})/gi;
+    let m: RegExpExecArray | null;
+    while ((m = timeRe.exec(src)) && windows.length < 60) {
+      const start = Math.max(0, m.index - 80);
+      const end = Math.min(src.length, m.index + m[0].length + 120);
+      windows.push(src.slice(start, end).replace(/\s+/g, " ").trim());
+    }
+    cleanedContent = windows.join("\n");
+  }
 
   const systemPrompt = `
-You are an expert timetable parser. Your task is to analyze the user-provided text, which is often messy and poorly formatted, and extract all class schedules into a clean, structured JSON array.
+You are an expert timetable parser. Extract the timetable from the provided content and convert it into a JSON format that can be directly placed in a schedule application.
 
 **CRITICAL INSTRUCTIONS:**
-1. **IGNORE ALL GARBAGE**: Discard any text that is not part of the main weekly schedule grid (e.g., headers, footers, subject lists, faculty names).
-2. **OUTPUT ONLY JSON**: Your entire response must be a single JSON array \`[]\`. Do not include any other text, explanations, or markdown.
-3. **ADHERE TO THE SCHEMA**: Each object in the array must follow this exact structure: \`{ "day": "Monday", "start_time": "HH:MM", "end_time": "HH:MM", "subject": "Subject Name", "faculty": "Faculty Initials", "room": "Room Code" }\`.
-4. **HANDLE RECURRENCE**: Assume all classes are weekly recurring events.
+1. **PARSE THE ACTUAL CONTENT**: Only extract classes from the text the user provides. Do NOT generate fake or example data.
+2. **OUTPUT ONLY JSON**: Your entire response must be a single JSON array. Do not include reasoning text in your final response.
+3. **REAL DATA ONLY**: If you cannot find real timetable data in the provided text, return an empty array [].
+
+**JSON SCHEMA**: Each class object must follow this exact structure:
+\`\`\`json
+{
+  "day": "Monday",
+  "start_time": "07:30", 
+  "end_time": "09:00",
+  "subject": "UI/UX",
+  "faculty": "PS", 
+  "room": "MA213-A",
+  "combined": "UI/UX • PS • MA213-A"
+}
+\`\`\`
+
+**EXTRACTION RULES:**
+- Extract time slots (like 07:30 to 09:00, 09:00 to 10:30)
+- Extract days (Monday, Tuesday, Wednesday, Thursday, Friday)
+- Extract subject codes (UI/UX, BT, NLP, DEV, AI, CD, DWDM, MP1, etc.)
+- Extract faculty initials (PS, SKS, AC, WS, PT, JS, RP, etc.)
+- Extract room codes (MA213-A, MB203, MC310, MA205, MA206, MA210, etc.)
+- Combine subject, faculty, and room in the "combined" field with " • " separator
+
+**TIMETABLE PATTERN RECOGNITION:**
+- Look for time formats: "07:30 to 08:30", "09:00-10:30", "14:00 to 15:30"
+- Common subjects: UI/UX, BT (Blockchain), NLP, DEV, AI, CD (Compiler Design), DWDM, MP1
+- Faculty initials are usually 2-3 letters: PS, SKS, AC, WS, PT, JS, RP
+- Room codes: MA###, MB###, MC### (like MA213-A, MB203, MC310)
 
 **EXAMPLE:**
+If text contains "07:30 to 09:00 UI/UX PS MA213-A" on MONDAY:
+Output: \`{"day": "Monday", "start_time": "07:30", "end_time": "09:00", "subject": "UI/UX", "faculty": "PS", "room": "MA213-A", "combined": "UI/UX • PS • MA213-A"}\`
 
-**messy input:**
-"TIME MONDAY TUESDAY
-07:30 to 09:00 UI/UX PS MA213-A BT SKS MB203
-DEV - WS - MA210
-LIBRARY"
-
-**desired JSON output:**
-[
-  {
-    "day": "Monday",
-    "start_time": "07:30",
-    "end_time": "09:00",
-    "subject": "UI/UX",
-    "faculty": "PS",
-    "room": "MA213-A"
-  },
-  {
-    "day": "Monday",
-    "start_time": "07:30",
-    "end_time": "09:00",
-    "subject": "DEV",
-    "faculty": "WS",
-    "room": "MA210"
-  },
-  {
-    "day": "Tuesday",
-    "start_time": "07:30",
-    "end_time": "09:00",
-    "subject": "BT",
-    "faculty": "SKS",
-    "room": "MB203"
-  },
-  {
-    "day": "Tuesday",
-    "start_time": "07:30",
-    "end_time": "09:00",
-    "subject": "LIBRARY",
-    "faculty": "N/A",
-    "room": "N/A"
-  }
-]
+**REMEMBER**: Extract ONLY from the actual content provided. Return clean JSON array that can be directly used in a schedule application.
 `;
 
   try {
-    const response = await callOpenRouter([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `Here is the timetable text:\n\n${cleanedContent}` }
-    ], {
-      retries: 2,
-      model: pickModel("timetable", content),
-    });
+    console.log("🗓️ [TIMETABLE] Content being sent to AI:");
+    console.log("📄 First 500 chars:", cleanedContent.substring(0, 500));
+    console.log(
+      "📄 Content contains 'UI/UX':",
+      cleanedContent.includes("UI/UX")
+    );
+    console.log("📄 Content contains 'BT':", cleanedContent.includes("BT"));
+    console.log("📄 Full content length:", cleanedContent.length);
+
+    const response = await callOpenRouter(
+      [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `**EXTRACT TIMETABLE FROM THIS CONTENT:**
+
+${cleanedContent}
+
+**TASK:** Extract the complete timetable and convert it into JSON format suitable for direct placement in a schedule application.
+
+**REQUIREMENTS:**
+- Extract time slots, days, subjects, faculty, and rooms from the content above
+- Return a clean JSON array where each object represents one class
+- Include a "combined" field with format: "Subject • Faculty • Room"
+- Do not separate into multiple columns - keep subject, faculty, room in one combined field
+- Return ONLY the JSON array, no explanations or formatting
+
+**OUTPUT:** JSON array of class objects that can be directly imported into a schedule.`,
+        },
+      ],
+      {
+        retries: 2,
+        model: pickModel("timetable", content),
+      }
+    );
 
     console.log("🗓️ [TIMETABLE] AI Response:", response);
 
     // Extract the JSON array from the response string
     const jsonMatch = response.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      console.error("🚨 [TIMETABLE] AI response did not contain a valid JSON array.");
+      console.error(
+        "🚨 [TIMETABLE] AI response did not contain a valid JSON array."
+      );
       return [];
     }
 
     const rawClasses = JSON.parse(jsonMatch[0]);
     console.log("🗓️ [TIMETABLE] Extracted raw classes:", rawClasses);
 
-    // Convert to our internal format
+    // 📋 LOG: Direct JSON format for schedule placement
+    console.log("\n📋 [SCHEDULE JSON] Ready for direct placement:");
+    console.log("==========================================");
+    console.log(JSON.stringify(rawClasses, null, 2));
+    console.log("==========================================\n");
+
+    // Convert to our internal format and also include raw JSON for direct schedule use
     const items = rawClasses.map((cls: any, index: number) => ({
       id: `timetable-${Date.now()}-${index}`,
-      title: cls.subject || cls.title || "Class",
+      title:
+        cls.combined ||
+        `${cls.subject || "Class"}${cls.faculty ? ` (${cls.faculty})` : ""}`,
       day: cls.day || "Monday",
       time: cls.start_time || cls.time || "09:00",
       endTime: cls.end_time || cls.endTime,
@@ -2265,6 +2384,8 @@ LIBRARY"
       source: source,
       createdAt: new Date().toISOString(),
       recurring: true,
+      // Store raw JSON for direct schedule placement
+      rawScheduleData: cls,
     }));
 
     const timetableClasses = items.map((item) => ({
@@ -2281,11 +2402,34 @@ LIBRARY"
       recurring: true,
     }));
 
-    // If AI returned no items or empty, try manual enhanced fallback
-    if (!timetableClasses.length) {
+    // If AI returned no or too few items, try Gemini fallback next
+    if (!timetableClasses.length || timetableClasses.length < 3) {
       console.warn(
-        "[TIMETABLE] AI returned 0 classes; running manual fallback parser..."
+        `[TIMETABLE] OpenRouter returned ${timetableClasses.length} classes; trying Gemini fallback...`
       );
+      try {
+        const geminiResults = await generateTimetableWithGemini(
+          content,
+          source
+        );
+        if (geminiResults && geminiResults.length > 0) {
+          console.log(
+            "✅ [TIMETABLE] Gemini fallback successful! Extracted",
+            geminiResults.length,
+            "classes"
+          );
+          generateTimetableSummary(geminiResults);
+          return geminiResults;
+        }
+      } catch (geminiErr) {
+        console.error(
+          "🚨 [TIMETABLE] Gemini fallback failed after low result:",
+          geminiErr
+        );
+      }
+
+      // If Gemini also failed/empty, try manual enhanced fallback
+      console.warn("[TIMETABLE] AI empty; running manual fallback parser...");
       const fallbackClasses = extractTimetableManually(content, source);
       if (fallbackClasses.length) {
         console.log(
@@ -2304,7 +2448,41 @@ LIBRARY"
 
     return timetableClasses;
   } catch (error) {
-    console.error("🗓️ [TIMETABLE] Extraction failed:", error);
+    console.error("🗓️ [TIMETABLE] OpenRouter extraction failed:", error);
+
+    // Check if it's a rate limit error OR disabled OpenRouter - try Gemini fallback
+    if (
+      error instanceof Error &&
+      (error.message.includes("Rate limit exceeded") ||
+        error.message.includes("rate-limited") ||
+        error.message.includes("429") ||
+        error.message.includes("Too Many Requests") ||
+        error.message.includes("OpenRouter temporarily disabled"))
+    ) {
+      console.log(
+        "⏰ [TIMETABLE] OpenRouter unavailable - trying Gemini fallback..."
+      );
+      try {
+        const geminiResults = await generateTimetableWithGemini(
+          content,
+          source
+        );
+        if (geminiResults.length > 0) {
+          console.log(
+            "✅ [TIMETABLE] Gemini fallback successful! Extracted",
+            geminiResults.length,
+            "classes"
+          );
+          generateTimetableSummary(geminiResults);
+          return geminiResults;
+        }
+      } catch (geminiError) {
+        console.error(
+          "🚨 [TIMETABLE] Gemini fallback also failed:",
+          geminiError
+        );
+      }
+    }
 
     // Enhanced fallback: Manual pattern detection
     const fallbackClasses = extractTimetableManually(content, source);
@@ -2569,7 +2747,10 @@ function normalizeTime(timeStr: string): string {
 }
 
 export async function generateFlashcards(content: string): Promise<any[]> {
-  console.log("[DEBUG] Flashcard Generation - Content Preview:", content.substring(0, 500));
+  console.log(
+    "[DEBUG] Flashcard Generation - Content Preview:",
+    content.substring(0, 500)
+  );
 
   // A simpler, more direct prompt
   const systemPrompt = `
@@ -2584,26 +2765,36 @@ You are an expert at creating study materials. Based on the provided text, gener
 `;
 
   try {
-    const response = await callOpenRouter([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `Create flashcards from this text:\n\n${content}` }
-    ], {
-      retries: 2,
-      model: pickModel("flashcards", content),
-    });
+    const response = await callOpenRouter(
+      [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Create flashcards from this text:\n\n${content}`,
+        },
+      ],
+      {
+        retries: 2,
+        model: pickModel("flashcards", content),
+      }
+    );
 
     console.log("[DEBUG] AI Response:", response);
 
     // Robust parsing to find the JSON array
     const jsonMatch = response.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      console.warn("[DEBUG] AI response for flashcards was not a valid array. Returning empty.");
+      console.warn(
+        "[DEBUG] AI response for flashcards was not a valid array. Returning empty."
+      );
       return [];
     }
 
     const flashcards = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(flashcards)) {
-      console.warn("[DEBUG] Parsed flashcard data is not an array. Returning empty.");
+      console.warn(
+        "[DEBUG] Parsed flashcard data is not an array. Returning empty."
+      );
       return [];
     }
 
@@ -2617,9 +2808,38 @@ You are an expert at creating study materials. Based on the provided text, gener
 
     console.log("[DEBUG] Generated flashcards:", normalizedCards);
     return normalizedCards;
-
   } catch (error) {
-    console.error("Flashcard generation error:", error);
+    console.error("OpenRouter flashcard generation error:", error);
+
+    // Try Gemini fallback if OpenRouter fails (especially for rate limits)
+    if (
+      error instanceof Error &&
+      error.message.includes("Rate limit exceeded")
+    ) {
+      console.log(
+        "⏰ [FLASHCARDS] OpenRouter rate limited - trying Gemini fallback..."
+      );
+      try {
+        const geminiFlashcards = await generateFlashcardsWithGemini(
+          content,
+          "Flashcard Generation"
+        );
+        if (geminiFlashcards.length > 0) {
+          console.log(
+            "✅ [FLASHCARDS] Gemini fallback successful! Generated",
+            geminiFlashcards.length,
+            "flashcards"
+          );
+          return geminiFlashcards;
+        }
+      } catch (geminiError) {
+        console.error(
+          "🚨 [FLASHCARDS] Gemini fallback also failed:",
+          geminiError
+        );
+      }
+    }
+
     return []; // Return empty array on failure
   }
 }

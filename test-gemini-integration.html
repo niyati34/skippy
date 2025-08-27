@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini AI Integration Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+      }
+      .result {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 4px;
+        white-space: pre-wrap;
+      }
+      .config {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 Gemini AI Integration Test</h1>
+      <p>
+        This page tests the Gemini AI fallback integration for timetable parsing
+        and flashcard generation.
+      </p>
+
+      <div class="config">
+        <h3>📋 Setup Instructions:</h3>
+        <ol>
+          <li>
+            Go to
+            <a href="https://aistudio.google.com/app/apikey" target="_blank"
+              >Google AI Studio</a
+            >
+          </li>
+          <li>
+            Create a new API key (free tier: 15 requests/minute, 1500/day)
+          </li>
+          <li>
+            Update your <code>.env.local</code> file:
+            <code>GEMINI_API_KEY=your_key_here</code>
+          </li>
+          <li>Restart the dev server</li>
+        </ol>
+      </div>
+
+      <div class="status info">
+        <strong>📊 Current Configuration:</strong><br />
+        API Key: <span id="apiKeyStatus">Checking...</span><br />
+        Model: <span id="modelStatus">Loading...</span><br />
+        Base URL: <span id="baseUrlStatus">Loading...</span>
+      </div>
+
+      <h3>🧪 Tests</h3>
+
+      <button onclick="testTimetableParsing()">Test Timetable Parsing</button>
+      <button onclick="testFlashcardGeneration()">
+        Test Flashcard Generation
+      </button>
+      <button onclick="testSampleTC4()">Test with Sample TC4 Data</button>
+
+      <div id="results"></div>
+    </div>
+
+    <script type="module">
+      // Check configuration
+      function checkConfig() {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const model = import.meta.env.VITE_GEMINI_MODEL;
+        const baseUrl = import.meta.env.VITE_GEMINI_API_BASE;
+
+        document.getElementById("apiKeyStatus").textContent =
+          apiKey && apiKey !== "your_gemini_api_key_here"
+            ? "✅ Configured"
+            : "❌ Not configured";
+        document.getElementById("modelStatus").textContent =
+          model || "gemini-1.5-flash";
+        document.getElementById("baseUrlStatus").textContent =
+          baseUrl || "Default";
+      }
+
+      function addResult(title, content, type = "info") {
+        const results = document.getElementById("results");
+        const div = document.createElement("div");
+        div.className = `status ${type}`;
+        div.innerHTML = `<strong>${title}</strong><br><div class="result">${content}</div>`;
+        results.appendChild(div);
+      }
+
+      // Import test functions
+      import {
+        generateTimetableWithGemini,
+        generateFlashcardsWithGemini,
+      } from "./src/services/geminiAI.js";
+
+      window.testTimetableParsing = async function () {
+        addResult("🗓️ Testing Timetable Parsing", "Starting test...", "info");
+
+        const sampleContent = `
+TIME MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY
+07:30 to 09:00 UI/UX-PS-MA213-A BT-SKS-MB203 NLP-AC-MC310 DEV-WS-MB302 AI-PT-MC221
+09:30 to 11:00 CD-JS-MA205 DWDM-RP-MA206 MP1-LAB AI-PT-MC316 BT-SKS-MA206
+`;
+
+        try {
+          const result = await generateTimetableWithGemini(
+            sampleContent,
+            "Test TC4"
+          );
+          addResult(
+            "✅ Timetable Test Result",
+            JSON.stringify(result, null, 2),
+            "success"
+          );
+        } catch (error) {
+          addResult("❌ Timetable Test Failed", error.message, "error");
+        }
+      };
+
+      window.testFlashcardGeneration = async function () {
+        addResult(
+          "📚 Testing Flashcard Generation",
+          "Starting test...",
+          "info"
+        );
+
+        const sampleContent = `
+Computer Engineering subjects:
+- UI/UX: User Interface and User Experience Design
+- BT: Blockchain Technology - distributed ledger systems
+- NLP: Natural Language Processing - AI language understanding
+- DEV: Software Development - programming and coding
+- AI: Artificial Intelligence - machine learning systems
+`;
+
+        try {
+          const result = await generateFlashcardsWithGemini(
+            sampleContent,
+            "Test Content"
+          );
+          addResult(
+            "✅ Flashcard Test Result",
+            JSON.stringify(result, null, 2),
+            "success"
+          );
+        } catch (error) {
+          addResult("❌ Flashcard Test Failed", error.message, "error");
+        }
+      };
+
+      window.testSampleTC4 = async function () {
+        addResult(
+          "🎓 Testing Sample TC4 Data",
+          "Testing with realistic TC4 timetable...",
+          "info"
+        );
+
+        const tc4Sample = `
+FACULTY OF TECHNOLOGY Department of Computer Engineering
+Class Room:- MA205, MA206, MA210
+Division: TC4 Class Coordinator: Prof. Parth Shah
+TIME MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY
+07:30 to 08:30 UI/UX BT NLP DEV AI CD
+                PS SKS AC WS PT JS
+                MA213-A MB203 MC310 MB302 MC221 MC316
+08:30 to 09:30 BT-SKS-MA206 UI/UX-PS-MA205 CD-JS-MA211 DEV-WS-MA210
+09:30 to 10:30 DWDM-RP-MA206 AI-PT-MC316 MP1-LAB
+11:00 to 12:00 CD-JS-MC316 DWDM-RP-MC315 AI-PT-MA210
+`;
+
+        try {
+          const timetableResult = await generateTimetableWithGemini(
+            tc4Sample,
+            "TC4 Test"
+          );
+          addResult(
+            "✅ TC4 Timetable Result",
+            JSON.stringify(timetableResult, null, 2),
+            "success"
+          );
+
+          const flashcardResult = await generateFlashcardsWithGemini(
+            tc4Sample,
+            "TC4 Test"
+          );
+          addResult(
+            "✅ TC4 Flashcard Result",
+            JSON.stringify(flashcardResult, null, 2),
+            "success"
+          );
+        } catch (error) {
+          addResult("❌ TC4 Test Failed", error.message, "error");
+        }
+      };
+
+      // Initialize
+      checkConfig();
+    </script>
+  </body>
+</html>

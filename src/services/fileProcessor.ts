@@ -1296,6 +1296,62 @@ IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
     return validItems;
   } catch (error) {
     console.error("🗓️ [SCHEDULE] Error generating schedule items:", error);
+
+    // Check if it's a rate limit error OR disabled OpenRouter - try Gemini fallback
+    if (
+      error instanceof Error &&
+      (error.message.includes("Rate limit exceeded") ||
+        error.message.includes("rate-limited") ||
+        error.message.includes("429") ||
+        error.message.includes("Too Many Requests") ||
+        error.message.includes("OpenRouter temporarily disabled"))
+    ) {
+      console.log(
+        "⏰ [SCHEDULE] OpenRouter unavailable - trying Gemini fallback..."
+      );
+
+      try {
+        // Import Gemini function
+        const { callGemini } = await import("./geminiAI.js");
+
+        const geminiResponse = await callGemini(
+          [
+            { role: "system", content: messages[0].content },
+            { role: "user", content: messages[1].content },
+          ],
+          {
+            model: "gemini-1.5-flash",
+            temperature: 0.1,
+            maxTokens: 2048,
+            responseMimeType: "application/json",
+          }
+        );
+
+        console.log("🗓️ [SCHEDULE] Gemini Response:", geminiResponse);
+
+        const cleanGeminiResponse = geminiResponse
+          .trim()
+          .replace(/```json\n?|\n?```/g, "");
+        const geminiScheduleItems = JSON.parse(cleanGeminiResponse);
+
+        const validGeminiItems = Array.isArray(geminiScheduleItems)
+          ? geminiScheduleItems.filter((item) => validateScheduleItem(item))
+          : [];
+
+        console.log(
+          "✅ [SCHEDULE] Gemini fallback successful! Generated",
+          validGeminiItems.length,
+          "schedule items"
+        );
+        return validGeminiItems;
+      } catch (geminiError) {
+        console.error(
+          "🚨 [SCHEDULE] Gemini fallback also failed:",
+          geminiError
+        );
+      }
+    }
+
     console.log("🗓️ [SCHEDULE] Falling back to manual extraction...");
 
     // Enhanced fallback: Only extract dates with clear time-sensitive context
