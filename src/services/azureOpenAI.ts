@@ -2746,25 +2746,55 @@ function normalizeTime(timeStr: string): string {
   return timeStr.replace(/[^\d:]/g, "") || "09:00";
 }
 
-export async function generateFlashcards(content: string): Promise<any[]> {
+export async function generateFlashcards(
+  content: string,
+  options?: { count?: number; difficulty?: string }
+): Promise<any[]> {
   console.log(
     "[DEBUG] Flashcard Generation - Content Preview:",
     content.substring(0, 500)
   );
 
   // A simpler, more direct prompt
-  const systemPrompt = `
-You are an expert at creating study materials. Based on the provided text, generate a concise set of flashcards. Each flashcard should be a simple question-and-answer pair.
+  const targetCount =
+    Math.min(Math.max(Number(options?.count || 0) || 0, 0), 100) || undefined;
+  const difficulty = (options?.difficulty || "").toString().toLowerCase();
+  const difficultyHint = difficulty
+    ? `Aim for ${difficulty} difficulty in phrasing and depth.`
+    : "";
 
-**CRITICAL INSTRUCTIONS:**
-1. **Output ONLY a valid JSON array** of objects in your response. Do not include any other text or markdown.
-2. The structure must be: \`[{"question": "question text", "answer": "answer text", "category": "category"}]\`.
-3. If the text is not suitable for creating flashcards (e.g., it's just a timetable), return an empty array \`[]\`.
-4. Create between 3-8 flashcards maximum to avoid overwhelming the learner.
-5. Focus on key concepts, definitions, and important facts.
+  const countHint = targetCount
+    ? `Return exactly ${targetCount} flashcards. Do not return fewer than this number. If the answer risks being cut off, still ensure the JSON is valid and contains exactly ${targetCount} items.`
+    : `Create a focused set of 6-12 flashcards to cover the essentials.`;
+
+  const systemPrompt = `
+You are an expert at creating study materials. Based on the provided text, generate a set of flashcards. Each flashcard must be a simple question-and-answer pair.
+
+CRITICAL INSTRUCTIONS:
+1. Output ONLY a valid JSON array of objects in your response. Do not include any other text or markdown.
+2. The structure must be: [{"question": "question text", "answer": "answer text", "category": "category"}].
+3. If the text is not suitable for creating flashcards (e.g., it's just a timetable), return an empty array [].
+4. ${countHint}
+5. Focus on key concepts, definitions, and important facts. ${difficultyHint}
 `;
 
   try {
+    // If OpenRouter is explicitly disabled, directly use Gemini fallback
+    const DISABLE_OPENROUTER =
+      (import.meta as any)?.env?.VITE_DISABLE_OPENROUTER === "true" ||
+      (typeof localStorage !== "undefined" &&
+        localStorage.getItem("disableOpenRouter") === "true");
+    if (DISABLE_OPENROUTER) {
+      console.log(
+        "⏭️ [FLASHCARDS] OpenRouter disabled - using Gemini fallback directly"
+      );
+      const geminiFlashcards = await generateFlashcardsWithGemini(
+        content,
+        "Flashcard Generation"
+      );
+      return geminiFlashcards;
+    }
+
     const response = await callOpenRouter(
       [
         { role: "system", content: systemPrompt },
@@ -2810,37 +2840,31 @@ You are an expert at creating study materials. Based on the provided text, gener
     return normalizedCards;
   } catch (error) {
     console.error("OpenRouter flashcard generation error:", error);
-
-    // Try Gemini fallback if OpenRouter fails (especially for rate limits)
-    if (
-      error instanceof Error &&
-      error.message.includes("Rate limit exceeded")
-    ) {
+    // Try Gemini fallback on any OpenRouter failure
+    try {
       console.log(
-        "⏰ [FLASHCARDS] OpenRouter rate limited - trying Gemini fallback..."
+        "🔁 [FLASHCARDS] Trying Gemini fallback due to OpenRouter failure..."
       );
-      try {
-        const geminiFlashcards = await generateFlashcardsWithGemini(
-          content,
-          "Flashcard Generation"
+      const geminiFlashcards = await generateFlashcardsWithGemini(
+        content,
+        "Flashcard Generation"
+      );
+      if (geminiFlashcards.length > 0) {
+        console.log(
+          "✅ [FLASHCARDS] Gemini fallback successful! Generated",
+          geminiFlashcards.length,
+          "flashcards"
         );
-        if (geminiFlashcards.length > 0) {
-          console.log(
-            "✅ [FLASHCARDS] Gemini fallback successful! Generated",
-            geminiFlashcards.length,
-            "flashcards"
-          );
-          return geminiFlashcards;
-        }
-      } catch (geminiError) {
-        console.error(
-          "🚨 [FLASHCARDS] Gemini fallback also failed:",
-          geminiError
-        );
+        return geminiFlashcards;
       }
+    } catch (geminiError) {
+      console.error(
+        "🚨 [FLASHCARDS] Gemini fallback also failed:",
+        geminiError
+      );
     }
 
-    return []; // Return empty array on failure
+    return []; // Return empty array on failure (both paths failed)
   }
 }
 
