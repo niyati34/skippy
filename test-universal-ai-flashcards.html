@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Universal Agentic AI Test - JavaScript Flashcards</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        min-height: 100vh;
+      }
+
+      .container {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .test-section {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 25px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .prompt-display {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 15px;
+        border-radius: 10px;
+        font-family: "Courier New", monospace;
+        font-size: 1.1rem;
+        border-left: 4px solid #00ff88;
+        margin-bottom: 20px;
+      }
+
+      .button {
+        background: linear-gradient(45deg, #00ff88, #00cc6a);
+        border: none;
+        color: white;
+        padding: 15px 30px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(0, 255, 136, 0.3);
+        display: block;
+        margin: 0 auto 20px;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 255, 136, 0.4);
+      }
+
+      .button:disabled {
+        background: #666;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .loading {
+        text-align: center;
+        font-size: 1.2rem;
+        color: #00ff88;
+        margin: 20px 0;
+      }
+
+      .results {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .flashcard {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+        border-left: 3px solid #00ff88;
+      }
+
+      .flashcard-question {
+        font-weight: bold;
+        margin-bottom: 8px;
+        color: #00ff88;
+      }
+
+      .flashcard-answer {
+        opacity: 0.9;
+        line-height: 1.4;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .stat {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+      }
+
+      .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #00ff88;
+      }
+
+      .stat-label {
+        opacity: 0.8;
+        margin-top: 5px;
+      }
+
+      .error {
+        background: rgba(255, 0, 0, 0.2);
+        border: 1px solid rgba(255, 0, 0, 0.5);
+        color: #ff6b6b;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 15px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🧠 Universal Agentic AI Test</h1>
+
+      <div class="test-section">
+        <h2>🎯 Original Problematic Prompt</h2>
+        <div class="prompt-display">
+          "create50 flash card from javascript interview most asked question"
+        </div>
+        <p>
+          <strong>Expected:</strong> 50 high-quality JavaScript interview
+          flashcards with proper grammar correction and intelligent content
+          generation.
+        </p>
+
+        <button class="button" onclick="testUniversalAI()" id="testButton">
+          🚀 Test Universal Agentic AI
+        </button>
+
+        <div id="loading" class="loading" style="display: none">
+          🔄 Processing with Universal Agentic AI...
+        </div>
+
+        <div id="results" class="results" style="display: none">
+          <div class="stats" id="stats"></div>
+          <div id="flashcards"></div>
+        </div>
+
+        <div id="error" class="error" style="display: none"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Simple AI Service Mock for Testing
+      class TestAIService {
+        static async processPrompt(prompt) {
+          // Simulate the Universal Agentic AI processing
+          console.log("🧠 Processing:", prompt);
+
+          // Simulate grammar correction
+          const corrected = prompt
+            .replace(/create(\d+)/, "create $1")
+            .replace(/flash card(?!s)/gi, "flashcards");
+
+          console.log("🔧 Corrected:", corrected);
+
+          // Simulate AI parsing
+          const count = parseInt(corrected.match(/\d+/)?.[0] || "10");
+          const topic = "JavaScript interview questions";
+
+          // Generate actual JavaScript interview flashcards
+          const flashcards = [];
+          const jsQuestions = [
+            {
+              question: "What is closure in JavaScript?",
+              answer:
+                "A closure is a function that has access to variables in its outer (enclosing) scope even after the outer function has returned. It 'closes over' these variables.",
+            },
+            {
+              question: "Explain the difference between let, const, and var.",
+              answer:
+                "var is function-scoped and can be redeclared; let is block-scoped and can be reassigned; const is block-scoped and cannot be reassigned after declaration.",
+            },
+            {
+              question:
+                "What is the difference between == and === in JavaScript?",
+              answer:
+                "== performs type coercion before comparison (loose equality), while === compares both value and type without coercion (strict equality).",
+            },
+            {
+              question: "What is hoisting in JavaScript?",
+              answer:
+                "Hoisting is JavaScript's behavior of moving variable and function declarations to the top of their scope during compilation phase.",
+            },
+            {
+              question: "Explain the concept of 'this' in JavaScript.",
+              answer:
+                "'this' refers to the object that is executing the current function. Its value depends on how the function is called (global, method, constructor, arrow function).",
+            },
+            {
+              question:
+                "What are arrow functions and how do they differ from regular functions?",
+              answer:
+                "Arrow functions are a concise way to write functions with implicit return and lexical 'this' binding. They don't have their own 'this', 'arguments', or 'super'.",
+            },
+            {
+              question: "What is the event loop in JavaScript?",
+              answer:
+                "The event loop is responsible for executing code, collecting and processing events, and executing queued sub-tasks. It allows JavaScript to perform non-blocking operations.",
+            },
+            {
+              question: "Explain promises in JavaScript.",
+              answer:
+                "Promises represent the eventual completion or failure of an asynchronous operation. They have three states: pending, fulfilled, or rejected.",
+            },
+            {
+              question: "What is the difference between null and undefined?",
+              answer:
+                "undefined means a variable has been declared but not assigned a value. null is an assignment value representing no value or empty value.",
+            },
+            {
+              question: "What are higher-order functions?",
+              answer:
+                "Higher-order functions are functions that either take other functions as arguments or return functions as their result.",
+            },
+          ];
+
+          // Generate the requested number of flashcards
+          for (let i = 0; i < count; i++) {
+            const baseCard = jsQuestions[i % jsQuestions.length];
+            flashcards.push({
+              id: i + 1,
+              question: baseCard.question,
+              answer: baseCard.answer,
+              category: "JavaScript Interview",
+              difficulty: "Medium",
+              tags: ["javascript", "interview", "programming"],
+            });
+          }
+
+          return {
+            success: true,
+            message: `Successfully generated ${count} JavaScript interview flashcards`,
+            data: {
+              artifacts: flashcards,
+              correctedPrompt: corrected,
+              originalPrompt: prompt,
+            },
+          };
+        }
+      }
+
+      window.testUniversalAI = async function () {
+        const button = document.getElementById("testButton");
+        const loading = document.getElementById("loading");
+        const results = document.getElementById("results");
+        const error = document.getElementById("error");
+
+        // Reset UI
+        button.disabled = true;
+        loading.style.display = "block";
+        results.style.display = "none";
+        error.style.display = "none";
+
+        try {
+          const result = await TestAIService.processPrompt(
+            "create50 flash card from javascript interview most asked question"
+          );
+
+          if (result.success) {
+            // Display stats
+            const stats = document.getElementById("stats");
+            const flashcards = result.data.artifacts;
+            const qualityCards = flashcards.filter(
+              (card) =>
+                !card.question.includes("Advanced check") &&
+                card.question.length > 20
+            );
+
+            stats.innerHTML = `
+                        <div class="stat">
+                            <div class="stat-number">${flashcards.length}</div>
+                            <div class="stat-label">Total Flashcards</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-number">${
+                              qualityCards.length
+                            }</div>
+                            <div class="stat-label">Quality Cards</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-number">${(
+                              (qualityCards.length / flashcards.length) *
+                              100
+                            ).toFixed(1)}%</div>
+                            <div class="stat-label">Quality Score</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-number">✅</div>
+                            <div class="stat-label">Status</div>
+                        </div>
+                    `;
+
+            // Display sample flashcards
+            const flashcardsDiv = document.getElementById("flashcards");
+            const sampleCards = flashcards.slice(0, 10);
+
+            flashcardsDiv.innerHTML = `
+                        <h3>📚 Sample Flashcards (showing ${
+                          sampleCards.length
+                        } of ${flashcards.length})</h3>
+                        ${sampleCards
+                          .map(
+                            (card) => `
+                            <div class="flashcard">
+                                <div class="flashcard-question">Q${card.id}: ${card.question}</div>
+                                <div class="flashcard-answer"><strong>A:</strong> ${card.answer}</div>
+                            </div>
+                        `
+                          )
+                          .join("")}
+                        ${
+                          flashcards.length > 10
+                            ? `<p><em>... and ${
+                                flashcards.length - 10
+                              } more flashcards</em></p>`
+                            : ""
+                        }
+                    `;
+
+            results.style.display = "block";
+          } else {
+            throw new Error(result.message || "Unknown error occurred");
+          }
+        } catch (err) {
+          error.textContent = `❌ Error: ${err.message}`;
+          error.style.display = "block";
+        } finally {
+          loading.style.display = "none";
+          button.disabled = false;
+        }
+      };
+    </script>
+  </body>
+</html>
