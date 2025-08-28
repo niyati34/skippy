@@ -1,5 +1,6 @@
 // Advanced multi-agent orchestrator with memory and tool use
 import { parseIntent } from "@/lib/intent";
+import { universalAI } from "@/lib/universalAgent";
 import {
   generateFlashcards,
   generateNotesFromContent,
@@ -422,7 +423,7 @@ export class FlashcardAgent implements Agent {
     let content = text;
     // If command-like phrase present, extract the topic and enrich
     const cmdMatch = content.match(
-      /(?:make|create|generate)\s+flashcards?\s+(?:from|about|on|for)\s+([^\n.,;]+)/i
+      /(?:make|create|generate)\s+flash\s*cards?\s+(?:from|about|on|for)\s+([^\n.,;]+)/i
     );
     if (cmdMatch) {
       const topic = cmdMatch[1].trim();
@@ -436,9 +437,18 @@ export class FlashcardAgent implements Agent {
     }
 
     // Extract optional difficulty and target count from text
-    const difficulty = (text.match(/\b(beginner|easy|intermediate|advanced|hard)\b/i) || [])[1]?.toLowerCase();
-    const countStr = (text.match(/\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i) || [])[1];
-    const targetCount = countStr ? Math.max(1, Math.min(100, Number(countStr))) : undefined;
+    const difficulty = (text.match(
+      /\b(beginner|easy|intermediate|advanced|hard)\b/i
+    ) || [])[1]?.toLowerCase();
+    const countStr =
+      (text.match(/\b(\d{1,3})\s*(?:cards?|flash\s*cards?)\b/i) || [])[1] ||
+      (text.match(/(?:make|create|generate)\s*(\d{1,3})\s*flash\s*cards?/i) ||
+        [])[1] ||
+      // e.g., "create50 flashcard"
+      (text.match(/(?:make|create|generate)\s*(\d{1,3})\b/i) || [])[1];
+    const targetCount = countStr
+      ? Math.max(1, Math.min(100, Number(countStr)))
+      : undefined;
 
     try {
       console.log(
@@ -505,7 +515,10 @@ export class FlashcardAgent implements Agent {
           mapped.push({
             question: `Advanced check ${i}: A key concept about ${base}?`,
             answer: `A concise, accurate point about ${base}.`,
-            category: (base.split(" ")[0] || "General").replace(/[^A-Za-z0-9]/g, ""),
+            category: (base.split(" ")[0] || "General").replace(
+              /[^A-Za-z0-9]/g,
+              ""
+            ),
           });
         }
       }
@@ -631,7 +644,9 @@ export class CommandAgent implements Agent {
         const items = Array.isArray(parsed) ? parsed : [parsed];
         for (const item of items) {
           if (!item || typeof item !== "object") continue;
-          const actionRaw = (item.action || item.type || "").toString().toLowerCase();
+          const actionRaw = (item.action || item.type || "")
+            .toString()
+            .toLowerCase();
           const target = (item.target || "content").toString();
           const content =
             item.content || item.topic || item.text || item.query || "";
@@ -676,7 +691,7 @@ export class CommandAgent implements Agent {
       },
       {
         regex:
-          /(make|create|generate)\s+(flashcards?)\s+(?:from|about|on|for)\s+(.+)/i,
+          /(make|create|generate)\s+(flash\s*cards?)\s+(?:from|about|on|for)\s+(.+)/i,
         action: "create_flashcards",
         target: "content",
       },
@@ -688,12 +703,19 @@ export class CommandAgent implements Agent {
       },
       // Bare flashcards phrases like "advanced flashcards from blockchain" or "40 flashcards"
       {
-        regex: /flashcards?\s+(?:from|about|on|for)\s+(.+)/i,
+        regex: /flash\s*cards?\s+(?:from|about|on|for)\s+(.+)/i,
         action: "create_flashcards",
         target: "content",
       },
       {
-        regex: /\b(\d{1,3})\s*flashcards?\b/i,
+        regex: /\b(\d{1,3})\s*flash\s*cards?\b/i,
+        action: "create_flashcards",
+        target: "content",
+      },
+      // e.g., "create50 flashcards from X" or "make50 flash card about X"
+      {
+        regex:
+          /(make|create|generate)\s*(\d{1,3})\s*flash\s*cards?\b.*?(?:from|about|on|for)\s+(.+)/i,
         action: "create_flashcards",
         target: "content",
       },
@@ -747,22 +769,48 @@ export class CommandAgent implements Agent {
         const key = `${pattern.action}`;
         if (seenActions.has(key)) continue;
         seenActions.add(key);
+        // Extract optional count/difficulty modifiers from the full text
+        const cnt =
+          (text.match(/\b(\d{1,3})\s*(?:cards?|flash\s*cards?)\b/i) || [])[1] ||
+          (text.match(
+            /(?:make|create|generate)\s*(\d{1,3})\s*flash\s*cards?/i
+          ) || [])[1] ||
+          undefined;
+        const diff = (text.match(
+          /\b(beginner|easy|intermediate|advanced|hard)\b/i
+        ) || [])[1];
         commands.push({
           action: pattern.action,
           target: pattern.target,
-          params: { content },
+          params: {
+            content,
+            ...(cnt ? { count: Number(cnt) } : {}),
+            ...(diff ? { difficulty: diff } : {}),
+          },
         });
       }
     }
 
     // If nothing matched but the user mentioned flashcards, create a default command
-    if (commands.length === 0 && /flashcards?/i.test(text)) {
+    if (commands.length === 0 && /flash\s*cards?/i.test(text)) {
       const topic =
         (text.match(/(?:from|about|on|for)\s+([^,.;\n]+)/i) || [])[1] || "";
+      const cnt =
+        (text.match(/\b(\d{1,3})\s*(?:cards?|flash\s*cards?)\b/i) || [])[1] ||
+        (text.match(/(?:make|create|generate)\s*(\d{1,3})\s*flash\s*cards?/i) ||
+          [])[1] ||
+        undefined;
+      const diff = (text.match(
+        /\b(beginner|easy|intermediate|advanced|hard)\b/i
+      ) || [])[1];
       commands.push({
         action: "create_flashcards",
         target: "content",
-        params: { content: topic },
+        params: {
+          content: topic,
+          ...(cnt ? { count: Number(cnt) } : {}),
+          ...(diff ? { difficulty: diff } : {}),
+        },
       });
     }
     return commands;
@@ -815,10 +863,14 @@ export class CommandAgent implements Agent {
           // Preserve user modifiers like difficulty and count (from text or structured params)
           const diff =
             command.params.difficulty ||
-            (input.text || "").match(/\b(beginner|easy|intermediate|advanced|hard)\b/i)?.[1];
+            (input.text || "").match(
+              /\b(beginner|easy|intermediate|advanced|hard)\b/i
+            )?.[1];
           const cnt =
             command.params.count ||
-            (input.text || "").match(/\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i)?.[1];
+            (input.text || "").match(
+              /\b(\d{1,3})\s*(?:cards?|flashcards?)\b/i
+            )?.[1];
           const mods = [
             diff ? ` Make it ${String(diff).toLowerCase()}.` : "",
             cnt ? ` Create exactly ${cnt} cards.` : "",
@@ -948,6 +1000,45 @@ export class Orchestrator {
 
   // High-level router with advanced multi-tool support and fallback handling
   async handle(input: AgentTaskInput): Promise<AgentResult> {
+    // First, try the Universal Agentic AI for comprehensive understanding
+    try {
+      console.log("🌟 [Orchestrator] Trying Universal Agentic AI first");
+      const universalResult = await universalAI.processAnyPrompt(input);
+
+      // If Universal AI successfully handled it, return the result
+      if (
+        universalResult.artifacts &&
+        Object.keys(universalResult.artifacts).length > 0
+      ) {
+        console.log(
+          "✅ [Orchestrator] Universal AI successfully handled the request"
+        );
+        return universalResult;
+      }
+
+      // If Universal AI provided a meaningful response but no artifacts, still return it
+      if (
+        universalResult.summary &&
+        !universalResult.summary.includes("I'm not sure") &&
+        !universalResult.summary.includes("encountered an issue")
+      ) {
+        console.log(
+          "✅ [Orchestrator] Universal AI provided meaningful response"
+        );
+        return universalResult;
+      }
+
+      console.log(
+        "⚠️ [Orchestrator] Universal AI unclear, falling back to classic agents"
+      );
+    } catch (error) {
+      console.error(
+        "🚨 [Orchestrator] Universal AI failed, using fallback:",
+        error
+      );
+    }
+
+    // Fallback to existing multi-agent system
     const text = (input.text || "").trim();
     const parsed = parseIntent(text);
 

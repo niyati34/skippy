@@ -2779,6 +2779,22 @@ CRITICAL INSTRUCTIONS:
 `;
 
   try {
+    // If OpenRouter is explicitly disabled, directly use Gemini fallback
+    const DISABLE_OPENROUTER =
+      (import.meta as any)?.env?.VITE_DISABLE_OPENROUTER === "true" ||
+      (typeof localStorage !== "undefined" &&
+        localStorage.getItem("disableOpenRouter") === "true");
+    if (DISABLE_OPENROUTER) {
+      console.log(
+        "⏭️ [FLASHCARDS] OpenRouter disabled - using Gemini fallback directly"
+      );
+      const geminiFlashcards = await generateFlashcardsWithGemini(
+        content,
+        "Flashcard Generation"
+      );
+      return geminiFlashcards;
+    }
+
     const response = await callOpenRouter(
       [
         { role: "system", content: systemPrompt },
@@ -2824,37 +2840,31 @@ CRITICAL INSTRUCTIONS:
     return normalizedCards;
   } catch (error) {
     console.error("OpenRouter flashcard generation error:", error);
-
-    // Try Gemini fallback if OpenRouter fails (especially for rate limits)
-    if (
-      error instanceof Error &&
-      error.message.includes("Rate limit exceeded")
-    ) {
+    // Try Gemini fallback on any OpenRouter failure
+    try {
       console.log(
-        "⏰ [FLASHCARDS] OpenRouter rate limited - trying Gemini fallback..."
+        "🔁 [FLASHCARDS] Trying Gemini fallback due to OpenRouter failure..."
       );
-      try {
-        const geminiFlashcards = await generateFlashcardsWithGemini(
-          content,
-          "Flashcard Generation"
+      const geminiFlashcards = await generateFlashcardsWithGemini(
+        content,
+        "Flashcard Generation"
+      );
+      if (geminiFlashcards.length > 0) {
+        console.log(
+          "✅ [FLASHCARDS] Gemini fallback successful! Generated",
+          geminiFlashcards.length,
+          "flashcards"
         );
-        if (geminiFlashcards.length > 0) {
-          console.log(
-            "✅ [FLASHCARDS] Gemini fallback successful! Generated",
-            geminiFlashcards.length,
-            "flashcards"
-          );
-          return geminiFlashcards;
-        }
-      } catch (geminiError) {
-        console.error(
-          "🚨 [FLASHCARDS] Gemini fallback also failed:",
-          geminiError
-        );
+        return geminiFlashcards;
       }
+    } catch (geminiError) {
+      console.error(
+        "🚨 [FLASHCARDS] Gemini fallback also failed:",
+        geminiError
+      );
     }
 
-    return []; // Return empty array on failure
+    return []; // Return empty array on failure (both paths failed)
   }
 }
 
