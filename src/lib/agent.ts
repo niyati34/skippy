@@ -229,7 +229,7 @@ Recent schedule context (max 5): ${
   }
 }
 
-// Enhanced Notes Agent with better content processing
+// Enhanced Notes Agent with Universal AI integration
 export class NotesAgent implements Agent {
   name = "Notes";
   canHandle(i: AgentTaskInput) {
@@ -239,6 +239,52 @@ export class NotesAgent implements Agent {
     const source = input.files?.[0]?.name || "chat-input";
     const text =
       input.text || input.files?.map((f) => f.content).join("\n\n") || "";
+
+    console.log("📝 [NotesAgent] Input text:", text);
+
+    try {
+      // Use Universal Agentic AI for intelligent notes generation
+      console.log("🤖 [NotesAgent] Using Universal Agentic AI for processing");
+      const result = await universalAI.processAnyPrompt({ text });
+
+      if (result.artifacts?.notes && result.artifacts.notes.length > 0) {
+        const notes = result.artifacts.notes;
+        console.log(
+          "✅ [NotesAgent] Universal AI generated:",
+          notes.length,
+          "notes"
+        );
+        // Universal AI already handles saving via NotesStorage in its own flow.
+        // Avoid double-saving; just return artifacts as-is.
+        BuddyMemoryStorage.logTask(
+          "notes",
+          `Processed ${notes.length} notes via Universal AI`
+        );
+        return {
+          summary:
+            result.summary ||
+            `Prepared ${notes.length} structured notes using advanced AI processing.`,
+          artifacts: { notes },
+        };
+      } else {
+        console.warn(
+          "⚠️ [NotesAgent] Universal AI returned no notes, using fallback"
+        );
+        // Fallback to old method if Universal AI fails
+        return await this.fallbackNotesGeneration(text, source);
+      }
+    } catch (error) {
+      console.error("🚨 [NotesAgent] Universal AI failed:", error);
+      // Fallback to old method
+      return await this.fallbackNotesGeneration(text, source);
+    }
+  }
+
+  private async fallbackNotesGeneration(
+    text: string,
+    source: string
+  ): Promise<AgentResult> {
+    console.log("🔄 [NotesAgent] Using fallback notes generation");
 
     try {
       const notes = await generateNotesFromContent(text, source);
@@ -404,7 +450,7 @@ export class PlannerAgent implements Agent {
   }
 }
 
-// Enhanced Flashcard Agent with better content processing
+// Enhanced Flashcard Agent with Universal AI integration
 export class FlashcardAgent implements Agent {
   name = "Flashcard";
   canHandle(i: AgentTaskInput) {
@@ -418,6 +464,54 @@ export class FlashcardAgent implements Agent {
       input.text || input.files?.map((f) => f.content).join("\n\n") || "";
 
     console.log("📚 [FlashcardAgent] Input text:", text);
+
+    try {
+      // Use Universal Agentic AI for intelligent flashcard generation
+      console.log(
+        "🤖 [FlashcardAgent] Using Universal Agentic AI for processing"
+      );
+      const result = await universalAI.processAnyPrompt({ text });
+
+      if (
+        result.artifacts?.flashcards &&
+        result.artifacts.flashcards.length > 0
+      ) {
+        const flashcards = result.artifacts.flashcards;
+        console.log(
+          "✅ [FlashcardAgent] Universal AI generated:",
+          flashcards.length,
+          "flashcards"
+        );
+        // Avoid double-saving; Universal pipeline may have already saved.
+        BuddyMemoryStorage.logTask(
+          "flashcards",
+          `Processed ${flashcards.length} cards via Universal AI`
+        );
+        return {
+          summary:
+            result.summary ||
+            `Prepared ${flashcards.length} flashcards using advanced AI processing.`,
+          artifacts: { flashcards },
+        };
+      } else {
+        console.warn(
+          "⚠️ [FlashcardAgent] Universal AI returned no flashcards, using fallback"
+        );
+        // Fallback to old method if Universal AI fails
+        return await this.fallbackFlashcardGeneration(text, source);
+      }
+    } catch (error) {
+      console.error("🚨 [FlashcardAgent] Universal AI failed:", error);
+      // Fallback to old method
+      return await this.fallbackFlashcardGeneration(text, source);
+    }
+  }
+
+  private async fallbackFlashcardGeneration(
+    text: string,
+    source: string
+  ): Promise<AgentResult> {
+    console.log("🔄 [FlashcardAgent] Using fallback flashcard generation");
 
     // If text is too short, try to expand it with basic topic context
     let content = text;
