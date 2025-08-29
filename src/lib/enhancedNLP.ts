@@ -35,6 +35,13 @@ export class EnhancedNLPProcessor {
     ["flash card", "flashcards"],
     ["flash cards", "flashcards"],
     ["flashcrd", "flashcards"],
+    ["flashcarrd", "flashcards"],
+    ["flashcarrds", "flashcards"],
+    ["flascarrd", "flashcards"],
+    ["flascarrds", "flashcards"],
+    ["flascard", "flashcards"],
+    ["flascards", "flashcards"],
+    ["flashcrad", "flashcards"],
     ["note", "notes"],
     ["notez", "notes"],
     ["nte", "notes"],
@@ -86,6 +93,10 @@ export class EnhancedNLPProcessor {
     ["mathematic", "mathematics"],
     ["biologey", "biology"],
     ["biologi", "biology"],
+    // General typos from user feedback
+    ["thesee", "these"],
+    ["rectonise", "recognize"],
+    ["langualge", "language"],
   ]);
 
   // Grammar patterns to fix
