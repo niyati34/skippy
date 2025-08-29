@@ -183,6 +183,17 @@ export const FlashcardStorage = {
 
   add: (flashcard: Omit<StoredFlashcard, "id" | "createdAt">) => {
     const existing = FlashcardStorage.load();
+    const norm = (s: string) =>
+      (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+    // Dedupe by normalized question+answer only (ignore category differences)
+    const exists = existing.find(
+      (c) =>
+        norm(c.question) === norm(flashcard.question) &&
+        norm(c.answer) === norm(flashcard.answer)
+    );
+    if (exists) {
+      return exists; // Don't add duplicate
+    }
     const newCard: StoredFlashcard = {
       ...flashcard,
       id: Date.now().toString(),
@@ -198,10 +209,41 @@ export const FlashcardStorage = {
     flashcards: Omit<StoredFlashcard, "id" | "createdAt">[]
   ): StoredFlashcard[] => {
     const existing = FlashcardStorage.load();
-    const newCards = flashcards.map((card) => ({
+    // Build a set to dedupe by normalized question+answer only (ignore category)
+    const norm = (s: string) =>
+      (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+    const keyOf = (c: { question: string; answer: string }) =>
+      `${norm(c.question)}|${norm(c.answer)}`;
+    const existingKeys = new Set(existing.map(keyOf));
+    // First, drop duplicates within the incoming batch itself
+    const batchKeys = new Set<string>();
+    const filtered = [] as Omit<StoredFlashcard, "id" | "createdAt">[];
+    for (const c of flashcards) {
+      const k = keyOf(c as any);
+      if (batchKeys.has(k)) continue; // intra-batch duplicate
+      if (existingKeys.has(k)) continue; // already stored
+      batchKeys.add(k);
+      filtered.push(c);
+    }
+    const makeId = (index: number) => {
+      try {
+        // Prefer crypto.randomUUID when available
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        if (typeof crypto !== "undefined" && crypto.randomUUID) {
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
+          return crypto.randomUUID();
+        }
+      } catch {}
+      return `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`;
+    };
+
+    const nowIso = new Date().toISOString();
+    const newCards = filtered.map((card, i) => ({
       ...card,
-      id: (Date.now() + Math.random()).toString(),
-      createdAt: new Date().toISOString(),
+      id: makeId(i),
+      createdAt: nowIso,
       srs: card.srs,
     }));
     existing.push(...newCards);
