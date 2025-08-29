@@ -114,6 +114,11 @@ async function callGemini(
 
     const result = data.candidates[0].content.parts[0].text;
     console.log("✅ [GEMINI] Response received, length:", result.length);
+    // Log a safe preview of the raw Gemini answer for debugging
+    try {
+      const preview = result.slice(0, 2000);
+      console.log("📝 [GEMINI RAW RESPONSE]\n" + preview);
+    } catch {}
     return result;
   } catch (error) {
     console.error("🚨 [GEMINI] Request failed:", error);
@@ -410,21 +415,49 @@ Return JSON only:`;
  */
 export async function generateFlashcardsWithGemini(
   content: string,
-  source: string = "PDF Upload"
+  source: string = "PDF Upload",
+  opts: { count?: number; difficulty?: string; category?: string } = {}
 ): Promise<any[]> {
   console.log("📚 [GEMINI FLASHCARDS] Starting generation...");
+
+  const desired = Math.max(1, Math.min(100, Number(opts.count || 0) || 0));
+  const difficulty = (opts.difficulty || "").toString().toLowerCase();
+  const difficultyHint = difficulty
+    ? `Aim for ${difficulty} difficulty in phrasing and depth.`
+    : "";
 
   const systemPrompt = `
 Create educational flashcards from the provided content. Focus on key concepts, definitions, and important information.
 
 OUTPUT ONLY JSON: Return a JSON array with no other text.
-SCHEMA: {"question": "What is...", "answer": "Definition or explanation", "category": "Subject area"}
+SCHEMA: {"question": "What is...", "answer": "Definition or explanation", "category": "${
+    opts.category || "General"
+  }"}
 
-Generate 5-10 high-quality flashcards that help students learn the material.
+${
+  desired
+    ? `Return exactly ${desired} flashcards. Do not include any extra commentary.`
+    : `Generate 6-12 high-quality flashcards that help students learn the material.`
+}
+${difficultyHint}
 `;
 
-  const userPrompt = `Create flashcards from this content:
+  const topic = opts.category || "General";
+  const desiredCountText = desired
+    ? `Create exactly ${desired} flashcards.`
+    : `Create 6-12 flashcards.`;
+  const negativeConstraints = `
+Rules:
+- The topic is strictly: ${topic}.
+- Do NOT switch languages or topics. For example, if topic is JavaScript, do not generate Java (JVM) questions.
+- If the provided content mentions other topics, ignore them and stay on ${topic}.
+- Each item MUST be about ${topic}.
+`;
 
+  const userPrompt = `${desiredCountText}
+${negativeConstraints}
+
+Content:
 ${content.substring(0, 2000)}`;
 
   try {
@@ -437,24 +470,110 @@ ${content.substring(0, 2000)}`;
         model: "gemini-1.5-flash",
         temperature: 0.3,
         maxTokens: 1500,
+        responseMimeType: "application/json",
       }
     );
 
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
+    // Log the raw response from Gemini for flashcard generation
+    try {
+      console.log("📝 [GEMINI FLASHCARDS RAW]\n" + response.slice(0, 4000));
+    } catch {}
+
+    // Robust JSON extraction
+    const tryParsers: Array<() => any[]> = [
+      // 1) Direct parse
+      () => {
+        const parsed = JSON.parse(response);
+        return Array.isArray(parsed) ? parsed : [];
+      },
+      // 2) Strip common code fences and parse
+      () => {
+        const stripped = response.replace(/```json\n?|```/g, "");
+        const parsed = JSON.parse(stripped);
+        return Array.isArray(parsed) ? parsed : [];
+      },
+      // 3) Regex match first array
+      () => {
+        const m = response.match(/\[[\s\S]*\]/);
+        return m ? (JSON.parse(m[0]) as any[]) : [];
+      },
+      // 4) Bracket balance extraction for arrays (ignore brackets inside strings)
+      () => {
+        const s = response;
+        let start = -1;
+        let depth = 0;
+        let inString = false;
+        let prev = "";
+        for (let i = 0; i < s.length; i++) {
+          const ch = s[i];
+          if (inString) {
+            if (ch === '"' && prev !== "\\") inString = false;
+          } else {
+            if (ch === '"') inString = true;
+            else if (ch === "[") {
+              if (start === -1) start = i;
+              depth++;
+            } else if (ch === "]") {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                const candidate = s.slice(start, i + 1);
+                // Clean trailing commas
+                const cleaned = candidate.replace(/,(\s*[}\]])/g, "$1");
+                try {
+                  const parsed = JSON.parse(cleaned);
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {}
+              }
+            }
+          }
+          prev = ch;
+        }
+        return [];
+      },
+      // 5) Loose extraction: build cards from key pairs if JSON parse fails
+      () => {
+        const items: any[] = [];
+        const re =
+          /\{[^}]*?"question"\s*:\s*"([\s\S]*?)"[^}]*?"answer"\s*:\s*"([\s\S]*?)"(?:[^}]*?"category"\s*:\s*"([\s\S]*?)")?[^}]*?\}/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(response)) && items.length < (desired || 100)) {
+          const q = (m[1] || "").replace(/\n+/g, " ").trim();
+          const a = (m[2] || "").replace(/\n+/g, " ").trim();
+          const c = (m[3] || opts.category || "General").trim();
+          if (q && a) items.push({ question: q, answer: a, category: c });
+        }
+        return items;
+      },
+    ];
+
+    let flashcards: any[] = [];
+    for (const fn of tryParsers) {
+      try {
+        flashcards = fn();
+        if (Array.isArray(flashcards) && flashcards.length) break;
+      } catch {}
+    }
+
+    if (!flashcards || !flashcards.length) {
       console.warn("🚨 [GEMINI] No JSON array found in flashcard response");
       return [];
     }
-
-    const flashcards = JSON.parse(jsonMatch[0]);
     console.log("✅ [GEMINI] Generated", flashcards.length, "flashcards");
 
-    return flashcards.map((card: any, index: number) => ({
+    const normalized = flashcards.map((card: any, index: number) => ({
       id: `gemini-flashcard-${Date.now()}-${index}`,
       ...card,
       source: `${source} (Gemini)`,
       createdAt: new Date().toISOString(),
     }));
+
+    // If Gemini returned fewer than desired, just return what we have;
+    // caller may decide to top-up.
+    if (desired && normalized.length > desired) {
+      return normalized.slice(0, desired);
+    }
+
+    return normalized;
   } catch (error) {
     console.error("🚨 [GEMINI] Flashcard generation failed:", error);
     return [];

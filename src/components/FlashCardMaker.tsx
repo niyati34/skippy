@@ -78,7 +78,27 @@ const FlashCardMaker = ({
   // Load flashcards from localStorage on component mount
   useEffect(() => {
     const loadedFlashcards = FlashcardStorage.load();
-    const formattedCards = loadedFlashcards.map((card) => ({
+    // One-time cleanup: remove any stored duplicates by normalized Q+A
+    const norm = (s: string) =>
+      (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+    const seen = new Set<string>();
+    const unique = [] as typeof loadedFlashcards;
+    for (const c of loadedFlashcards) {
+      const k = `${norm(c.question)}|${norm(c.answer)}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      unique.push(c);
+    }
+    if (unique.length !== loadedFlashcards.length) {
+      FlashcardStorage.save(unique);
+      toast({
+        title: "Cleaned duplicates",
+        description: `Removed ${
+          loadedFlashcards.length - unique.length
+        } duplicate cards.`,
+      });
+    }
+    const formattedCards = unique.map((card) => ({
       id: card.id,
       question: card.question,
       answer: card.answer,
@@ -96,45 +116,52 @@ const FlashCardMaker = ({
 
   useEffect(() => {
     if (externalCards.length > 0) {
-      const newCards = externalCards.map((card, index) => ({
-        id: (Date.now() + index).toString(),
+      // Normalize incoming cards and persist via storage (which dedupes),
+      // then reload from storage to avoid in-memory duplicates.
+      const flashcardsToSave = externalCards.map((card: any) => ({
         question: card.question || card.front || "Question",
         answer: card.answer || card.back || "Answer",
         category: card.category || "General",
-      }));
-      setFlashCards((prev) => [...prev, ...newCards]);
-
-      // Save new cards to localStorage
-      const flashcardsToSave = newCards.map((card) => ({
-        question: card.question,
-        answer: card.answer,
-        category: card.category,
         source: "uploaded_file",
       }));
-      FlashcardStorage.addBatch(flashcardsToSave);
+
+      const saved = FlashcardStorage.addBatch(flashcardsToSave);
+
+      // Reload full, deduped set from storage and reflect in UI
+      const loaded = FlashcardStorage.load();
+      const formatted = loaded.map((c) => ({
+        id: c.id,
+        question: c.question,
+        answer: c.answer,
+        category: c.category,
+      }));
+      setFlashCards(formatted);
 
       toast({
         title: "New flashcards added! 🎯",
-        description: `Added ${newCards.length} flashcards from your content.`,
+        description: `Added ${saved.length} unique flashcards. Total now ${formatted.length}.`,
       });
     }
   }, [externalCards, toast]);
 
   const addFlashCard = () => {
     if (newCard.question && newCard.answer && newCard.category) {
-      const card: FlashCard = {
-        id: Date.now().toString(),
-        ...newCard,
-      };
-      setFlashCards([...flashCards, card]);
-
-      // Save to localStorage
+      // Save to localStorage (dedupes) then reload from storage
       FlashcardStorage.add({
         question: newCard.question,
         answer: newCard.answer,
         category: newCard.category,
         source: "manual_entry",
       });
+
+      const loaded = FlashcardStorage.load();
+      const formatted = loaded.map((c) => ({
+        id: c.id,
+        question: c.question,
+        answer: c.answer,
+        category: c.category,
+      }));
+      setFlashCards(formatted);
 
       setNewCard({ question: "", answer: "", category: "" });
       toast({
@@ -184,13 +211,21 @@ const FlashCardMaker = ({
 
   // Delete individual flashcard
   const deleteFlashCard = (cardId: string) => {
-    setFlashCards((prev) => prev.filter((card) => card.id !== cardId));
     FlashcardStorage.remove(cardId);
+    // Reload after deletion to ensure UI reflects storage state
+    const loaded = FlashcardStorage.load();
+    const formatted = loaded.map((c) => ({
+      id: c.id,
+      question: c.question,
+      answer: c.answer,
+      category: c.category,
+    }));
+    setFlashCards(formatted);
 
     // Adjust current card index if needed
-    if (currentCardIndex >= flashCards.length - 1) {
-      setCurrentCardIndex(Math.max(0, flashCards.length - 2));
-    }
+    setCurrentCardIndex((idx) =>
+      Math.min(idx, Math.max(0, formatted.length - 1))
+    );
 
     toast({
       title: "Card deleted! 🗑️",
@@ -240,25 +275,26 @@ const FlashCardMaker = ({
         );
 
         if (newCards.length > 0) {
-          const formattedCards = newCards.map((card, index) => ({
-            id: (Date.now() + Math.random()).toString(),
-            question: card.question,
-            answer: card.answer,
-            category: note.category || "Generated from Notes",
-          }));
-
-          setFlashCards((prev) => [...prev, ...formattedCards]);
-
-          // Save to storage
+          // Save to storage (dedupes) then reload from storage
           const flashcardsToSave = newCards.map((card) => ({
             question: card.question,
             answer: card.answer,
             category: note.category || "Generated from Notes",
             source: `note-${note.title}`,
           }));
-          FlashcardStorage.addBatch(flashcardsToSave);
+          const saved = FlashcardStorage.addBatch(flashcardsToSave);
 
-          totalNewCards += newCards.length;
+          // Reload all cards to ensure no in-memory duplicates
+          const loaded = FlashcardStorage.load();
+          const formatted = loaded.map((c) => ({
+            id: c.id,
+            question: c.question,
+            answer: c.answer,
+            category: c.category,
+          }));
+          setFlashCards(formatted);
+
+          totalNewCards += saved.length;
         }
       }
 
