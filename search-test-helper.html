@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🔍 Search Functionality Tester</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+      .container {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+      }
+      .test-btn {
+        background: linear-gradient(45deg, #4caf50, #45a049);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 10px 5px;
+        transition: all 0.3s ease;
+      }
+      .test-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+      }
+      .result-area {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+        font-family: "Courier New", monospace;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .status {
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+      }
+      .success {
+        background: rgba(76, 175, 80, 0.3);
+      }
+      .error {
+        background: rgba(244, 67, 54, 0.3);
+      }
+      .warning {
+        background: rgba(255, 193, 7, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 Search Functionality Tester</h1>
+      <p>
+        This tool helps you test the search functionality in your Skippy AI app.
+      </p>
+
+      <div class="status" id="status">
+        Ready to test search functionality...
+      </div>
+
+      <h2>📊 Setup & Testing</h2>
+      <button class="test-btn" onclick="addTestData()">1. Add Test Data</button>
+      <button class="test-btn" onclick="checkData()">
+        2. Check Current Data
+      </button>
+      <button class="test-btn" onclick="testSearch()">
+        3. Test Search Function
+      </button>
+      <button class="test-btn" onclick="openSkippyApp()">
+        4. Open Skippy App
+      </button>
+
+      <h2>🧪 Manual Tests</h2>
+      <p>After setting up data, try these commands in your Skippy AI chat:</p>
+      <div
+        style="
+          background: rgba(0, 0, 0, 0.2);
+          padding: 15px;
+          border-radius: 10px;
+        "
+      >
+        <div><strong>• "find all my programming materials"</strong></div>
+        <div><strong>• "what notes do I have about JavaScript"</strong></div>
+        <div><strong>• "search for AI flashcards"</strong></div>
+        <div><strong>• "show me my Python content"</strong></div>
+      </div>
+
+      <div class="result-area" id="results">
+        Click the buttons above to start testing...
+      </div>
+    </div>
+
+    <script>
+      function updateStatus(message, type = "success") {
+        const status = document.getElementById("status");
+        status.textContent = message;
+        status.className = `status ${type}`;
+      }
+
+      function updateResults(message) {
+        const results = document.getElementById("results");
+        results.textContent += message + "\n\n";
+        results.scrollTop = results.scrollHeight;
+      }
+
+      // Add comprehensive test data
+      function addTestData() {
+        updateStatus("Adding test data...", "warning");
+        updateResults("🔄 Adding comprehensive test data...");
+
+        const testNotes = [
+          {
+            id: "note-js-1",
+            title: "JavaScript Fundamentals",
+            content:
+              "JavaScript is a programming language that enables interactive web pages. Key concepts include variables, functions, objects, and event handling. ES6 introduced arrow functions, let/const, and async/await.",
+            category: "programming",
+            tags: ["javascript", "web development", "programming", "es6"],
+            createdAt: new Date().toISOString(),
+            source: "Manual",
+          },
+          {
+            id: "note-python-1",
+            title: "Python Programming Basics",
+            content:
+              "Python is a high-level programming language known for its simplicity and readability. It supports multiple programming paradigms and has extensive libraries for data science, web development, and automation.",
+            category: "programming",
+            tags: ["python", "programming", "data science"],
+            createdAt: new Date().toISOString(),
+            source: "Manual",
+          },
+          {
+            id: "note-ai-1",
+            title: "Artificial Intelligence Overview",
+            content:
+              "AI encompasses machine learning, deep learning, and neural networks. Key applications include natural language processing, computer vision, and robotics.",
+            category: "ai",
+            tags: [
+              "artificial intelligence",
+              "machine learning",
+              "deep learning",
+            ],
+            createdAt: new Date().toISOString(),
+            source: "Manual",
+          },
+        ];
+
+        const testFlashcards = [
+          {
+            id: "card-js-1",
+            question: "What is JavaScript?",
+            answer:
+              "JavaScript is a programming language that enables interactive web pages and is commonly used for client-side web development.",
+            category: "programming",
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "card-js-2",
+            question: "What are JavaScript variables?",
+            answer:
+              "Variables in JavaScript are containers for storing data values. They can be declared using var, let, or const keywords.",
+            category: "programming",
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "card-python-1",
+            question: "What makes Python popular for data science?",
+            answer:
+              "Python is popular for data science due to its simple syntax, extensive libraries like pandas, numpy, and scikit-learn, and strong community support.",
+            category: "programming",
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "card-ai-1",
+            question: "What is Machine Learning?",
+            answer:
+              "Machine Learning is a subset of AI that enables computers to learn and improve from experience without being explicitly programmed.",
+            category: "ai",
+            createdAt: new Date().toISOString(),
+          },
+        ];
+
+        const testSchedule = [
+          {
+            id: "schedule-1",
+            title: "JavaScript Study Session",
+            date: new Date(Date.now() + 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split("T")[0],
+            time: "10:00",
+            type: "study",
+            priority: "high",
+          },
+          {
+            id: "schedule-2",
+            title: "Python Programming Practice",
+            date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split("T")[0],
+            time: "14:00",
+            type: "study",
+            priority: "medium",
+          },
+        ];
+
+        try {
+          localStorage.setItem("skippy-notes", JSON.stringify(testNotes));
+          localStorage.setItem(
+            "skippy-flashcards",
+            JSON.stringify(testFlashcards)
+          );
+          localStorage.setItem("skippy-schedule", JSON.stringify(testSchedule));
+
+          updateStatus("✅ Test data added successfully!", "success");
+          updateResults("✅ Successfully added:");
+          updateResults(`   📝 ${testNotes.length} notes`);
+          updateResults(`   🎴 ${testFlashcards.length} flashcards`);
+          updateResults(`   📅 ${testSchedule.length} schedule items`);
+          updateResults(
+            "\n🎯 Ready to test! Try the search commands in Skippy AI."
+          );
+        } catch (error) {
+          updateStatus("❌ Failed to add test data", "error");
+          updateResults("❌ Error: " + error.message);
+        }
+      }
+
+      // Check current data
+      function checkData() {
+        updateStatus("Checking current data...", "warning");
+        updateResults("📊 Current data status:");
+
+        try {
+          const notes = JSON.parse(
+            localStorage.getItem("skippy-notes") || "[]"
+          );
+          const flashcards = JSON.parse(
+            localStorage.getItem("skippy-flashcards") || "[]"
+          );
+          const schedule = JSON.parse(
+            localStorage.getItem("skippy-schedule") || "[]"
+          );
+
+          updateResults(`📝 Notes: ${notes.length}`);
+          updateResults(`🎴 Flashcards: ${flashcards.length}`);
+          updateResults(`📅 Schedule: ${schedule.length}`);
+
+          if (notes.length > 0) {
+            updateResults("\n📝 Sample notes:");
+            notes.slice(0, 2).forEach((note, i) => {
+              updateResults(`${i + 1}. ${note.title} (${note.category})`);
+            });
+          }
+
+          if (flashcards.length > 0) {
+            updateResults("\n🎴 Sample flashcards:");
+            flashcards.slice(0, 2).forEach((card, i) => {
+              updateResults(`${i + 1}. Q: ${card.question}`);
+            });
+          }
+
+          updateStatus("✅ Data check completed", "success");
+        } catch (error) {
+          updateStatus("❌ Error checking data", "error");
+          updateResults("❌ Error: " + error.message);
+        }
+      }
+
+      // Test search function directly
+      function testSearch() {
+        updateStatus("Testing search functionality...", "warning");
+        updateResults("🧪 Testing search function...");
+
+        // Check if universalAI is available
+        if (typeof window.universalAI === "undefined") {
+          updateStatus("⚠️ Please open Skippy AI first", "warning");
+          updateResults("❌ universalAI not found. Please:");
+          updateResults('1. Click "Open Skippy App" button');
+          updateResults("2. Wait for the app to load");
+          updateResults("3. Come back and try again");
+          return;
+        }
+
+        updateResults("✅ universalAI found, testing search...");
+
+        // Test search for programming materials
+        window.universalAI
+          .processAnyPrompt({ text: "find all my programming materials" })
+          .then((result) => {
+            updateStatus("✅ Search test completed!", "success");
+            updateResults("🔍 Search results:");
+            updateResults(result.summary || "No summary available");
+
+            if (result.artifacts) {
+              const { notes, flashcards, schedule } = result.artifacts;
+              if (notes && notes.length > 0) {
+                updateResults(`\n📝 Found ${notes.length} notes`);
+              }
+              if (flashcards && flashcards.length > 0) {
+                updateResults(`🎴 Found ${flashcards.length} flashcards`);
+              }
+              if (schedule && schedule.length > 0) {
+                updateResults(`📅 Found ${schedule.length} schedule items`);
+              }
+            }
+          })
+          .catch((error) => {
+            updateStatus("❌ Search test failed", "error");
+            updateResults("❌ Search error: " + error.message);
+          });
+      }
+
+      // Open Skippy app in new tab
+      function openSkippyApp() {
+        window.open("http://localhost:8081", "_blank");
+        updateStatus("🚀 Skippy AI opened in new tab", "success");
+        updateResults("🚀 Skippy AI app opened in new tab");
+        updateResults(
+          "💡 Wait for it to load, then come back and test search."
+        );
+      }
+
+      // Auto-check data on load
+      window.addEventListener("load", () => {
+        setTimeout(checkData, 1000);
+      });
+    </script>
+  </body>
+</html>

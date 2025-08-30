@@ -298,22 +298,12 @@ const StudyDashboard = ({ userName = "Friend" }: StudyDashboardProps) => {
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-col flex-1 md:pl-64">
-          <main className="flex-1">
-            <div className="py-6 px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col flex-1 md:pl-64 h-screen">
+          <main className="flex-1 h-full">
+            <div className="h-full">
               {activeTab === "ai-chat" && (
-                <Card className="h-[calc(100vh-8rem)] cyber-glow">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="flex items-center gap-2">
-                      <MessageCircle className="w-5 h-5 text-primary" />
-                      Skippy AI Assistant
-                    </CardTitle>
-                    <CardDescription>
-                      Chat with Skippy to organize your studies, upload files,
-                      and get instant help
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="h-[calc(100%-6rem)] p-0">
+                <Card className="h-full">
+                  <CardContent className="h-full p-0">
                     <DashboardAI
                       onScheduleUpdate={(items) => {
                         setScheduleItems((prev) => [...prev, ...items]);

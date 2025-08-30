@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🔧 Universal Agent Fixes Validation</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #1e1b2e 0%, #2a1a4a 100%);
+        color: #ffffff;
+        line-height: 1.6;
+      }
+      .container {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        padding: 30px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      h1 {
+        text-align: center;
+        color: #00d4ff;
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+      }
+      .status {
+        padding: 15px;
+        border-radius: 10px;
+        margin: 15px 0;
+        border-left: 5px solid;
+      }
+      .success {
+        background: rgba(0, 255, 0, 0.1);
+        border-color: #00ff00;
+      }
+      .error {
+        background: rgba(255, 0, 0, 0.1);
+        border-color: #ff0000;
+      }
+      .warning {
+        background: rgba(255, 165, 0, 0.1);
+        border-color: #ffa500;
+      }
+      .info {
+        background: rgba(0, 212, 255, 0.1);
+        border-color: #00d4ff;
+      }
+      .test-section {
+        margin: 30px 0;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .test-btn {
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        margin: 10px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .test-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+      }
+      .result-area {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 20px;
+        border-radius: 10px;
+        margin: 15px 0;
+        white-space: pre-wrap;
+        font-family: "Courier New", monospace;
+        min-height: 100px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .fix-item {
+        display: flex;
+        align-items: center;
+        margin: 15px 0;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      }
+      .fix-status {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px;
+      }
+      .pending {
+        background: #ffa500;
+      }
+      .fixed {
+        background: #00ff00;
+        color: #000;
+      }
+      .failed {
+        background: #ff0000;
+      }
+      code {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-family: "Courier New", monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔧 Universal Agent Fixes Validation</h1>
+
+      <div class="info status">
+        <strong>🎯 Testing Two Critical Fixes:</strong><br />
+        1. <strong>Flashcard creation from existing notes</strong> - Should use
+        your actual note content<br />
+        2. <strong>Schedule queries</strong> - "what's tomorrow?", "show my
+        schedule", etc. should work properly
+      </div>
+
+      <!-- Fix Status -->
+      <div class="test-section">
+        <h3>🔍 Fix Status</h3>
+        <div class="fix-item">
+          <div id="fix1-status" class="fix-status pending">?</div>
+          <div>
+            <strong>Fix 1: Flashcard creation from existing notes</strong><br />
+            <code>useExistingData</code> parameter now properly loads note
+            content for flashcard generation
+          </div>
+        </div>
+        <div class="fix-item">
+          <div id="fix2-status" class="fix-status pending">?</div>
+          <div>
+            <strong>Fix 2: Schedule queries and commands</strong><br />
+            Timeframe detection for "tomorrow", "show schedule", "add study
+            session" commands
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Controls -->
+      <div class="test-section">
+        <h3>🧪 Test Controls</h3>
+        <button class="test-btn" onclick="setupTestData()">
+          📊 Setup Test Data
+        </button>
+        <button class="test-btn" onclick="testFlashcardFromNotes()">
+          🎴 Test Flashcards from Notes
+        </button>
+        <button class="test-btn" onclick="testScheduleQueries()">
+          📅 Test Schedule Queries
+        </button>
+        <button class="test-btn" onclick="runFullValidation()">
+          🚀 Run Full Validation
+        </button>
+      </div>
+
+      <!-- Results Display -->
+      <div class="test-section">
+        <h3>📋 Test Results</h3>
+        <div id="results" class="result-area">
+          Click "Run Full Validation" to test both fixes...
+        </div>
+      </div>
+
+      <!-- Manual Testing -->
+      <div class="test-section">
+        <h3>👨‍💻 Manual Testing in Skippy AI</h3>
+        <div class="info status">
+          After running the tests above, try these commands directly in your
+          Skippy AI chat:
+          <ul>
+            <li><code>"make flashcards from my JavaScript notes"</code></li>
+            <li><code>"create flashcards from my existing notes"</code></li>
+            <li><code>"what's tomorrow?"</code></li>
+            <li><code>"show my schedule"</code></li>
+            <li><code>"add study session Friday 3 PM"</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let testResults = [];
+
+      function log(message, type = "info") {
+        const resultsDiv = document.getElementById("results");
+        const timestamp = new Date().toLocaleTimeString();
+        const prefix =
+          type === "success"
+            ? "✅"
+            : type === "error"
+            ? "❌"
+            : type === "warning"
+            ? "⚠️"
+            : "ℹ️";
+        resultsDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+        resultsDiv.scrollTop = resultsDiv.scrollHeight;
+      }
+
+      function updateFixStatus(fixNumber, status) {
+        const statusEl = document.getElementById(`fix${fixNumber}-status`);
+        statusEl.className = `fix-status ${status}`;
+        statusEl.textContent =
+          status === "fixed" ? "✓" : status === "failed" ? "✗" : "?";
+      }
+
+      function setupTestData() {
+        log("Setting up test data...");
+
+        try {
+          // Create comprehensive test notes
+          const testNotes = [
+            {
+              id: "test-js-fundamentals",
+              title: "JavaScript Fundamentals",
+              content:
+                "JavaScript is a programming language for web development. Key concepts include: variables (let, const, var), functions (arrow functions, regular functions), objects (properties, methods), arrays (map, filter, reduce), promises and async/await for asynchronous programming, DOM manipulation, and event handling.",
+              category: "programming",
+              tags: ["javascript", "programming", "web development"],
+              createdAt: new Date().toISOString(),
+              source: "Test Data",
+            },
+            {
+              id: "test-react-basics",
+              title: "React Basics",
+              content:
+                "React is a JavaScript library for building user interfaces. Core concepts: components (functional and class components), JSX syntax, props for passing data, state management with useState hook, useEffect for lifecycle methods, event handling, conditional rendering, and list rendering with map function.",
+              category: "programming",
+              tags: ["react", "javascript", "frontend"],
+              createdAt: new Date().toISOString(),
+              source: "Test Data",
+            },
+            {
+              id: "test-python-basics",
+              title: "Python Data Science",
+              content:
+                "Python is excellent for data science. Key libraries: pandas for data manipulation, numpy for numerical operations, matplotlib and seaborn for visualization, scikit-learn for machine learning. Important concepts: data cleaning, exploratory data analysis, statistical analysis, and model building.",
+              category: "data science",
+              tags: ["python", "data science", "machine learning"],
+              createdAt: new Date().toISOString(),
+              source: "Test Data",
+            },
+          ];
+
+          // Create test schedule items
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowStr = tomorrow.toISOString().split("T")[0];
+
+          const testSchedule = [
+            {
+              id: "schedule-js-study",
+              title: "JavaScript Study Session",
+              date: tomorrowStr,
+              time: "10:00 AM",
+              type: "study",
+              priority: "medium",
+              description: "Review JavaScript fundamentals and practice coding",
+            },
+            {
+              id: "schedule-react-project",
+              title: "React Project Review",
+              date: tomorrowStr,
+              time: "2:00 PM",
+              type: "assignment",
+              priority: "high",
+              description: "Complete React component implementation",
+            },
+            {
+              id: "schedule-python-exam",
+              title: "Python Data Science Exam",
+              date: tomorrowStr,
+              time: "4:00 PM",
+              type: "exam",
+              priority: "high",
+              description: "Final exam covering pandas and machine learning",
+            },
+          ];
+
+          // Save to localStorage
+          localStorage.setItem("skippy-notes", JSON.stringify(testNotes));
+          localStorage.setItem("skippy-schedule", JSON.stringify(testSchedule));
+
+          log(`✅ Test data created successfully!`, "success");
+          log(`📝 Created ${testNotes.length} test notes`);
+          log(`📅 Created ${testSchedule.length} schedule items for tomorrow`);
+          log(`🎯 Data includes: JavaScript, React, and Python content`);
+        } catch (error) {
+          log(`❌ Failed to setup test data: ${error.message}`, "error");
+        }
+      }
+
+      async function testFlashcardFromNotes() {
+        log("🎴 Testing flashcard creation from existing notes...");
+
+        try {
+          // Check if universalAI is available
+          if (typeof window.universalAI === "undefined") {
+            throw new Error(
+              "UniversalAgenticAI not available. Make sure Skippy AI app is running."
+            );
+          }
+
+          const universalAI = window.universalAI;
+
+          // Test 1: Create flashcards from JavaScript notes
+          log("Test 1: 'make flashcards from my JavaScript notes'");
+          const result1 = await universalAI.processAnyPrompt(
+            "make flashcards from my JavaScript notes",
+            {}
+          );
+
+          if (result1.artifacts?.flashcards?.length > 0) {
+            log(
+              `✅ Created ${result1.artifacts.flashcards.length} flashcards from JavaScript notes`,
+              "success"
+            );
+            log(`📋 Summary: ${result1.summary}`);
+
+            // Check if flashcards contain actual content from notes
+            const hasRelevantContent = result1.artifacts.flashcards.some(
+              (card) =>
+                card.question.toLowerCase().includes("javascript") ||
+                card.answer.toLowerCase().includes("javascript") ||
+                card.answer.toLowerCase().includes("variable") ||
+                card.answer.toLowerCase().includes("function")
+            );
+
+            if (hasRelevantContent) {
+              updateFixStatus(1, "fixed");
+              log(
+                "✅ Flashcards contain relevant JavaScript content from notes!",
+                "success"
+              );
+            } else {
+              updateFixStatus(1, "failed");
+              log(
+                "❌ Flashcards don't seem to contain content from notes",
+                "error"
+              );
+            }
+          } else {
+            updateFixStatus(1, "failed");
+            log(`❌ No flashcards created: ${result1.summary}`, "error");
+          }
+
+          // Test 2: Create flashcards from all existing notes
+          log("\nTest 2: 'create flashcards from my existing notes'");
+          const result2 = await universalAI.processAnyPrompt(
+            "create flashcards from my existing notes",
+            {}
+          );
+
+          if (result2.artifacts?.flashcards?.length > 0) {
+            log(
+              `✅ Created ${result2.artifacts.flashcards.length} flashcards from all notes`,
+              "success"
+            );
+            log(`📋 Summary: ${result2.summary}`);
+          } else {
+            log(
+              `❌ Failed to create flashcards from all notes: ${result2.summary}`,
+              "error"
+            );
+          }
+        } catch (error) {
+          updateFixStatus(1, "failed");
+          log(`❌ Flashcard test failed: ${error.message}`, "error");
+        }
+      }
+
+      async function testScheduleQueries() {
+        log("📅 Testing schedule queries and commands...");
+
+        try {
+          if (typeof window.universalAI === "undefined") {
+            throw new Error(
+              "UniversalAgenticAI not available. Make sure Skippy AI app is running."
+            );
+          }
+
+          const universalAI = window.universalAI;
+
+          // Test 1: "what's tomorrow?"
+          log('Test 1: "what\'s tomorrow?"');
+          const result1 = await universalAI.processAnyPrompt(
+            "what's tomorrow?",
+            {}
+          );
+
+          if (
+            result1.summary.toLowerCase().includes("tomorrow") ||
+            result1.artifacts?.schedule?.length > 0
+          ) {
+            log(`✅ Tomorrow query worked: ${result1.summary}`, "success");
+            updateFixStatus(2, "fixed");
+          } else {
+            log(`⚠️ Tomorrow query response: ${result1.summary}`, "warning");
+          }
+
+          // Test 2: "show my schedule"
+          log("\nTest 2: 'show my schedule'");
+          const result2 = await universalAI.processAnyPrompt(
+            "show my schedule",
+            {}
+          );
+          log(`📋 Schedule response: ${result2.summary}`);
+
+          // Test 3: "add study session Friday 3 PM"
+          log("\nTest 3: 'add study session Friday 3 PM'");
+          const result3 = await universalAI.processAnyPrompt(
+            "add study session Friday 3 PM",
+            {}
+          );
+
+          if (
+            result3.summary.toLowerCase().includes("added") ||
+            result3.summary.toLowerCase().includes("schedule")
+          ) {
+            log(`✅ Schedule creation worked: ${result3.summary}`, "success");
+          } else {
+            log(`📋 Schedule creation response: ${result3.summary}`);
+          }
+        } catch (error) {
+          updateFixStatus(2, "failed");
+          log(`❌ Schedule test failed: ${error.message}`, "error");
+        }
+      }
+
+      async function runFullValidation() {
+        log("🚀 Starting full validation of Universal Agent fixes...");
+        log("=".repeat(60));
+
+        // Reset status indicators
+        updateFixStatus(1, "pending");
+        updateFixStatus(2, "pending");
+
+        try {
+          // Step 1: Setup test data
+          setupTestData();
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // Step 2: Test flashcard creation from notes
+          await testFlashcardFromNotes();
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // Step 3: Test schedule queries
+          await testScheduleQueries();
+
+          log("\n🎯 VALIDATION COMPLETE!");
+          log("=".repeat(60));
+          log("📊 Check the fix status indicators above to see results");
+          log("💡 Try the manual testing commands in your Skippy AI chat");
+        } catch (error) {
+          log(`❌ Full validation failed: ${error.message}`, "error");
+        }
+      }
+
+      // Initial setup message
+      log("🔧 Universal Agent Fixes Validation Tool Ready");
+      log("👆 Click buttons above to test the fixes");
+      log("⚠️ Make sure your Skippy AI app is running at localhost:5173");
+
+      // Check if universalAI is available
+      setTimeout(() => {
+        if (typeof window.universalAI !== "undefined") {
+          log("✅ UniversalAgenticAI detected - ready for testing!", "success");
+        } else {
+          log(
+            "⚠️ UniversalAgenticAI not detected. Open localhost:5173 in another tab first.",
+            "warning"
+          );
+        }
+      }, 2000);
+    </script>
+  </body>
+</html>
