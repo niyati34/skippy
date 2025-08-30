@@ -53,6 +53,7 @@ import {
   createDefaultOrchestrator,
 } from "@/lib/agent";
 import { parseIntent } from "@/lib/intent";
+import { UniversalAgenticAI } from "@/lib/universalAgent";
 import {
   processUploadedFile,
   FileProcessingResult,
@@ -81,6 +82,12 @@ const DashboardAI = ({
   onNotesUpdate,
 }: DashboardAIProps) => {
   const orchestrator = createDefaultOrchestrator();
+  const universalAI = new UniversalAgenticAI();
+
+  // Make universalAI available globally for debugging
+  if (typeof window !== "undefined") {
+    (window as any).universalAI = universalAI;
+  }
   // Generate day-wise summary for Google Calendar style display
   const generateDayWiseSummary = (classes: any[]): string => {
     const days = [
@@ -118,8 +125,23 @@ const DashboardAI = ({
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content:
-        "Hi, I'm Skippy. I can analyze files, create schedules, generate flashcards, and organize notes. Upload a file or ask a question to begin.",
+      content: `👋 Hey there! I'm Skippy, your intelligent study buddy! 
+
+I can help you with everything study-related:
+
+🎴 **Flashcards**: "create 20 flashcards about JavaScript", "make flashcards from my notes"
+📝 **Notes**: "create notes about machine learning", "find my AI notes" 
+📅 **Schedule**: "what's tomorrow?", "show my schedule", "add study session Friday 3 PM"
+🔍 **Search**: "find notes containing algorithms", "search flashcards about Python"
+💬 **Chat**: Just talk to me naturally - "hey buddy", "give me study tips"
+
+Try saying things like:
+• "make 30 flashcards of AI"
+• "what notes do I have about JavaScript?" 
+• "create study plan for this week"
+• "find all my programming materials"
+
+Upload files (PDF, images, text) and I'll extract schedules, create notes, or make flashcards automatically! What would you like to work on? 🚀`,
     },
   ]);
   const [inputText, setInputText] = useState("");
@@ -377,9 +399,11 @@ const DashboardAI = ({
     setIsLoading(true);
 
     try {
-      // 1) Try centralized orchestrator (now wired to real tools)
+      // 1) Use the enhanced UniversalAgent for all text processing
       try {
-        const result = await orchestrator.handle({ text: messageText });
+        const result = await universalAI.processAnyPrompt({
+          text: messageText,
+        });
         const summary = result?.summary ? toPlainText(result.summary) : "";
         const arts = result?.artifacts || {};
         let consumed = false;

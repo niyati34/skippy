@@ -41,6 +41,10 @@ export class EnhancedNLPProcessor {
     ["flascarrds", "flashcards"],
     ["flascard", "flashcards"],
     ["flascards", "flashcards"],
+    ["flashhh", "flashcards"],
+    ["flashhhh", "flashcards"],
+    ["flashh", "flashcards"],
+    ["flasshcard", "flashcards"],
     ["flashcrad", "flashcards"],
     ["note", "notes"],
     ["notez", "notes"],
@@ -93,6 +97,14 @@ export class EnhancedNLPProcessor {
     ["mathematic", "mathematics"],
     ["biologey", "biology"],
     ["biologi", "biology"],
+    ["block cain", "blockchain"],
+    ["blockcain", "blockchain"],
+    ["blokchain", "blockchain"],
+    ["block chain", "blockchain"],
+    ["histroy", "history"],
+    ["histry", "history"],
+    ["india history", "history of india"],
+    ["indian history", "history of india"],
     // General typos from user feedback
     ["thesee", "these"],
     ["rectonise", "recognize"],
@@ -128,6 +140,9 @@ export class EnhancedNLPProcessor {
     { pattern: /\bfcards\b/gi, replacement: "flashcards" },
     { pattern: /\bcards\b/gi, replacement: "flashcards" },
 
+    // Fix redundancy from typo corrections
+    { pattern: /\bflashcards\s+cards?\b/gi, replacement: "flashcards" },
+
     // Subject variations
     { pattern: /\bjs\b/gi, replacement: "JavaScript" },
     { pattern: /\bmaths\b/gi, replacement: "mathematics" },
@@ -158,6 +173,9 @@ export class EnhancedNLPProcessor {
 
   correctText(input: string): TextCorrectionResult {
     let correctedText = input.toLowerCase().trim();
+    // Normalize exaggerated repeated letters (e.g., "flashhhh" -> "flashh")
+    // Keep at most 2 repeats to avoid damaging valid words like "need"
+    correctedText = correctedText.replace(/([a-z])\1{2,}/g, "$1$1");
     const corrections: Array<{
       original: string;
       corrected: string;
