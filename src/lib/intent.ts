@@ -1,4 +1,4 @@
-export type IntentType = "flashcards" | "notes" | "schedule" | "fun" | "none";
+export type IntentType = "flashcards" | "notes" | "schedule" | "fun" | "delete" | "none";
 
 export interface ParsedIntent {
   type: IntentType;
@@ -48,6 +48,12 @@ export function parseIntent(raw: string): ParsedIntent {
         new RegExp(`${kind}\\s*(?:about|from|on|for)?\\s*[:\\-]?\\s*(.*)$`, "i")
       ) || s;
     return { type: "fun", content, funKind: kind };
+  }
+
+  // Delete commands
+  if (/(delete|remove|clear)\s+(all\s+)?(notes?|flashcards?|cards?)/i.test(s)) {
+    const content = after(/(?:notes?|flashcards?|cards?)\s*(.*)$/i);
+    return { type: "delete", content };
   }
 
   return { type: "none", content: s };

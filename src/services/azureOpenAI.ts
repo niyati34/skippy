@@ -5,7 +5,8 @@
 import {
   generateTimetableWithGemini,
   generateFlashcardsWithGemini,
-} from "./geminiAI.js";
+  generateNotesWithGemini,
+} from "./geminiAI";
 
 const ENV_MODEL = (import.meta as any)?.env?.VITE_OPENROUTER_MODEL || "";
 function getRuntimeModel(): string {
@@ -33,10 +34,11 @@ export async function callOpenRouter(
   messages: ChatMessage[],
   optionsOrRetries?: CallOptions
 ): Promise<string> {
-  // 🚫 TEMPORARY DISABLE: Force skip OpenRouter for testing
-  const DISABLE_OPENROUTER =
-    import.meta.env.VITE_DISABLE_OPENROUTER === "true" ||
-    localStorage.getItem("disableOpenRouter") === "true";
+  // ✅ TEMPORARILY ENABLED: Allow OpenRouter for proper functionality
+  const DISABLE_OPENROUTER = false; // Disabled the temporary disable flag
+  // const DISABLE_OPENROUTER =
+  //   import.meta.env.VITE_DISABLE_OPENROUTER === "true" ||
+  //   localStorage.getItem("disableOpenRouter") === "true";
 
   if (DISABLE_OPENROUTER) {
     console.log(
@@ -1764,10 +1766,34 @@ IMPORTANT:
       },
     ];
 
-    const response = await callOpenRouter(messages, {
-      retries: 3,
-      model: pickModel("notes", content),
-    });
+    // Try OpenRouter first; if unavailable/fails, fall back to Gemini notes API
+    let response: string | null = null;
+    try {
+      response = await callOpenRouter(messages, {
+        retries: 3,
+        model: pickModel("notes", content),
+      });
+    } catch (err) {
+      console.warn(
+        "[Notes] OpenRouter failed or disabled, using Gemini fallback:",
+        err
+      );
+      const geminiNotes = await generateNotesWithGemini(content, fileName);
+      if (Array.isArray(geminiNotes) && geminiNotes.length > 0) {
+        // Normalize and return Gemini notes
+        return geminiNotes.map((n: any, i: number) => ({
+          title: n?.title || `Study Notes: ${fileName} - Part ${i + 1}`,
+          // Keep Gemini content as-is, but ensure minimal formatting consistency
+          content: n?.content || `# Study Notes: ${fileName}\n\n${content}`,
+          category: n?.category || detectSmartCategory(content, fileName),
+          tags: Array.isArray(n?.tags)
+            ? n.tags.slice(0, 5)
+            : ["structured", "academic", "study-notes"],
+        }));
+      }
+      // If Gemini also failed or returned empty, continue to structured fallback below
+      response = null;
+    }
 
     // Enhanced JSON parsing to handle complex content
     let clean = (response || "").trim();
@@ -1833,6 +1859,20 @@ IMPORTANT:
     });
   } catch (e) {
     console.error("Error in generateNotesFromContent:", e);
+    // Final safety: try Gemini once more before falling back to structured notes
+    try {
+      const geminiNotes = await generateNotesWithGemini(content, fileName);
+      if (Array.isArray(geminiNotes) && geminiNotes.length > 0) {
+        return geminiNotes.map((n: any, i: number) => ({
+          title: n?.title || `Study Notes: ${fileName} - Part ${i + 1}`,
+          content: n?.content || `# Study Notes: ${fileName}\n\n${content}`,
+          category: n?.category || detectSmartCategory(content, fileName),
+          tags: Array.isArray(n?.tags)
+            ? n.tags.slice(0, 5)
+            : ["structured", "academic", "study-notes"],
+        }));
+      }
+    } catch {}
     return createStructuredFallbackNotes(content, fileName);
   }
 }

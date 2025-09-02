@@ -413,6 +413,300 @@ Return JSON only:`;
 /**
  * Generate flashcards using Gemini AI
  */
+export async function generateNotesWithGemini(
+  content: string,
+  source: string = "chat-input"
+): Promise<any[]> {
+  console.log("📝 [GEMINI NOTES] Starting generation...");
+
+  const systemPrompt = `
+You are an expert academic note-taking specialist. Create comprehensive, well-structured study notes.
+
+OUTPUT ONLY JSON: Return a JSON array with no other text.
+SCHEMA: {"title": "Study Notes: [Topic]", "content": "Structured markdown content", "category": "Academic", "tags": ["structured", "academic"]}
+
+Create 1-3 comprehensive notes that cover the topic thoroughly with:
+- Clear definitions and explanations
+- Key concepts and principles
+- Important details and examples
+- Proper markdown formatting with headers, bold text, and bullet points
+`;
+
+  const userPrompt = `Create comprehensive study notes about: ${content}
+
+Focus on:
+- Clear definitions and explanations
+- Key concepts and important details
+- Proper academic structure
+- Use markdown formatting with headers, bold text, and bullet points
+
+Return exactly 1-3 high-quality notes.`;
+
+  try {
+    const response = await callGemini(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        model: "gemini-1.5-flash",
+        temperature: 0.3,
+        maxTokens: 2000,
+        responseMimeType: "application/json",
+      }
+    );
+
+    // Log the raw response from Gemini for notes generation
+    try {
+      console.log("📝 [GEMINI NOTES RAW]\n" + response.slice(0, 4000));
+    } catch {}
+
+    // Robust JSON extraction
+    const tryParsers: Array<() => any[]> = [
+      // 1) Direct parse
+      () => {
+        const parsed = JSON.parse(response);
+        return Array.isArray(parsed) ? parsed : [];
+      },
+      // 2) Strip common code fences and parse
+      () => {
+        const stripped = response.replace(/```json\n?|```/g, "");
+        const parsed = JSON.parse(stripped);
+        return Array.isArray(parsed) ? parsed : [];
+      },
+      // 3) Regex match first array
+      () => {
+        const m = response.match(/\[[\s\S]*\]/);
+        return m ? (JSON.parse(m[0]) as any[]) : [];
+      },
+    ];
+
+    for (const parser of tryParsers) {
+      try {
+        const result = parser();
+        if (result && result.length > 0) {
+          console.log("✅ [GEMINI] Generated", result.length, "notes");
+          return result.map((note: any) => ({
+            title: note.title || `Study Notes: ${source}`,
+            content: note.content || "",
+            category: note.category || "Academic",
+            tags: Array.isArray(note.tags)
+              ? note.tags
+              : ["structured", "academic"],
+          }));
+        }
+      } catch (e) {
+        console.warn("Parser failed, trying next...", e);
+      }
+    }
+
+    // Fallback: create a basic note
+    console.log("⚠️ [GEMINI] All parsers failed, creating fallback note");
+    return [
+      {
+        title: `Study Notes: ${source}`,
+        content: `# Study Notes: ${content}\n\n## Overview\n\n${content} is an important topic that requires careful study.\n\n## Key Points\n\n- Important concept 1\n- Important concept 2\n- Important concept 3\n\n## Summary\n\nThis topic covers essential information that students should understand thoroughly.`,
+        category: "Academic",
+        tags: ["structured", "academic", "fallback"],
+      },
+    ];
+  } catch (error) {
+    console.error("❌ [GEMINI NOTES] Generation failed:", error);
+    return [
+      {
+        title: `Study Notes: ${source}`,
+        content: `# Study Notes: ${content}\n\n## Overview\n\n${content} is an important topic that requires careful study.\n\n## Key Points\n\n- Important concept 1\n- Important concept 2\n- Important concept 3\n\n## Summary\n\nThis topic covers essential information that students should understand thoroughly.`,
+        category: "Academic",
+        tags: ["structured", "academic", "error-fallback"],
+      },
+    ];
+  }
+}
+
+/**
+ * Generate fun learning content using Gemini AI
+ */
+export async function generateFunLearningWithGemini(
+  content: string,
+  type: string = "story"
+): Promise<string> {
+  console.log("🎯 [GEMINI FUN LEARNING] Starting generation...");
+
+  const systemPrompt = `
+You are a creative educational content creator. Generate engaging, educational content based on the provided topic.
+
+OUTPUT: Return only the content, no JSON or markdown formatting.
+`;
+
+  const userPrompt = `Create a ${type} about: ${content}
+
+Make it:
+- Educational and informative
+- Engaging and fun to read
+- Appropriate for students
+- Creative and original
+
+Return only the content, no formatting.`;
+
+  try {
+    const response = await callGemini(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        model: "gemini-1.5-flash",
+        temperature: 0.7,
+        maxTokens: 1500,
+      }
+    );
+
+    console.log("✅ [GEMINI] Generated fun learning content");
+    return response;
+  } catch (error) {
+    console.error("🚨 [GEMINI] Fun learning generation failed:", error);
+    return `Here's a ${type} about ${content}:\n\nThis is a placeholder ${type}. Please try again later.`;
+  }
+}
+
+/**
+ * Generate schedule data using Gemini AI
+ */
+export async function generateScheduleWithGemini(
+  content: string,
+  source: string = "chat-input"
+): Promise<any[]> {
+  console.log("📅 [GEMINI SCHEDULE] Starting generation...");
+
+  const systemPrompt = `
+You are an expert schedule parser. Extract schedule information from the provided content and return a JSON array.
+
+OUTPUT ONLY JSON: Return a JSON array with no other text.
+SCHEMA: {"title": "Event Title", "date": "YYYY-MM-DD", "time": "HH:MM", "description": "Event description"}
+`;
+
+  const userPrompt = `Extract schedule information from: ${content}
+
+Look for:
+- Dates and times
+- Event titles
+- Descriptions
+- Deadlines
+
+Return exactly 1-5 schedule items as JSON array.`;
+
+  try {
+    const response = await callGemini(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        model: "gemini-1.5-flash",
+        temperature: 0.1,
+        maxTokens: 1000,
+        responseMimeType: "application/json",
+      }
+    );
+
+    // Parse JSON response
+    const cleaned = response.replace(/```json\n?|```/g, "").trim();
+    const items = JSON.parse(cleaned);
+
+    if (Array.isArray(items)) {
+      console.log("✅ [GEMINI] Generated", items.length, "schedule items");
+      return items.map((item: any, index: number) => ({
+        id: `gemini-schedule-${Date.now()}-${index}`,
+        title: item.title || "Event",
+        date: item.date || new Date().toISOString().split("T")[0],
+        time: item.time || "09:00",
+        description: item.description || "",
+        type: "event" as const,
+        source: `${source} (Gemini)`,
+        createdAt: new Date().toISOString(),
+      }));
+    }
+
+    return [];
+  } catch (error) {
+    console.error("🚨 [GEMINI] Schedule generation failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Analyze file content using Gemini AI
+ */
+export async function analyzeFileContentWithGemini(
+  content: string,
+  fileName: string
+): Promise<any> {
+  console.log("🔍 [GEMINI ANALYSIS] Starting analysis...");
+
+  const systemPrompt = `
+You are an expert content analyzer. Analyze the provided content and return a JSON object with analysis results.
+
+OUTPUT ONLY JSON: Return a JSON object with no other text.
+SCHEMA: {"contentType": "type", "hasEducationalContent": true/false, "hasScheduleData": true/false, "summary": "brief summary", "confidence": 0.9}
+`;
+
+  const userPrompt = `Analyze this content from file "${fileName}":
+
+${content.substring(0, 2000)}
+
+Determine:
+- Content type (academic, schedule, general, etc.)
+- Whether it contains educational content
+- Whether it contains schedule/timetable data
+- Brief summary
+- Confidence level (0-1)
+
+Return analysis as JSON object.`;
+
+  try {
+    const response = await callGemini(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        model: "gemini-1.5-flash",
+        temperature: 0.1,
+        maxTokens: 500,
+        responseMimeType: "application/json",
+      }
+    );
+
+    const cleaned = response.replace(/```json\n?|```/g, "").trim();
+    const analysis = JSON.parse(cleaned);
+
+    console.log("✅ [GEMINI] Analysis completed");
+    return analysis;
+  } catch (error) {
+    console.error("🚨 [GEMINI] Analysis failed:", error);
+    return {
+      contentType: "unknown",
+      hasEducationalContent: false,
+      hasScheduleData: false,
+      summary: "Analysis failed",
+      confidence: 0.5,
+    };
+  }
+}
+
+/**
+ * Extract text from image using Gemini AI
+ */
+export async function extractTextFromImageWithGemini(
+  imageFile: File
+): Promise<string> {
+  console.log("🖼️ [GEMINI OCR] Starting text extraction...");
+
+  // For now, return a placeholder since image processing requires different API
+  console.log("⚠️ [GEMINI] Image processing not implemented yet");
+  return "Image text extraction not available with current Gemini setup.";
+}
+
 export async function generateFlashcardsWithGemini(
   content: string,
   source: string = "PDF Upload",
@@ -420,7 +714,12 @@ export async function generateFlashcardsWithGemini(
 ): Promise<any[]> {
   console.log("📚 [GEMINI FLASHCARDS] Starting generation...");
 
-  const desired = Math.max(1, Math.min(100, Number(opts.count || 0) || 0));
+  // Determine desired count only if the user explicitly provided it.
+  // If not provided, allow Gemini to generate a healthy batch (8-16) instead of defaulting to 1.
+  const desired =
+    typeof opts.count === "number" && opts.count > 0
+      ? Math.min(100, Math.floor(opts.count))
+      : 0;
   const difficulty = (opts.difficulty || "").toString().toLowerCase();
   const difficultyHint = difficulty
     ? `Aim for ${difficulty} difficulty in phrasing and depth.`
@@ -435,17 +734,18 @@ SCHEMA: {"question": "What is...", "answer": "Definition or explanation", "categ
   }"}
 
 ${
-  desired
+  desired > 0
     ? `Return exactly ${desired} flashcards. Do not include any extra commentary.`
-    : `Generate 6-12 high-quality flashcards that help students learn the material.`
+    : `Generate 8-16 high-quality flashcards that help students learn the material.`
 }
 ${difficultyHint}
 `;
 
   const topic = opts.category || "General";
-  const desiredCountText = desired
-    ? `Create exactly ${desired} flashcards.`
-    : `Create 6-12 flashcards.`;
+  const desiredCountText =
+    desired > 0
+      ? `Create exactly ${desired} flashcards.`
+      : `Create as many high-quality flashcards as possible (aim for 8-16).`;
   const negativeConstraints = `
 Rules:
 - The topic is strictly: ${topic}.
@@ -536,7 +836,8 @@ ${content.substring(0, 2000)}`;
         const re =
           /\{[^}]*?"question"\s*:\s*"([\s\S]*?)"[^}]*?"answer"\s*:\s*"([\s\S]*?)"(?:[^}]*?"category"\s*:\s*"([\s\S]*?)")?[^}]*?\}/g;
         let m: RegExpExecArray | null;
-        while ((m = re.exec(response)) && items.length < (desired || 100)) {
+        const cap = desired > 0 ? desired : 24; // sensible cap when free-form
+        while ((m = re.exec(response)) && items.length < cap) {
           const q = (m[1] || "").replace(/\n+/g, " ").trim();
           const a = (m[2] || "").replace(/\n+/g, " ").trim();
           const c = (m[3] || opts.category || "General").trim();
@@ -567,9 +868,8 @@ ${content.substring(0, 2000)}`;
       createdAt: new Date().toISOString(),
     }));
 
-    // If Gemini returned fewer than desired, just return what we have;
-    // caller may decide to top-up.
-    if (desired && normalized.length > desired) {
+    // If Gemini returned more than desired, trim to desired.
+    if (desired > 0 && normalized.length > desired) {
       return normalized.slice(0, desired);
     }
 

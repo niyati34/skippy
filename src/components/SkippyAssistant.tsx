@@ -383,7 +383,7 @@ const SkippyAssistant = ({
       });
 
       // Process with advanced agentic system
-      const result = await orchestrator.processInput(input, []);
+      const result = await orchestrator.handle({ text: input, files: [] });
 
       if (result.success) {
         const summary = toPlainText(result.response || "I've processed your request successfully!");

@@ -247,9 +247,17 @@ const NotesManager = ({ notes: externalNotes = [] }: NotesManagerProps) => {
         );
 
         if (newNotes.length > 0) {
-          // Save only new notes to localStorage
-          NotesStorage.addBatch(newNotes);
-          return [...prev, ...newNotes];
+          // Save only new notes to localStorage and use returned items with IDs
+          const saved = NotesStorage.addBatch(
+            newNotes.map((n) => ({
+              title: n.title,
+              content: n.content,
+              source: n.source || "import",
+              category: n.category || "General",
+              tags: Array.isArray((n as any).tags) ? (n as any).tags : [],
+            }))
+          );
+          return [...prev, ...saved];
         }
         return prev;
       });

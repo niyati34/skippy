@@ -125,6 +125,57 @@ export class AdvancedAgenticOrchestrator {
     return agents;
   }
 
+  // NEW: Handle method that uses TaskUnderstanding system
+  async handle(input: { text: string; files: File[] }): Promise<AgentResponse> {
+    const userInput = input.text;
+    const files = input.files;
+    
+    console.log('🧠 [AdvancedAgenticOrchestrator] Processing with TaskUnderstanding: "${userInput}"');
+    
+    // PRIORITY 1: Handle delete commands immediately (most important)
+    if (/(delete|remove|clear)\s+all/i.test(userInput)) {
+      console.log("🗑️ [AdvancedAgenticOrchestrator] Delete command detected, using TaskUnderstanding immediately...");
+      try {
+        const { TaskUnderstanding } = await import('@/lib/taskUnderstanding');
+        const { TaskExecutor } = await import('@/lib/taskExecutor');
+        
+        const taskRequest = TaskUnderstanding.understandRequest(userInput);
+        console.log(`📋 [AdvancedAgenticOrchestrator] Delete task request:`, taskRequest);
+        
+        if (taskRequest.actions && taskRequest.actions.length > 0) {
+          const taskResults = await TaskExecutor.executeTask(taskRequest);
+          console.log(`⚡ [AdvancedAgenticOrchestrator] Delete task results:`, taskResults);
+          
+          const summaries: string[] = [];
+          taskResults.forEach(result => {
+            if (result.success) {
+              summaries.push(result.message);
+            }
+          });
+          
+          const finalSummary = taskRequest.message + " " + summaries.join(" ");
+          console.log(`🎯 [AdvancedAgenticOrchestrator] Delete completed:`, { summary: finalSummary });
+          
+          return {
+            success: true,
+            response: finalSummary,
+            tasks: [],
+            metadata: {
+              modelsUsed: [],
+              processingTime: 0,
+              confidence: taskRequest.confidence
+            }
+          };
+        }
+      } catch (error) {
+        console.error("🚨 [AdvancedAgenticOrchestrator] TaskUnderstanding failed for delete:", error);
+      }
+    }
+    
+    // Fallback to original processInput method
+    return this.processInput(userInput, files);
+  }
+
   async processInput(userInput: string, files: File[] = []): Promise<AgentResponse> {
     console.log('🚀 Advanced Agentic Processing Started');
     

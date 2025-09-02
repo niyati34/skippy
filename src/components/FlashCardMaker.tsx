@@ -78,23 +78,28 @@ const FlashCardMaker = ({
   // Load flashcards from localStorage on component mount
   useEffect(() => {
     const loadedFlashcards = FlashcardStorage.load();
+    // Ensure loadedFlashcards is always an array to prevent iteration errors
+    const safeFlashcards = Array.isArray(loadedFlashcards)
+      ? loadedFlashcards
+      : [];
+
     // One-time cleanup: remove any stored duplicates by normalized Q+A
     const norm = (s: string) =>
       (s || "").toLowerCase().trim().replace(/\s+/g, " ");
     const seen = new Set<string>();
-    const unique = [] as typeof loadedFlashcards;
-    for (const c of loadedFlashcards) {
+    const unique = [] as typeof safeFlashcards;
+    for (const c of safeFlashcards) {
       const k = `${norm(c.question)}|${norm(c.answer)}`;
       if (seen.has(k)) continue;
       seen.add(k);
       unique.push(c);
     }
-    if (unique.length !== loadedFlashcards.length) {
+    if (unique.length !== safeFlashcards.length) {
       FlashcardStorage.save(unique);
       toast({
         title: "Cleaned duplicates",
         description: `Removed ${
-          loadedFlashcards.length - unique.length
+          safeFlashcards.length - unique.length
         } duplicate cards.`,
       });
     }

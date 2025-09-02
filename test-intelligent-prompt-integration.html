@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Prompt Integration Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .test-input {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: background 0.3s;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .result {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .example {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 3px solid #2196F3;
+        }
+        .example h4 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        .flow-diagram {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .flow-step {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            margin: 10px;
+            font-weight: bold;
+        }
+        .flow-arrow {
+            font-size: 24px;
+            color: #4CAF50;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Intelligent Prompt Integration Test</h1>
+        
+        <div class="test-section">
+            <h3>🎯 What This Test Shows</h3>
+            <p>Your existing orchestrator now has <strong>two layers of intelligence</strong>:</p>
+            <ol>
+                <li><strong>Layer 1:</strong> Intelligent Prompt Understanding (NEW) - Understands natural language like "Yo buddy, help me prep for my math exam"</li>
+                <li><strong>Layer 2:</strong> Existing Multi-Agent System (FALLBACK) - Your proven keyword-based routing system</li>
+            </ol>
+        </div>
+
+        <div class="flow-diagram">
+            <h3>🔄 New Processing Flow</h3>
+            <div class="flow-step">User Input</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">🧠 Intelligent Prompt</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">⚡ Action Executor</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">📊 Results</div>
+            <br><br>
+            <div class="flow-arrow">↘️</div>
+            <div class="flow-step">🔄 Fallback to Existing Agents</div>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 Test Natural Language Commands</h3>
+            <p>Try these examples to see the intelligent prompt system in action:</p>
+            
+            <div class="example">
+                <h4>📝 Notes & Flashcards</h4>
+                <button class="test-button" onclick="testCommand('Make flashcards from my Biology notes about cells')">Test: Biology Flashcards</button>
+                <button class="test-button" onclick="testCommand('Create notes from this PDF and summarize the key points')">Test: PDF Notes + Summary</button>
+            </div>
+
+            <div class="example">
+                <h4>📅 Scheduling & Planning</h4>
+                <button class="test-button" onclick="testCommand('Remind me to study chemistry tomorrow at 6 PM')">Test: Study Reminder</button>
+                <button class="test-button" onclick="testCommand('Help me plan my week for exams')">Test: Exam Planning</button>
+            </div>
+
+            <div class="example">
+                <h4>🎯 Complex Multi-Action</h4>
+                <button class="test-button" onclick="testCommand('Yo buddy, help me prep for my math exam — give me notes + quiz me tomorrow')">Test: Multi-Action Request</button>
+                <button class="test-button" onclick="testCommand('Summarize this PDF and make flashcards')">Test: PDF + Flashcards</button>
+            </div>
+
+            <div class="example">
+                <h4>⏰ Timetable Parsing</h4>
+                <button class="test-button" onclick="testCommand('Parse my class timetable and add it to my schedule')">Test: Timetable Parsing</button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 Custom Test</h3>
+            <input type="text" id="customInput" class="test-input" placeholder="Type your natural language command here...">
+            <button class="test-button" onclick="testCustomCommand()">Test Custom Command</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Test Results</h3>
+            <div id="results" class="result">Results will appear here...</div>
+        </div>
+
+        <div class="test-section">
+            <h3>💡 How It Works</h3>
+            <p><strong>Before (Fixed Keywords):</strong> Only understood exact patterns like "make flashcards" or "create notes"</p>
+            <p><strong>Now (Intelligent Understanding):</strong> Understands natural language like:</p>
+            <ul>
+                <li>"Yo buddy, help me prep for my math exam" → Creates notes + flashcards + sets reminder</li>
+                <li>"I need to study chemistry tomorrow evening" → Schedules study session</li>
+                <li>"Can you analyze this document and quiz me on it?" → Analyzes content + creates flashcards</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>🔄 Fallback System</h3>
+            <p>If the intelligent prompt system can't understand a command, it automatically falls back to your existing multi-agent system. This ensures:</p>
+            <ul>
+                <li>✅ <strong>100% Backward Compatibility</strong> - All existing functionality still works</li>
+                <li>✅ <strong>Enhanced Intelligence</strong> - New natural language understanding</li>
+                <li>✅ <strong>Robust Fallback</strong> - Never loses functionality</li>
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the enhanced orchestrator
+        import { createDefaultOrchestrator } from './src/lib/agent.ts';
+
+        let orchestrator;
+
+        async function initializeOrchestrator() {
+            try {
+                orchestrator = createDefaultOrchestrator();
+                console.log('✅ Enhanced orchestrator initialized with intelligent prompt integration');
+                return true;
+            } catch (error) {
+                console.error('❌ Failed to initialize orchestrator:', error);
+                return false;
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', initializeOrchestrator);
+
+        // Test function for predefined commands
+        window.testCommand = async function(command) {
+            if (!orchestrator) {
+                showResult('❌ Orchestrator not initialized. Please wait...');
+                return;
+            }
+
+            showResult('🧠 Processing: ' + command);
+            
+            try {
+                const result = await orchestrator.handle({
+                    text: command,
+                    files: [],
+                    subject: 'Test',
+                    mode: 'test'
+                });
+
+                showResult('✅ Result:\n' + JSON.stringify(result, null, 2));
+            } catch (error) {
+                showResult('❌ Error: ' + error.message);
+            }
+        };
+
+        // Test function for custom input
+        window.testCustomCommand = async function() {
+            const input = document.getElementById('customInput').value.trim();
+            if (!input) {
+                showResult('❌ Please enter a command first');
+                return;
+            }
+
+            await testCommand(input);
+        };
+
+        // Helper function to show results
+        function showResult(message) {
+            document.getElementById('results').textContent = message;
+        }
+
+        // Add some example commands to test
+        console.log('🧠 Intelligent Prompt Integration Test Loaded');
+        console.log('💡 Try commands like:');
+        console.log('   - "Make flashcards from my Biology notes about cells"');
+        console.log('   - "Yo buddy, help me prep for my math exam"');
+        console.log('   - "Remind me to study chemistry tomorrow at 6 PM"');
+    </script>
+</body>
+</html>

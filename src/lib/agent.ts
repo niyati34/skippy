@@ -280,30 +280,66 @@ export class NotesAgent implements Agent {
     }
   }
 
-  private async fallbackNotesGeneration(
+    private async fallbackNotesGeneration(
     text: string,
     source: string
   ): Promise<AgentResult> {
     console.log("🔄 [NotesAgent] Using fallback notes generation");
 
     try {
-      const notes = await generateNotesFromContent(text, source);
-      const saved = NotesStorage.addBatch(
-        (notes || []).map((n) => ({
-          title: n.title || `Notes from ${source}`,
-          content: n.content || "",
-          source,
-          category: n.category || "General",
-          tags: Array.isArray(n.tags) ? n.tags : ["study"],
-        }))
-      );
-      BuddyMemoryStorage.logTask("notes", `Added ${saved.length} notes`);
-      return {
-        summary: saved.length
+      // If the text is a simple topic request (like "history"), create structured notes
+      if (text.length < 100 && !text.includes('\n')) {
+        const topic = text.trim();
+        const structuredNote = {
+          title: `Study Notes: ${topic}`,
+          content: `# Study Notes: ${topic}
+
+## Key Concepts
+- Fundamental principles of ${topic}
+- Important historical developments
+- Core theories and applications
+
+## Main Topics
+1. Introduction to ${topic}
+2. Key principles and concepts
+3. Historical significance
+4. Modern applications
+5. Study tips and resources
+
+## Summary
+Comprehensive study material covering the essential aspects of ${topic} for effective learning and understanding.`,
+          source: "Generated",
+          category: topic.charAt(0).toUpperCase() + topic.slice(1),
+          tags: [topic.toLowerCase(), "study", "notes"],
+        };
+
+        const saved = NotesStorage.addBatch([structuredNote]);
+        BuddyMemoryStorage.logTask("notes", `Added structured notes for ${topic}`);
+        
+        return {
+          summary: `Created comprehensive study notes about ${topic}. They're now saved and ready for review!`,
+          artifacts: { notes: saved },
+        };
+      }
+
+      // Otherwise, use the AI service
+    const notes = await generateNotesFromContent(text, source);
+    const saved = NotesStorage.addBatch(
+      (notes || []).map((n) => ({
+        title: n.title || `Notes from ${source}`,
+        content: n.content || "",
+        source,
+        category: n.category || "General",
+        tags: Array.isArray(n.tags) ? n.tags : ["study"],
+      }))
+    );
+    BuddyMemoryStorage.logTask("notes", `Added ${saved.length} notes`);
+    return {
+      summary: saved.length
           ? `Created ${saved.length} structured notes from your content. They're now saved and ready for review!`
           : "I couldn't create notes from this. Please provide more content or try a different file.",
-        artifacts: { notes: saved },
-      };
+      artifacts: { notes: saved },
+    };
     } catch (error) {
       console.error("Notes generation failed:", error);
       return {
@@ -420,26 +456,26 @@ export class PlannerAgent implements Agent {
 
     // Fallback to AI-based parsing
     try {
-      const items = await generateScheduleFromContent(text);
-      const saved = ScheduleStorage.addBatch(
-        (items || []).map((it) => ({
-          title: it.title || "Event",
-          date: it.date,
-          time: it.time || "09:00",
-          type: (it.type as StoredScheduleItem["type"]) || "assignment",
-          source,
-        }))
-      );
+    const items = await generateScheduleFromContent(text);
+    const saved = ScheduleStorage.addBatch(
+      (items || []).map((it) => ({
+        title: it.title || "Event",
+        date: it.date,
+        time: it.time || "09:00",
+        type: (it.type as StoredScheduleItem["type"]) || "assignment",
+        source,
+      }))
+    );
       BuddyMemoryStorage.logTask(
         "schedule",
         `Added ${saved.length} items via AI`
       );
-      return {
-        summary: saved.length
+    return {
+      summary: saved.length
           ? `Added ${saved.length} items to your schedule using AI analysis.`
           : "I didn't find clear dates or times. Add specific dates/times or upload a schedule file.",
-        artifacts: { schedule: saved },
-      };
+      artifacts: { schedule: saved },
+    };
     } catch (error) {
       console.error("AI schedule generation failed:", error);
       return {
@@ -534,15 +570,20 @@ export class FlashcardAgent implements Agent {
     const difficulty = (text.match(
       /\b(beginner|easy|intermediate|advanced|hard)\b/i
     ) || [])[1]?.toLowerCase();
+    
+    // Enhanced count extraction - look for patterns like "5 flashcards of math"
     const countStr =
       (text.match(/\b(\d{1,3})\s*(?:cards?|flash\s*cards?)\b/i) || [])[1] ||
-      (text.match(/(?:make|create|generate)\s*(\d{1,3})\s*flash\s*cards?/i) ||
-        [])[1] ||
-      // e.g., "create50 flashcard"
-      (text.match(/(?:make|create|generate)\s*(\d{1,3})\b/i) || [])[1];
+      (text.match(/(?:make|create|generate)\s*(\d{1,3})\s*flash\s*cards?/i) || [])[1] ||
+      (text.match(/(?:make|create|generate)\s*(\d{1,3})\b/i) || [])[1] ||
+      // New pattern: "5 flashcards of math" or "5 flashcard of math"
+      (text.match(/(\d{1,3})\s*flash\s*cards?\s+(?:of|about|on|for)\s+/i) || [])[1];
+    
     const targetCount = countStr
       ? Math.max(1, Math.min(100, Number(countStr)))
       : undefined;
+    
+    console.log(`🎯 [FlashcardAgent] Target count: ${targetCount}, Difficulty: ${difficulty}`);
 
     try {
       console.log(
@@ -555,10 +596,10 @@ export class FlashcardAgent implements Agent {
       });
       console.log("📋 [FlashcardAgent] Generated cards:", cards?.length || 0);
       let mapped = (cards || []).map((c: any) => ({
-        question: c.question || c.front || "Question",
-        answer: c.answer || c.back || "Answer",
-        category: c.category || "General",
-      }));
+      question: c.question || c.front || "Question",
+      answer: c.answer || c.back || "Answer",
+      category: c.category || "General",
+    }));
       if (!mapped.length) {
         const topicMatch =
           (content.match(/about\s+([^\n.,;]+)/i) || [])[1] ||
@@ -616,16 +657,16 @@ export class FlashcardAgent implements Agent {
           });
         }
       }
-      const saved = FlashcardStorage.addBatch(
-        mapped as Omit<StoredFlashcard, "id" | "createdAt">[]
-      );
-      BuddyMemoryStorage.logTask("flashcards", `Added ${saved.length} cards`);
-      return {
-        summary: saved.length
+    const saved = FlashcardStorage.addBatch(
+      mapped as Omit<StoredFlashcard, "id" | "createdAt">[]
+    );
+    BuddyMemoryStorage.logTask("flashcards", `Added ${saved.length} cards`);
+    return {
+      summary: saved.length
           ? `Created ${saved.length} flashcards from your content. They're ready for practice!`
           : "I couldn't extract enough content to make flashcards. Try adding more detail or paste text.",
-        artifacts: { flashcards: saved },
-      };
+      artifacts: { flashcards: saved },
+    };
     } catch (error) {
       console.error("🚨 [FlashcardAgent] Generation failed:", error);
       return {
@@ -658,7 +699,7 @@ export class FunAgent implements Agent {
         kind
       );
       BuddyMemoryStorage.logTask("fun", `Created ${kind}`);
-      return {
+    return {
         summary: `Created a fun ${kind} for you! Check the Fun Learning section to enjoy it.`,
         artifacts: { fun: { type: kind, content: out } },
       };
@@ -842,6 +883,17 @@ export class CommandAgent implements Agent {
         regex: /(delete|remove)\s+flashcard\s+(.*)/i,
         action: "delete_flashcard",
         target: "flashcards",
+      },
+      // NEW: Delete all commands
+      {
+        regex: /(delete|remove|clear)\s+all\s+(notes?|flashcards?|cards?)/i,
+        action: "delete_all",
+        target: "all",
+      },
+      {
+        regex: /(delete|remove|clear)\s+all\s+(notes?|flashcards?|cards?)\s+and\s+(notes?|flashcards?|cards?)/i,
+        action: "delete_all",
+        target: "all",
       },
       {
         regex: /remember\s+(.+)/i,
@@ -1056,19 +1108,77 @@ export class CommandAgent implements Agent {
       case "delete_flashcard": {
         const q = (command.params.content || "").toLowerCase();
         const all = FlashcardStorage.load();
-        const remain = all.filter(
-          (c) =>
-            !`${c.question} ${c.answer} ${c.category}`.toLowerCase().includes(q)
-        );
-        const removed = all.length - remain.length;
-        if (removed > 0) FlashcardStorage.save(remain as any);
+        
+        // More precise matching - only delete if exact match or very close
+        const toRemove = all.filter((c) => {
+          const question = c.question.toLowerCase();
+          const answer = c.answer.toLowerCase();
+          const category = c.category.toLowerCase();
+          
+          // Exact match on any field
+          if (question === q || answer === q || category === q) return true;
+          
+          // Close match (contains the query as a word)
+          const words = q.split(/\s+/);
+          return words.some(word => 
+            question.includes(word) || answer.includes(word) || category.includes(word)
+          );
+        });
+        
+        const remain = all.filter(c => !toRemove.includes(c));
+        const removed = toRemove.length;
+        
+        if (removed > 0) {
+          FlashcardStorage.save(remain as any);
+          console.log(`🗑️ [CommandAgent] Deleted ${removed} flashcards matching "${q}"`);
+        }
+        
         return {
           summary:
             removed > 0
-              ? `Removed ${removed} flashcard(s).`
-              : "I couldn't find a matching flashcard to delete.",
+              ? `Removed ${removed} flashcard(s) matching "${q}".`
+              : `No flashcards found matching "${q}".`,
           artifacts: { flashcards: remain },
         };
+      }
+      case "delete_all": {
+        const target = command.params.content || "";
+        let notesDeleted = 0;
+        let flashcardsDeleted = 0;
+        
+        // Delete all notes
+        if (target.includes('note') || target.includes('all')) {
+          const allNotes = NotesStorage.load();
+          notesDeleted = allNotes.length;
+          NotesStorage.save([]);
+          console.log(`🗑️ [CommandAgent] Deleted all ${notesDeleted} notes`);
+        }
+        
+        // Delete all flashcards
+        if (target.includes('flashcard') || target.includes('card') || target.includes('all')) {
+          const allFlashcards = FlashcardStorage.load();
+          flashcardsDeleted = allFlashcards.length;
+          FlashcardStorage.save([]);
+          console.log(`🗑️ [CommandAgent] Deleted all ${flashcardsDeleted} flashcards`);
+        }
+        
+        const totalDeleted = notesDeleted + flashcardsDeleted;
+        
+        if (totalDeleted > 0) {
+          return {
+            summary: `Deleted all items: ${notesDeleted} notes and ${flashcardsDeleted} flashcards.`,
+            artifacts: { 
+              notes: [], 
+              flashcards: [],
+              deleted: { notes: notesDeleted, flashcards: flashcardsDeleted }
+            },
+          };
+        } else {
+          return {
+            summary: "No items found to delete.",
+            artifacts: { notes: [], flashcards: [] },
+          };
+        }
       }
       case "remember":
         // Store in buddy memory
@@ -1081,59 +1191,230 @@ export class CommandAgent implements Agent {
           summary: `I'll remind you about: ${command.params.content}`,
         };
       default:
-        return {
+    return {
           summary: "I'm not sure how to handle that command yet.",
-        };
+    };
     }
   }
 }
 
-// Enhanced Orchestrator with advanced routing and fallback handling
+// Enhanced Orchestrator with intelligent prompt understanding + existing multi-agent system
 export class Orchestrator {
   constructor(private agents: Agent[]) {}
 
-  // High-level router with advanced multi-tool support and fallback handling
+  // High-level router with intelligent prompt understanding + existing multi-agent system
   async handle(input: AgentTaskInput): Promise<AgentResult> {
-    // First, try the Universal Agentic AI for comprehensive understanding
+    const text = (input.text || "").trim();
+    
+    console.log(`🧠 [Orchestrator] Processing: "${text}"`);
+    
+    // PRIORITY 1: Handle delete commands immediately (most important)
+    if (/(delete|remove|clear)\s+all/i.test(text)) {
+      console.log("🗑️ [Orchestrator] Delete command detected, using TaskUnderstanding immediately...");
+      try {
+        const { TaskUnderstanding } = await import('@/lib/taskUnderstanding');
+        const { TaskExecutor } = await import('@/lib/taskExecutor');
+        
+        const taskRequest = TaskUnderstanding.understandRequest(text);
+        console.log(`📋 [Orchestrator] Delete task request:`, taskRequest);
+        
+        if (taskRequest.actions && taskRequest.actions.length > 0) {
+          const taskResults = await TaskExecutor.executeTask(taskRequest);
+          console.log(`⚡ [Orchestrator] Delete task results:`, taskResults);
+          
+          const artifacts: any = {};
+          const summaries: string[] = [];
+          
+          taskResults.forEach(result => {
+            if (result.success) {
+              summaries.push(result.message);
+            }
+          });
+          
+          const finalSummary = taskRequest.message + " " + summaries.join(" ");
+          console.log(`🎯 [Orchestrator] Delete completed:`, { summary: finalSummary, artifacts });
+          
+          return {
+            summary: finalSummary,
+            artifacts: artifacts
+          };
+        }
+      } catch (error) {
+        console.error("🚨 [Orchestrator] TaskUnderstanding failed for delete:", error);
+      }
+    }
+    
+    // PRIORITY 2: Try the new Task Understanding system for other commands
     try {
-      console.log("🌟 [Orchestrator] Trying Universal Agentic AI first");
+      console.log("🧠 [Orchestrator] Trying new Task Understanding system...");
+      
+      const { TaskUnderstanding } = await import('@/lib/taskUnderstanding');
+      const { TaskExecutor } = await import('@/lib/taskExecutor');
+      
+      const taskRequest = TaskUnderstanding.understandRequest(text);
+      console.log(`📋 [Orchestrator] Task request:`, taskRequest);
+      
+      if (taskRequest.actions && taskRequest.actions.length > 0) {
+        console.log(`✅ [Orchestrator] Task Understanding worked: ${taskRequest.actions.length} actions`);
+        
+        const taskResults = await TaskExecutor.executeTask(taskRequest);
+        console.log(`⚡ [Orchestrator] Task results:`, taskResults);
+        
+        // Convert task results to orchestrator format
+        const artifacts: any = {};
+        const summaries: string[] = [];
+        
+        taskResults.forEach(result => {
+          if (result.success) {
+            summaries.push(result.message);
+            
+            // Add to artifacts based on what was created/deleted
+            if (result.data) {
+              if (Array.isArray(result.data)) {
+                if (result.data.length > 0 && result.data[0].question) {
+                  artifacts.flashcards = result.data;
+                } else if (result.data.length > 0 && result.data[0].title && !result.data[0].question) {
+                  artifacts.notes = result.data;
+                }
+              } else if (result.data.title && !result.data.question) {
+                artifacts.notes = artifacts.notes || [];
+                artifacts.notes.push(result.data);
+              } else if (result.data.question) {
+                artifacts.flashcards = artifacts.flashcards || [];
+                artifacts.flashcards.push(result.data);
+              }
+            }
+          }
+        });
+        
+        const finalSummary = taskRequest.message + " " + summaries.join(" ");
+        console.log(`🎯 [Orchestrator] Task Understanding result:`, { summary: finalSummary, artifacts });
+        
+        return {
+          summary: finalSummary,
+          artifacts: artifacts
+        };
+      }
+      
+      console.log("⚠️ [Orchestrator] Task Understanding didn't extract actions, trying intelligent prompt...");
+      
+    } catch (error) {
+      console.error("🚨 [Orchestrator] Task Understanding failed:", error);
+    }
+    
+    // Fallback: try intelligent prompt understanding
+    try {
+      console.log("🧠 [Orchestrator] Trying intelligent prompt understanding...");
+      
+      const { intelligentPromptOrchestrator } = await import('@/lib/intelligentPromptOrchestrator');
+      const { actionExecutor } = await import('@/lib/actionExecutor');
+      
+      const promptResponse = await intelligentPromptOrchestrator.processNaturalLanguageCommand({
+        userInput: text,
+        context: {
+          uploadedFiles: input.files || [],
+          currentSubject: input.subject,
+          studyMode: input.mode,
+          recentActivity: input.context?.recentActivity
+        }
+      });
+      
+      console.log(`📋 [Orchestrator] Prompt response:`, promptResponse);
+      
+      if (promptResponse.actions && promptResponse.actions.length > 0) {
+        console.log(`✅ [Orchestrator] Intelligent prompt understood: ${promptResponse.actions.length} actions`);
+        
+        const executionResults = await actionExecutor.executeActions(promptResponse, {
+          uploadedFiles: input.files || [],
+          currentSubject: input.subject,
+          studyMode: input.mode,
+          userInput: text
+        });
+        
+        console.log(`⚡ [Orchestrator] Execution results:`, executionResults);
+        
+        const artifacts: any = {};
+        const summaries: string[] = [];
+        
+        executionResults.forEach(result => {
+          if (result.success && result.output) {
+            console.log(`📊 [Orchestrator] Processing result for ${result.action}:`, result.output);
+            switch (result.action) {
+              case 'create_notes':
+                artifacts.notes = artifacts.notes || [];
+                artifacts.notes.push(result.output);
+                summaries.push(result.output.message);
+                break;
+              case 'create_flashcards':
+                artifacts.flashcards = artifacts.flashcards || [];
+                artifacts.flashcards.push(result.output);
+                summaries.push(result.output.message);
+                break;
+              case 'delete_flashcards':
+                artifacts.deleted = artifacts.deleted || [];
+                artifacts.deleted.push(result.output);
+                summaries.push(result.output.message);
+                break;
+              case 'schedule_task':
+                artifacts.schedule = artifacts.schedule || [];
+                artifacts.schedule.push(result.output);
+                summaries.push(result.output.message);
+                break;
+              case 'parse_timetable':
+                artifacts.timetable = artifacts.timetable || [];
+                artifacts.timetable.push(result.output);
+                summaries.push(result.output.message);
+                break;
+              default:
+                artifacts[result.action] = artifacts[result.action] || [];
+                artifacts[result.action].push(result.output);
+                summaries.push(result.output.message);
+            }
+          }
+        });
+        
+        const finalSummary = promptResponse.message + " " + summaries.join(" ");
+        console.log(`🎯 [Orchestrator] Intelligent prompt result:`, { summary: finalSummary, artifacts });
+        
+        return {
+          summary: finalSummary,
+          artifacts: artifacts,
+          confidence: promptResponse.confidence
+        };
+      }
+      
+      console.log("⚠️ [Orchestrator] Intelligent prompt didn't extract actions, falling back to classic agents");
+      
+    } catch (error) {
+      console.error("🚨 [Orchestrator] Intelligent prompt failed, using classic agents:", error);
+    }
+
+    // Fallback to existing multi-agent system
+    try {
+      console.log("🌟 [Orchestrator] Trying Universal Agentic AI as fallback...");
       const universalResult = await universalAI.processAnyPrompt(input);
 
-      // If Universal AI successfully handled it, return the result
       if (
         universalResult.artifacts &&
         Object.keys(universalResult.artifacts).length > 0
       ) {
-        console.log(
-          "✅ [Orchestrator] Universal AI successfully handled the request"
-        );
+        console.log("✅ [Orchestrator] Universal AI successfully handled the request");
         return universalResult;
       }
 
-      // If Universal AI provided a meaningful response but no artifacts, still return it
       if (
         universalResult.summary &&
         !universalResult.summary.includes("I'm not sure") &&
         !universalResult.summary.includes("encountered an issue")
       ) {
-        console.log(
-          "✅ [Orchestrator] Universal AI provided meaningful response"
-        );
+        console.log("✅ [Orchestrator] Universal AI provided meaningful response");
         return universalResult;
       }
-
-      console.log(
-        "⚠️ [Orchestrator] Universal AI unclear, falling back to classic agents"
-      );
     } catch (error) {
-      console.error(
-        "🚨 [Orchestrator] Universal AI failed, using fallback:",
-        error
-      );
+      console.error("🚨 [Orchestrator] Universal AI failed:", error);
     }
 
     // Fallback to existing multi-agent system
-    const text = (input.text || "").trim();
     const parsed = parseIntent(text);
 
     // Enhanced intent detection with fallback and typo tolerance
@@ -1145,10 +1426,13 @@ export class Orchestrator {
     const wantsFun =
       parsed.type === "fun" ||
       /(story|quiz|poem|song|rap|riddle|game)/i.test(text);
+    const wantsDelete = parsed.type === "delete" || /(delete|remove|clear)\s+all/i.test(text);
     const wantsCommand =
       /(make|create|generate|help|remember|remind|delete|remove|clear|reschedule|move|update)/i.test(
         text
       );
+    
+
     // Enhanced schedule Q&A detection - should go to BuddyAgent first
     const isScheduleQA =
       (/\b(do\s+i\s+have|what\s+do\s+i\s+have|when\s+is|is\s+there|any\s+exam|what.*exam|exam.*when)\b/i.test(
@@ -1204,6 +1488,14 @@ export class Orchestrator {
         results.push(result);
       }
 
+      if (wantsDelete) {
+        const result = await new CommandAgent().run({
+          ...input,
+          intent: "delete",
+        });
+        results.push(result);
+      }
+
       if (wantsCommand && results.length === 0) {
         const result = await new CommandAgent().run({
           ...input,
@@ -1212,14 +1504,14 @@ export class Orchestrator {
         results.push(result);
       }
 
-      if (results.length) {
-        return {
-          summary: results.map((r) => r.summary).join(" "),
+    if (results.length) {
+      return {
+        summary: results.map((r) => r.summary).join(" "),
           artifacts: Object.assign(
             {},
             ...results.map((r) => r.artifacts || {})
           ),
-        };
+      };
       }
     } catch (error) {
       console.error("Multi-agent execution failed:", error);
@@ -1228,10 +1520,10 @@ export class Orchestrator {
 
     // Otherwise pick best matching agent or default Buddy
     try {
-      const a =
-        this.agents.find((ag) =>
-          ag.canHandle({ ...input, intent: parsed.type })
-        ) || new BuddyAgent();
+    const a =
+      this.agents.find((ag) =>
+        ag.canHandle({ ...input, intent: parsed.type })
+      ) || new BuddyAgent();
       return await a.run({ ...input, intent: parsed.type });
     } catch (error) {
       console.error("Agent execution failed:", error);

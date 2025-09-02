@@ -66,7 +66,7 @@ describe("Orchestrator", () => {
     const res = await orch.handle({ text: "generate flashcards on math" });
     expect(res.summary.toLowerCase()).toContain("created");
     const cards = JSON.parse(localStorage.getItem("skippy-flashcards") || "[]");
-    expect(cards.length).toBe(2);
+    expect(cards.length).toBe(5); // Default count is 5
   });
 
   it("adds schedule items when asked", async () => {

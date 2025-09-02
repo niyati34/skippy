@@ -580,7 +580,27 @@ RETURN ONLY THE JSON ARRAY, no other text or explanations.`,
     return validFlashcards;
   } catch (error) {
     console.error("Flashcard generation error:", error);
-    // Fallback to simple flashcards
+
+    // Try Gemini fallback before using simple fallback
+    try {
+      console.log("[DEBUG] Trying Gemini fallback for flashcards...");
+      const { generateFlashcardsWithGemini } = await import(
+        "@/services/geminiAI"
+      );
+      const geminiCards = await generateFlashcardsWithGemini(content, source);
+      if (geminiCards && Array.isArray(geminiCards) && geminiCards.length > 0) {
+        console.log(
+          "[DEBUG] Gemini fallback successful:",
+          geminiCards.length,
+          "cards"
+        );
+        return geminiCards;
+      }
+    } catch (geminiError) {
+      console.error("[DEBUG] Gemini fallback also failed:", geminiError);
+    }
+
+    // Final fallback to simple flashcards
     const fallbackCards = createFallbackFlashcards(content, source);
     return fallbackCards;
   }
@@ -1312,7 +1332,7 @@ IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
 
       try {
         // Import Gemini function
-        const { callGemini } = await import("./geminiAI.js");
+        const { callGemini } = await import("./geminiAI");
 
         const geminiResponse = await callGemini(
           [
@@ -1828,6 +1848,14 @@ export async function processUploadedFile(
       generateNotesFromContent(content, file.name),
       generateScheduleFromContent(content, file.name),
     ]);
+
+    // Debug: Log what we got back
+    console.log(`[DEBUG] File processing results for ${file.name}:`);
+    console.log(`- Flashcards: ${flashcards.length} items`);
+    console.log(`- Notes: ${notes.length} items`);
+    if (notes.length > 0) {
+      console.log(`- First note title: "${notes[0].title}"`);
+    }
 
     // Merge non-recurring items (assignments/exams) with timetable previews
     if (aiSchedule && aiSchedule.length) {

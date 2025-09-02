@@ -19,6 +19,7 @@ import {
 } from "@/lib/storage";
 import { nlpProcessor } from "@/lib/enhancedNLP";
 import { studyDataManager } from "@/lib/studyDataManager";
+import { TaskUnderstanding } from "./taskUnderstanding";
 import type { AgentTaskInput, AgentResult } from "./agent";
 
 // Advanced Task Types for Universal Intelligence
@@ -308,6 +309,16 @@ export class UniversalAgenticAI {
       console.log("🧠 [Memory] Relevant context:", contextualMemory);
     }
 
+    // 🎯 NEW: Check for multiple different task types first using Task Understanding
+    const taskRequest = TaskUnderstanding.understandRequest(normalizedText);
+    if (taskRequest.actions.length > 1) {
+      console.log(
+        "🎯 [MultipleTaskTypes] Detected multiple different tasks:",
+        taskRequest.actions
+      );
+      return await this.handleMultipleTaskTypes(taskRequest, input);
+    }
+
     try {
       // 🚀 PHASE 1: Analyze task complexity and decompose if needed
       const taskAnalysis = await this.taskDecomposer.decompose(
@@ -339,12 +350,16 @@ export class UniversalAgenticAI {
 
       if (taskAnalysis.complexity === "simple") {
         // Direct execution for simple tasks
+        console.log("🎯 [UniversalAI] Taking SIMPLE execution path");
         result = await this.executeUniversalAction(intent, {
           ...input,
           text: normalizedText,
         });
       } else {
         // Advanced execution for complex tasks
+        console.log(
+          "🎯 [UniversalAI] Taking COMPLEX execution path via execution engine"
+        );
         result = await this.executionEngine.execute(taskAnalysis, this);
 
         // Enhance result with task context
@@ -573,67 +588,12 @@ Return ONLY the corrected text - nothing else.`;
       }
     } catch (error) {
       console.warn(
-        "🤖 [AI-NLU] AI correction failed, using smart fallback",
+        "🤖 [AI-NLU] AI correction failed, using original text",
         error
       );
-      
-      // 🧠 SMART LOCAL FALLBACK: When API fails, use intelligent pattern matching
-      const smartFallback = this.intelligentLocalCorrection(userText);
-      if (smartFallback !== userText) {
-        console.log(`🔧 [Smart-Fallback] Corrected: "${userText}" → "${smartFallback}"`);
-        return smartFallback;
-      }
     }
 
     return userText;
-  }
-
-  // 🧠 INTELLIGENT LOCAL CORRECTION: Smart typo detection without external API
-  private intelligentLocalCorrection(text: string): string {
-    let corrected = text.toLowerCase();
-
-    // Smart action word correction
-    const actionMappings = {
-      'deltee': 'delete', 'delet': 'delete', 'dele': 'delete',
-      'creat': 'create', 'mak': 'make', 'maek': 'make',
-      'remov': 'remove', 'deleete': 'delete'
-    };
-
-    // Smart object word correction  
-    const objectMappings = {
-      'fladshcard': 'flashcard', 'flascard': 'flashcard', 'flashcrd': 'flashcard',
-      'flashcards': 'flashcards', 'flascards': 'flashcards', 'fladshcards': 'flashcards',
-      'notess': 'notes', 'note': 'notes'
-    };
-
-    // Smart topic word correction
-    const topicMappings = {
-      'blockhainn': 'blockchain', 'blockchainn': 'blockchain', 'blokchain': 'blockchain',
-      'javascrpt': 'javascript', 'javasript': 'javascript', 'js': 'javascript',
-      'pyton': 'python', 'pythnn': 'python',
-      'reac': 'react', 'reactt': 'react'
-    };
-
-    // Apply intelligent corrections
-    for (const [typo, correct] of Object.entries(actionMappings)) {
-      corrected = corrected.replace(new RegExp(`\\b${typo}\\b`, 'gi'), correct);
-    }
-    
-    for (const [typo, correct] of Object.entries(objectMappings)) {
-      corrected = corrected.replace(new RegExp(`\\b${typo}\\b`, 'gi'), correct);
-    }
-    
-    for (const [typo, correct] of Object.entries(topicMappings)) {
-      corrected = corrected.replace(new RegExp(`\\b${typo}\\b`, 'gi'), correct);
-    }
-
-    // Smart phrase corrections
-    corrected = corrected
-      .replace(/related\s+to/gi, 'related')
-      .replace(/about\s+the/gi, 'about')
-      .replace(/all\s+the/gi, 'all');
-
-    return corrected;
   }
 
   // 🧠 SMART FUZZY MATCHING: AI-enhanced similarity detection
@@ -1086,7 +1046,12 @@ Return ONLY the corrected text - nothing else.`;
     }
   }
 
-  private async createIntelligentFlashcards(
+  // Public getter for context (needed by execution engine)
+  public getContext() {
+    return this.context;
+  }
+
+  public async createIntelligentFlashcards(
     params: UniversalIntent["parameters"],
     input: AgentTaskInput
   ): Promise<AgentResult> {
@@ -2413,6 +2378,214 @@ Make it suitable for detailed note-taking and study.`;
     };
   }
 
+  private async handleMultipleTaskTypes(
+    taskRequest: any,
+    input: AgentTaskInput
+  ): Promise<AgentResult> {
+    console.log(
+      "🎯 [MultipleTaskTypes] Processing multiple different task types..."
+    );
+
+    const results: any[] = [];
+    const allArtifacts: { [key: string]: any[] } = {};
+
+    for (const action of taskRequest.actions) {
+      console.log(
+        `🎯 [MultipleTaskTypes] Processing: ${action.type} ${action.target}`
+      );
+
+      try {
+        if (action.target === "flashcards") {
+          const flashcards = await generateFlashcards(
+            `Create ${action.data.count || 5} flashcards about ${
+              action.data.topic
+            }. 
+            
+            Focus specifically on ${
+              action.data.topic
+            } concepts, definitions, examples, and key points.
+            Each flashcard should test knowledge of ${action.data.topic}.`,
+            {
+              count: action.data.count || 5,
+              difficulty: "intermediate",
+            }
+          );
+
+          if (flashcards && flashcards.length > 0) {
+            // Save each flashcard
+            for (const card of flashcards) {
+              await FlashcardStorage.save({
+                ...card,
+                id: `${Date.now()}.${Math.random()}`,
+                createdAt: new Date().toISOString(),
+                source: "Universal AI",
+                difficulty: "intermediate",
+              });
+            }
+
+            results.push({
+              success: true,
+              message: `Created ${flashcards.length} flashcards about ${action.data.topic}.`,
+              data: flashcards,
+              count: flashcards.length,
+            });
+
+            if (!allArtifacts.flashcards) allArtifacts.flashcards = [];
+            allArtifacts.flashcards.push(...flashcards);
+          }
+        } else if (action.target === "notes") {
+          // 🛡️ Defensive programming: ensure data and topic exist
+          let topic = "general study topic";
+          let count = 1;
+
+          if (action.data) {
+            topic = action.data.topic || topic;
+            count = action.data.count || count;
+          }
+
+          console.log(
+            `📝 [UniversalAgent] Creating notes - topic: "${topic}", count: ${count}`
+          );
+
+          const content = `Create comprehensive notes about ${topic}. 
+            
+            Focus on key concepts, important details, and practical applications of ${topic}.
+            Structure the notes with clear headings and bullet points.`;
+
+          let notes = await generateNotesFromContent(
+            content,
+            `Notes about ${topic}`
+          );
+
+          // If user requested a specific count for notes, enforce it
+          if (typeof count === "number" && Array.isArray(notes)) {
+            notes = notes.slice(0, Math.max(0, count));
+          }
+
+          if (notes && notes.length > 0) {
+            const saved = NotesStorage.addBatch(notes);
+
+            results.push({
+              success: true,
+              message: `Created ${saved.length} notes about ${topic}.`,
+              data: saved,
+              count: saved.length,
+            });
+
+            if (!allArtifacts.notes) allArtifacts.notes = [];
+            allArtifacts.notes.push(...saved);
+          }
+        } else if (action.target === "schedule") {
+          const content = `Create a schedule item for ${action.data.task}. 
+            
+            Focus on practical timing and organization for ${action.data.task}.`;
+
+          const scheduleItem = await generateScheduleFromContent(content);
+
+          if (scheduleItem && scheduleItem.length > 0) {
+            const saved = ScheduleStorage.addBatch(scheduleItem);
+
+            results.push({
+              success: true,
+              message: `Added ${saved.length} schedule items: ${action.data.task}.`,
+              data: saved,
+              count: saved.length,
+            });
+
+            if (!allArtifacts.schedule) allArtifacts.schedule = [];
+            allArtifacts.schedule.push(...saved);
+          }
+        } else if (action.type === "analyze") {
+          // Handle analysis requests
+          const analysisResult = await this.handleAnalysisRequest(action);
+          results.push(analysisResult);
+        } else if (action.type === "navigate") {
+          // Handle navigation requests
+          const navigationResult = await this.handleNavigationRequest(action);
+          results.push(navigationResult);
+        } else if (action.type === "convert") {
+          // Handle conversion requests (notes to flashcards)
+          const conversionResult = await this.handleConversionRequest(action);
+          results.push(conversionResult);
+          if (conversionResult.success && conversionResult.data) {
+            if (!allArtifacts.flashcards) allArtifacts.flashcards = [];
+            allArtifacts.flashcards.push(...conversionResult.data);
+          }
+        } else if (action.type === "delete") {
+          // 🚀 Handle delete requests
+          console.log(`🗑️ [Delete] Processing delete ${action.target}...`);
+
+          let deleteCount = 0;
+          let deletedItems: any[] = [];
+
+          if (action.target === "notes" || action.target === "all") {
+            const currentNotes = NotesStorage.load();
+            deleteCount += currentNotes.length;
+            deletedItems.push(...currentNotes);
+            NotesStorage.save([]); // Clear by saving empty array
+            console.log(`🗑️ [Delete] Deleted ${currentNotes.length} notes`);
+          }
+
+          if (action.target === "flashcards" || action.target === "all") {
+            const currentFlashcards = FlashcardStorage.load();
+            deleteCount += currentFlashcards.length;
+            deletedItems.push(...currentFlashcards);
+            FlashcardStorage.save([]); // Clear by saving empty array
+            console.log(
+              `🗑️ [Delete] Deleted ${currentFlashcards.length} flashcards`
+            );
+          }
+
+          if (action.target === "schedule" || action.target === "all") {
+            const currentSchedule = ScheduleStorage.load();
+            deleteCount += currentSchedule.length;
+            deletedItems.push(...currentSchedule);
+            ScheduleStorage.save([]); // Clear by saving empty array
+            console.log(
+              `🗑️ [Delete] Deleted ${currentSchedule.length} schedule items`
+            );
+          }
+
+          results.push({
+            success: true,
+            message: `Deleted ${deleteCount} ${
+              action.target === "all" ? "items" : action.target
+            }.`,
+            data: deletedItems,
+            count: deleteCount,
+          });
+        }
+      } catch (error) {
+        console.error(
+          `❌ [MultipleTaskTypes] Error processing ${action.target}:`,
+          error
+        );
+        results.push({
+          success: false,
+          message: `Failed to create ${action.target}: ${error}`,
+          data: null,
+          count: 0,
+        });
+      }
+    }
+
+    // Build summary
+    const successfulResults = results.filter((r) => r.success);
+    const summaryParts = successfulResults.map((r) => r.message);
+    const totalItems = successfulResults.reduce((sum, r) => sum + r.count, 0);
+
+    const summary = `Successfully created ${totalItems} items across ${
+      successfulResults.length
+    } different types: ${summaryParts.join(" ")}`;
+
+    console.log("✅ [MultipleTaskTypes] Completed all tasks:", summary);
+
+    return {
+      summary,
+      artifacts: allArtifacts,
+    };
+  }
+
   private async handleUnclearIntent(
     intent: UniversalIntent,
     input: AgentTaskInput
@@ -3083,10 +3256,95 @@ class ExecutionEngine {
     agent: UniversalAgenticAI,
     previousResults?: Map<string, any>
   ): Promise<AgentResult> {
-    // This is a simplified delegation - in practice, this would route to specific agent methods
-    // based on the step type and description
+    // Route to specific agent methods based on step type and description
+    const description = step.description.toLowerCase();
+    console.log(
+      `🚀 [ExecutionEngine] Delegating step: ${step.type} - ${description}`
+    );
 
-    if (step.type === "analysis") {
+    // For creation steps, check the original request context to determine what to create
+    if (step.type === "creation") {
+      // Check if this is part of a flashcard creation request
+      // We can access the original context through the agent's context or look at the task
+      const originalContext = agent.getContext()?.userInput || "";
+      const isFlashcardRequest =
+        originalContext.toLowerCase().includes("flashcard") ||
+        description.includes("flashcard") ||
+        description.includes("card");
+
+      if (isFlashcardRequest) {
+        // Extract parameters from the original context
+        const topicMatch = originalContext.match(
+          /(?:about|for|on|of)\s+([^.]+?)(?:\s|$|\.)/i
+        );
+        const countMatch = originalContext.match(/(\d+)\s+flashcards?/i);
+
+        const topic = topicMatch ? topicMatch[1].trim() : "general";
+        const count = countMatch ? parseInt(countMatch[1]) : 5;
+
+        console.log(
+          `🎴 [ExecutionEngine] Creating ${count} flashcards for topic: ${topic}`
+        );
+
+        // Call the actual flashcard creation method
+        return await agent.createIntelligentFlashcards(
+          { topic, count, difficulty: "intermediate" },
+          { text: originalContext }
+        );
+      } else if (description.includes("note")) {
+        // Handle note creation
+        const topicMatch = description.match(
+          /notes?.*?(?:about|for|on)\s+([^.]+)/
+        );
+        const topic = topicMatch ? topicMatch[1].trim() : "general";
+
+        return {
+          summary: `Created notes about ${topic}`,
+          artifacts: {
+            notes: [
+              {
+                title: `Notes about ${topic}`,
+                content: `Study notes about ${topic}.`,
+                category: topic,
+              },
+            ],
+          },
+        };
+      } else {
+        // Generic creation step - create a basic note
+        return {
+          summary: `Created: ${step.description}`,
+          artifacts: {
+            notes: [
+              {
+                title: "Created Content",
+                content: step.description,
+                category: "creation",
+              },
+            ],
+          },
+        };
+      }
+    } else if (step.type === "analysis") {
+      // Handle note creation
+      const topicMatch = description.match(
+        /notes?.*?(?:about|for|on)\s+([^.]+)/
+      );
+      const topic = topicMatch ? topicMatch[1].trim() : "general";
+
+      return {
+        summary: `Created notes about ${topic}`,
+        artifacts: {
+          notes: [
+            {
+              title: `Notes about ${topic}`,
+              content: `Study notes about ${topic}.`,
+              category: topic,
+            },
+          ],
+        },
+      };
+    } else if (step.type === "analysis") {
       return {
         summary: `Analyzed: ${step.description}`,
         artifacts: {
@@ -3095,19 +3353,6 @@ class ExecutionEngine {
               title: "Analysis Result",
               content: step.description,
               category: "analysis",
-            },
-          ],
-        },
-      };
-    } else if (step.type === "creation") {
-      return {
-        summary: `Created: ${step.description}`,
-        artifacts: {
-          notes: [
-            {
-              title: "Created Content",
-              content: step.description,
-              category: "creation",
             },
           ],
         },
@@ -3255,6 +3500,141 @@ class LearningModule {
       }
     } catch (error) {
       console.warn("Failed to load learning data:", error);
+    }
+  }
+
+  // Handle analysis requests
+  private async handleAnalysisRequest(action: any): Promise<any> {
+    try {
+      let analysisData = {};
+      let message = "";
+
+      if (action.target === "notes") {
+        const notes = NotesStorage.load();
+        const noteCategories = [...new Set(notes.map((n) => n.category))];
+        message = `📝 You have ${notes.length} notes across ${
+          noteCategories.length
+        } categories: ${noteCategories.join(", ")}`;
+        analysisData = {
+          type: "notes",
+          count: notes.length,
+          categories: noteCategories,
+          items: notes,
+        };
+      } else if (action.target === "flashcards") {
+        const flashcards = FlashcardStorage.load();
+        const cardCategories = [...new Set(flashcards.map((f) => f.category))];
+        message = `🎯 You have ${flashcards.length} flashcards across ${
+          cardCategories.length
+        } categories: ${cardCategories.join(", ")}`;
+        analysisData = {
+          type: "flashcards",
+          count: flashcards.length,
+          categories: cardCategories,
+          items: flashcards,
+        };
+      } else if (action.target === "all") {
+        const notes = NotesStorage.load();
+        const flashcards = FlashcardStorage.load();
+        const schedule = ScheduleStorage.load();
+        message = `📊 Study Overview: ${notes.length} notes, ${flashcards.length} flashcards, ${schedule.length} schedule items`;
+        analysisData = {
+          type: "overview",
+          notes: notes.length,
+          flashcards: flashcards.length,
+          schedule: schedule.length,
+        };
+      }
+
+      return {
+        success: true,
+        message,
+        data: analysisData,
+        count: 1,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to analyze: ${error}`,
+        data: null,
+        count: 0,
+      };
+    }
+  }
+
+  // Handle navigation requests
+  private async handleNavigationRequest(action: any): Promise<any> {
+    try {
+      const page = action.data?.page || "dashboard";
+      return {
+        success: true,
+        message: `Navigation to ${page} requested`,
+        data: { page, action: "navigate" },
+        count: 1,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to navigate: ${error}`,
+        data: null,
+        count: 0,
+      };
+    }
+  }
+
+  // Handle conversion requests (notes to flashcards)
+  private async handleConversionRequest(action: any): Promise<any> {
+    try {
+      if (action.data?.from === "notes" && action.data?.to === "flashcards") {
+        const notes = NotesStorage.load();
+        const flashcardsFromNotes: any[] = [];
+
+        // Convert each note to flashcards
+        for (const note of notes) {
+          const flashcards = await generateFlashcards(
+            `Create flashcards from this note content: ${note.content}`,
+            { count: 3, difficulty: "intermediate" }
+          );
+
+          if (flashcards && flashcards.length > 0) {
+            flashcardsFromNotes.push(
+              ...flashcards.map((card) => ({
+                ...card,
+                id: `${Date.now()}.${Math.random()}`,
+                createdAt: new Date().toISOString(),
+                category: note.category,
+                source: `Generated from note: ${note.title}`,
+              }))
+            );
+          }
+        }
+
+        // Save the generated flashcards
+        if (flashcardsFromNotes.length > 0) {
+          FlashcardStorage.addBatch(flashcardsFromNotes);
+        }
+
+        return {
+          success: true,
+          message: `Generated ${flashcardsFromNotes.length} flashcards from ${notes.length} notes`,
+          data: flashcardsFromNotes,
+          count: flashcardsFromNotes.length,
+        };
+      }
+
+      return {
+        success: false,
+        message: "Unsupported conversion type",
+        data: null,
+        count: 0,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to convert: ${error}`,
+        data: null,
+        count: 0,
+      };
     }
   }
 }

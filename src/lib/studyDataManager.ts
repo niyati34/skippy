@@ -38,9 +38,13 @@ export interface QueryResult {
 export class StudyDataManager {
   // Get complete study context for intelligent responses
   getStudyContext(): StudyContext {
-    const flashcards = FlashcardStorage.load();
-    const notes = NotesStorage.load();
-    const schedule = ScheduleStorage.load();
+    const flashcards = Array.isArray(FlashcardStorage.load())
+      ? FlashcardStorage.load()
+      : [];
+    const notes = Array.isArray(NotesStorage.load()) ? NotesStorage.load() : [];
+    const schedule = Array.isArray(ScheduleStorage.load())
+      ? ScheduleStorage.load()
+      : [];
     const memory = BuddyMemoryStorage.load();
 
     // Calculate smart stats
@@ -60,7 +64,9 @@ export class StudyDataManager {
 
     // Extract favorite topics from notes and flashcards
     const topicCounts = new Map<string, number>();
-    [...notes, ...flashcards].forEach((item) => {
+    const safeNotes = Array.isArray(notes) ? notes : [];
+    const safeFlashcards = Array.isArray(flashcards) ? flashcards : [];
+    [...safeNotes, ...safeFlashcards].forEach((item) => {
       const category = item.category || "general";
       topicCounts.set(category, (topicCounts.get(category) || 0) + 1);
     });
