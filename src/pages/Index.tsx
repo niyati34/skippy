@@ -28,7 +28,7 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen relative">
       {/* Cyber Grid Background */}
       <CyberGrid />
 

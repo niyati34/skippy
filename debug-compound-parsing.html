@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Debug Compound Command Parsing</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f0f2f5;
+      }
+      .test-section {
+        background: white;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .command-example {
+        background: #333;
+        color: #00ff00;
+        padding: 8px;
+        margin: 5px 0;
+        border-radius: 3px;
+        font-family: monospace;
+        font-size: 16px;
+        font-weight: bold;
+      }
+      .results {
+        background: #f8f9fa;
+        padding: 15px;
+        margin: 10px 0;
+        border-left: 4px solid #3b82f6;
+        border-radius: 4px;
+        min-height: 100px;
+        white-space: pre-wrap;
+        font-family: monospace;
+      }
+      .test-button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        margin: 5px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .test-button:hover {
+        background: #2563eb;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔬 Debug Compound Command Parsing</h1>
+    <p>
+      Debugging why "1 notes of superman" is being classified as a delete
+      request
+    </p>
+
+    <div class="test-section">
+      <h2>🐛 Current Issue</h2>
+      <p>
+        The command is being split correctly into 3 parts, but the third part is
+        wrong:
+      </p>
+
+      <div class="command-example">
+        "delete all flashcard and make 5 flashcard off batman and 1 notes of
+        superman"
+      </div>
+
+      <h3>Expected Split:</h3>
+      <ol>
+        <li><strong>"delete all flashcard"</strong> → DELETE flashcards ✅</li>
+        <li>
+          <strong>"make 5 flashcard off batman"</strong> → CREATE 5 flashcards
+          about batman ✅
+        </li>
+        <li>
+          <strong>"1 notes of superman"</strong> → CREATE 1 note about superman
+          ❌ (wrongly classified as delete)
+        </li>
+      </ol>
+
+      <button class="test-button" onclick="testSplitting()">
+        Test Command Splitting
+      </button>
+      <button class="test-button" onclick="testClassification()">
+        Test Part Classification
+      </button>
+
+      <div id="results" class="results">
+        Click a button to start debugging...
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>🧪 Individual Part Testing</h2>
+      <p>Test each part individually to see how it's being classified:</p>
+
+      <button class="test-button" onclick="testPart('delete all flashcard')">
+        Test Part 1
+      </button>
+      <button
+        class="test-button"
+        onclick="testPart('make 5 flashcard off batman')"
+      >
+        Test Part 2
+      </button>
+      <button class="test-button" onclick="testPart('1 notes of superman')">
+        Test Part 3
+      </button>
+
+      <div id="part-results" class="results">
+        Individual part test results...
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>🔍 Pattern Testing</h2>
+      <p>Test specific patterns to understand the classification logic:</p>
+
+      <button class="test-button" onclick="testPatterns()">
+        Test All Patterns
+      </button>
+
+      <div id="pattern-results" class="results">Pattern test results...</div>
+    </div>
+
+    <script>
+      // Simulate the parsing logic
+      class DebugTaskUnderstanding {
+        static isCompoundRequest(input) {
+          const connectors = [
+            " and ",
+            " then ",
+            " also ",
+            " plus ",
+            " after that ",
+            " next ",
+            " & ",
+            ",",
+          ];
+          return connectors.some((connector) => input.includes(connector));
+        }
+
+        static splitCompoundRequest(input) {
+          const splitPatterns = [
+            / and /gi,
+            / then /gi,
+            / also /gi,
+            / plus /gi,
+            / after that /gi,
+            / next /gi,
+            / & /gi,
+            /,/g,
+          ];
+
+          let parts = [input];
+          for (const pattern of splitPatterns) {
+            const newParts = [];
+            for (const part of parts) {
+              newParts.push(...part.split(pattern));
+            }
+            parts = newParts;
+          }
+
+          return parts.filter((part) => part.trim().length > 0);
+        }
+
+        static isDeleteRequest(input) {
+          const deleteWords = [
+            "delete",
+            "remove",
+            "clear",
+            "drop",
+            "erase",
+            "rm",
+            "trash",
+            "wipe",
+          ];
+          const deleteTypos = [
+            "delte",
+            "delet",
+            "deleete",
+            "remvoe",
+            "rmv",
+            "clr",
+            "clera",
+            "dropp",
+            "earse",
+          ];
+
+          return (
+            deleteWords.some((word) => input.includes(word)) ||
+            deleteTypos.some((word) => input.includes(word))
+          );
+        }
+
+        static isCreateRequest(input) {
+          const createWords = [
+            "create",
+            "make",
+            "generate",
+            "add",
+            "new",
+            "build",
+          ];
+
+          // Check for explicit create words
+          if (createWords.some((word) => input.includes(word))) {
+            return true;
+          }
+
+          // Check for implicit creation patterns
+          // Pattern: "N flashcards/cards/notes" suggests creation
+          if (input.match(/\d+\s*(?:flashcard|card|note|flash)/i)) {
+            return true;
+          }
+
+          // Pattern: "three/five/ten flashcards" etc.
+          const numberWords = [
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+          ];
+          if (
+            numberWords.some((num) => input.includes(num)) &&
+            input.match(/(?:flashcard|card|note|flash)/i)
+          ) {
+            return true;
+          }
+
+          return false;
+        }
+
+        static classifyAction(input) {
+          const normalizedInput = input.toLowerCase().trim();
+
+          if (this.isDeleteRequest(normalizedInput)) {
+            return "DELETE";
+          }
+          if (this.isCreateRequest(normalizedInput)) {
+            return "CREATE";
+          }
+          return "UNKNOWN";
+        }
+      }
+
+      function testSplitting() {
+        const command =
+          "delete all flashcard and make 5 flashcard off batman and 1 notes of superman";
+
+        let output = `🔬 Testing Command Splitting:\n`;
+        output += `Original: "${command}"\n\n`;
+
+        // Test if it's detected as compound
+        const isCompound = DebugTaskUnderstanding.isCompoundRequest(command);
+        output += `Compound Request: ${isCompound ? "YES" : "NO"}\n\n`;
+
+        // Split the command
+        const parts = DebugTaskUnderstanding.splitCompoundRequest(command);
+        output += `Split into ${parts.length} parts:\n`;
+
+        parts.forEach((part, index) => {
+          output += `${index + 1}. "${part}"\n`;
+        });
+
+        document.getElementById("results").textContent = output;
+      }
+
+      function testClassification() {
+        const command =
+          "delete all flashcard and make 5 flashcard off batman and 1 notes of superman";
+        const parts = DebugTaskUnderstanding.splitCompoundRequest(command);
+
+        let output = `🎯 Testing Part Classification:\n\n`;
+
+        parts.forEach((part, index) => {
+          const classification = DebugTaskUnderstanding.classifyAction(part);
+          output += `Part ${index + 1}: "${part}"\n`;
+          output += `Classification: ${classification}\n`;
+
+          // Test individual patterns
+          const isDelete = DebugTaskUnderstanding.isDeleteRequest(
+            part.toLowerCase()
+          );
+          const isCreate = DebugTaskUnderstanding.isCreateRequest(
+            part.toLowerCase()
+          );
+
+          output += `  - isDelete: ${isDelete}\n`;
+          output += `  - isCreate: ${isCreate}\n`;
+
+          // Test specific pattern matches
+          const hasDeleteWord = [
+            "delete",
+            "remove",
+            "clear",
+            "drop",
+            "erase",
+          ].some((word) => part.toLowerCase().includes(word));
+          const hasCreateWord = [
+            "create",
+            "make",
+            "generate",
+            "add",
+            "new",
+            "build",
+          ].some((word) => part.toLowerCase().includes(word));
+          const hasNumberPattern = part.match(
+            /\d+\s*(?:flashcard|card|note|flash)/i
+          );
+
+          output += `  - hasDeleteWord: ${hasDeleteWord}\n`;
+          output += `  - hasCreateWord: ${hasCreateWord}\n`;
+          output += `  - hasNumberPattern: ${
+            hasNumberPattern ? "YES" : "NO"
+          }\n`;
+
+          output += `\n`;
+        });
+
+        document.getElementById("results").textContent = output;
+      }
+
+      function testPart(partText) {
+        let output = `🧪 Testing Individual Part:\n`;
+        output += `Input: "${partText}"\n\n`;
+
+        const normalizedInput = partText.toLowerCase().trim();
+        output += `Normalized: "${normalizedInput}"\n\n`;
+
+        // Test all patterns
+        const isDelete =
+          DebugTaskUnderstanding.isDeleteRequest(normalizedInput);
+        const isCreate =
+          DebugTaskUnderstanding.isCreateRequest(normalizedInput);
+        const classification = DebugTaskUnderstanding.classifyAction(partText);
+
+        output += `Classification Results:\n`;
+        output += `  - isDeleteRequest: ${isDelete}\n`;
+        output += `  - isCreateRequest: ${isCreate}\n`;
+        output += `  - Final Classification: ${classification}\n\n`;
+
+        // Detailed pattern analysis
+        output += `Pattern Analysis:\n`;
+
+        // Delete patterns
+        const deleteWords = [
+          "delete",
+          "remove",
+          "clear",
+          "drop",
+          "erase",
+          "rm",
+          "trash",
+          "wipe",
+        ];
+        const hasDeleteWord = deleteWords.some((word) =>
+          normalizedInput.includes(word)
+        );
+        output += `  - Has delete word: ${hasDeleteWord}\n`;
+
+        // Create patterns
+        const createWords = [
+          "create",
+          "make",
+          "generate",
+          "add",
+          "new",
+          "build",
+        ];
+        const hasCreateWord = createWords.some((word) =>
+          normalizedInput.includes(word)
+        );
+        output += `  - Has create word: ${hasCreateWord}\n`;
+
+        // Number patterns
+        const numberPattern = /\d+\s*(?:flashcard|card|note|flash)/i;
+        const numberMatch = normalizedInput.match(numberPattern);
+        output += `  - Number pattern match: ${
+          numberMatch ? `"${numberMatch[0]}"` : "NO"
+        }\n`;
+
+        // Number words
+        const numberWords = [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five",
+          "six",
+          "seven",
+          "eight",
+          "nine",
+          "ten",
+        ];
+        const hasNumberWord = numberWords.some((num) =>
+          normalizedInput.includes(num)
+        );
+        const hasCardWord = normalizedInput.match(
+          /(?:flashcard|card|note|flash)/i
+        );
+        output += `  - Number word: ${hasNumberWord}\n`;
+        output += `  - Card/note word: ${hasCardWord ? "YES" : "NO"}\n`;
+
+        document.getElementById("part-results").textContent = output;
+      }
+
+      function testPatterns() {
+        const testCases = [
+          "1 notes of superman",
+          "make 5 flashcard off batman",
+          "delete all flashcard",
+          "create note about history",
+          "5 flashcards",
+          "one note",
+          "remove flashcards",
+        ];
+
+        let output = `🔍 Pattern Testing Results:\n\n`;
+
+        testCases.forEach((testCase) => {
+          const isDelete = DebugTaskUnderstanding.isDeleteRequest(
+            testCase.toLowerCase()
+          );
+          const isCreate = DebugTaskUnderstanding.isCreateRequest(
+            testCase.toLowerCase()
+          );
+          const classification =
+            DebugTaskUnderstanding.classifyAction(testCase);
+
+          output += `"${testCase}": ${classification} (delete:${isDelete}, create:${isCreate})\n`;
+        });
+
+        document.getElementById("pattern-results").textContent = output;
+      }
+
+      // Initialize
+      window.onload = function () {
+        console.log("🔬 Debug page loaded");
+      };
+    </script>
+  </body>
+</html>

@@ -43,6 +43,7 @@ import {
   generateNotesFromContent,
   extractTextFromImage,
 } from "@/services/openrouter";
+import { generateNotesWithGemini } from "@/services/geminiAI";
 import {
   Orchestrator,
   BuddyAgent,
@@ -309,7 +310,6 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
         lowerText.includes("class")
       ) {
         setIsLoading(true);
-        // Process with simple logic here directly without external function
         try {
           const { extractFileContent } = await import(
             "@/services/fileProcessor"
@@ -317,68 +317,98 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
           const content = await extractFileContent(pendingFile);
 
           if (content && content.trim()) {
-            let message = "";
-            if (
-              lowerText.includes("flashcard") ||
-              lowerText.includes("cards")
-            ) {
-              message = `🎯 Creating flashcards from "${pendingFile.name}"...`;
-            } else if (
-              lowerText.includes("notes") ||
-              lowerText.includes("note")
-            ) {
-              message = `📝 Creating notes from "${pendingFile.name}"...`;
-            } else {
-              message = `📅 Extracting schedule from "${pendingFile.name}"...`;
-            }
+            const wantsFlashcards =
+              lowerText.includes("flashcard") || lowerText.includes("cards");
+            const wantsNotes =
+              lowerText.includes("notes") || lowerText.includes("note");
+            const wantsSchedule =
+              lowerText.includes("schedule") ||
+              lowerText.includes("timetable") ||
+              lowerText.includes("class");
+
+            const requested: string[] = [];
+            if (wantsFlashcards) requested.push("flashcards");
+            if (wantsNotes) requested.push("notes");
+            if (wantsSchedule) requested.push("schedule");
 
             const processingMessage: ChatMessage = {
               role: "assistant",
-              content: message,
+              content:
+                requested.length > 1
+                  ? `📁 Processing "${
+                      pendingFile.name
+                    }" to create ${requested.join(" and ")}...`
+                  : wantsFlashcards
+                  ? `🎯 Creating flashcards from "${pendingFile.name}"...`
+                  : wantsNotes
+                  ? `📝 Creating notes from "${pendingFile.name}"...`
+                  : `📅 Extracting schedule from "${pendingFile.name}"...`,
             };
             setMessages((prev) => [...prev, processingMessage]);
 
-            // Use the existing automatic processing but the user chose the intent
             const { processUploadedFile } = await import(
               "@/services/fileProcessor"
             );
             const result = await processUploadedFile(pendingFile);
 
             if (result.success) {
-              // Filter results based on intent
-              if (
-                lowerText.includes("flashcard") ||
-                lowerText.includes("cards")
-              ) {
-                if (result.flashcards.length > 0) {
-                  onFlashcardsUpdate(result.flashcards);
-                  const successMsg: ChatMessage = {
-                    role: "assistant",
-                    content: `✅ Created ${result.flashcards.length} flashcards from "${pendingFile.name}"!`,
-                  };
-                  setMessages((prev) => [...prev, successMsg]);
-                }
-              } else if (
-                lowerText.includes("notes") ||
-                lowerText.includes("note")
-              ) {
-                if (result.notes.length > 0) {
-                  onNotesUpdate(result.notes);
-                  const successMsg: ChatMessage = {
-                    role: "assistant",
-                    content: `✅ Created ${result.notes.length} notes from "${pendingFile.name}"!`,
-                  };
-                  setMessages((prev) => [...prev, successMsg]);
-                }
+              const summaries: string[] = [];
+
+              if (wantsFlashcards && result.flashcards.length > 0) {
+                const saved = FlashcardStorage.addBatch(
+                  result.flashcards.map((c) => ({
+                    ...c,
+                    source: pendingFile.name,
+                  }))
+                );
+                onFlashcardsUpdate(result.flashcards);
+                summaries.push(`✅ ${saved.length} flashcards`);
+              }
+
+              if (wantsNotes && result.notes.length > 0) {
+                const saved = NotesStorage.addBatch(
+                  result.notes.map((n) => ({ ...n, source: pendingFile.name }))
+                );
+                onNotesUpdate(result.notes);
+                summaries.push(`📝 ${saved.length} notes`);
+              }
+
+              if (wantsSchedule && result.scheduleItems.length > 0) {
+                const saved = ScheduleStorage.addBatch(
+                  result.scheduleItems.map((i) => ({
+                    ...i,
+                    source: pendingFile.name,
+                  }))
+                );
+                onScheduleUpdate(result.scheduleItems);
+                summaries.push(`📅 ${saved.length} schedule items`);
+              }
+
+              // Save file history entry
+              FileHistoryStorage.add({
+                fileName: pendingFile.name,
+                fileType: pendingFile.type,
+                contentType: "mixed",
+                flashcardsGenerated: result.flashcards.length,
+                notesGenerated: result.notes.length,
+                scheduleItemsGenerated: result.scheduleItems.length,
+              });
+
+              if (summaries.length > 0) {
+                const successMsg: ChatMessage = {
+                  role: "assistant",
+                  content: `✅ Created ${summaries.join(", ")} from "${
+                    pendingFile.name
+                  }"!`,
+                };
+                setMessages((prev) => [...prev, successMsg]);
               } else {
-                if (result.scheduleItems.length > 0) {
-                  onScheduleUpdate(result.scheduleItems);
-                  const successMsg: ChatMessage = {
-                    role: "assistant",
-                    content: `✅ Created ${result.scheduleItems.length} schedule items from "${pendingFile.name}"!`,
-                  };
-                  setMessages((prev) => [...prev, successMsg]);
-                }
+                const noneMsg: ChatMessage = {
+                  role: "assistant",
+                  content:
+                    "I couldn't find content to create what you asked. Try a different file or ask me to try another option.",
+                };
+                setMessages((prev) => [...prev, noneMsg]);
               }
             }
           }
@@ -399,7 +429,127 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
     setIsLoading(true);
 
     try {
-      // 1) Use the enhanced UniversalAgent for all text processing
+      // PRIORITY 1: Handle delete commands immediately (most important) - BEFORE UniversalAI
+      // Enhanced pattern to catch typos and compound commands
+      const deletePattern =
+        /(delet[e]?|remove|clear|rmv|clr)\s*(?:all|notes?|flashcards?|cards?|flash\s*cards?)/i;
+      const hasDeleteCommand = deletePattern.test(messageText.toLowerCase());
+
+      // Also check for compound commands that contain delete operations
+      const isCompoundWithDelete =
+        messageText.toLowerCase().includes(" and ") &&
+        /(delet[e]?|remove|clear)\s+(?:all|notes?|flashcards?|cards?)/i.test(
+          messageText.toLowerCase()
+        );
+
+      if (hasDeleteCommand || isCompoundWithDelete) {
+        console.log(
+          "🗑️ [DashboardAI] Delete/compound command detected, using TaskUnderstanding immediately..."
+        );
+        console.log("🔍 [DashboardAI] Pattern match details:", {
+          hasDeleteCommand,
+          isCompoundWithDelete,
+          originalText: messageText,
+        });
+        try {
+          const { TaskUnderstanding } = await import("@/lib/taskUnderstanding");
+          const { TaskExecutor } = await import("@/lib/taskExecutor");
+
+          const taskRequest = TaskUnderstanding.understandRequest(messageText);
+          console.log(`📋 [DashboardAI] Delete task request:`, taskRequest);
+
+          if (taskRequest.actions && taskRequest.actions.length > 0) {
+            const taskResults = await TaskExecutor.executeTask(taskRequest);
+            console.log(`⚡ [DashboardAI] Delete task results:`, taskResults);
+
+            const summaries: string[] = [];
+            taskResults.forEach((result) => {
+              if (result.success) {
+                summaries.push(result.message);
+              }
+            });
+
+            const finalSummary =
+              taskRequest.message + " " + summaries.join(" ");
+            console.log(`🎯 [DashboardAI] Delete completed:`, {
+              summary: finalSummary,
+            });
+
+            const msg: ChatMessage = {
+              role: "assistant",
+              content: finalSummary,
+            };
+            setMessages((p) => [...p, msg]);
+            speakMessageWithElevenLabs(finalSummary);
+            setIsLoading(false);
+            setInputText("");
+            return;
+          }
+        } catch (error) {
+          console.error(
+            "🚨 [DashboardAI] TaskUnderstanding failed for delete:",
+            error
+          );
+        }
+      }
+
+      // PRIORITY 1.5: Handle any compound command (contains " and ") with TaskUnderstanding
+      const isCompoundCommand =
+        messageText.toLowerCase().includes(" and ") &&
+        /(create|make|generate|add|delete|remove|clear|flashcard|note|card)/i.test(
+          messageText.toLowerCase()
+        );
+
+      if (isCompoundCommand) {
+        console.log(
+          "🔀 [DashboardAI] Compound command detected, using TaskUnderstanding..."
+        );
+        try {
+          const { TaskUnderstanding } = await import("@/lib/taskUnderstanding");
+          const { TaskExecutor } = await import("@/lib/taskExecutor");
+
+          const taskRequest = TaskUnderstanding.understandRequest(messageText);
+          console.log(`📋 [DashboardAI] Compound task request:`, taskRequest);
+
+          if (taskRequest.actions && taskRequest.actions.length > 0) {
+            const taskResults = await TaskExecutor.executeTask(taskRequest);
+            console.log(`⚡ [DashboardAI] Compound task results:`, taskResults);
+
+            const successfulResults = taskResults.filter((r) => r.success);
+            const messages = successfulResults.map((r) => r.message);
+            const finalSummary = `🎯 [DashboardAI] Compound completed: ${messages.join(
+              " "
+            )}`;
+
+            console.log(`🎯 [DashboardAI] Compound completed:`, finalSummary);
+
+            const botResponse: ChatMessage = {
+              role: "assistant",
+              content: finalSummary,
+            };
+            setMessages((prev) => [...prev, botResponse]);
+            speakMessageWithElevenLabs(finalSummary);
+            setIsLoading(false);
+            setInputText("");
+            return;
+          }
+        } catch (error) {
+          console.error(
+            "🚨 [DashboardAI] TaskUnderstanding failed for compound:",
+            error
+          );
+        }
+      }
+
+      // 2) Intent detection: run generators directly when asked (BEFORE UniversalAI)
+      const intentHandled = await handleIntentCommand(messageText);
+      if (intentHandled) {
+        setIsLoading(false);
+        setInputText("");
+        return;
+      }
+
+      // 3) Use the enhanced UniversalAgent for all other text processing
       try {
         const result = await universalAI.processAnyPrompt({
           text: messageText,
@@ -452,14 +602,6 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
         }
       } catch {}
 
-      // 2) Intent detection: run generators directly when asked (temporary until all agents fully cover flows)
-      const intentHandled = await handleIntentCommand(messageText);
-      if (intentHandled) {
-        setIsLoading(false);
-        setInputText("");
-        return;
-      }
-
       // 3) Otherwise, do a short general chat reply
       const systemPrompt: ChatMessage = {
         role: "system",
@@ -496,14 +638,251 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
     const s = raw.trim();
     const lower = s.toLowerCase();
 
+    console.log(`🔍 [IntentHandler] Processing: "${s}"`);
+
     // helpers
     const after = (re: RegExp) => (s.match(re)?.[1] || s).trim();
 
     try {
-      // Flashcards
-      if (/(make|create|generate)\s+(some\s+)?flashcards?\b/i.test(s)) {
+      // Check/count flashcards queries (typo tolerant)
+      const howManyPattern =
+        /(how\s*many|howmany|count|how much|are there any|check)/i;
+      const flashcardsFuzzy = /fl+as*h*c*ar+d+s?/i; // tolerate repeats/typos
+      if (howManyPattern.test(s) && flashcardsFuzzy.test(s)) {
+        const { FlashcardStorage } = await import("@/lib/storage");
+        const all = FlashcardStorage.load();
+        // Optional topic filter: "for|about|on|related to|of <topic>"
+        const topicMatch = s.match(
+          /(?:for|about|on|related to|of)\s+([^?.!]+)/i
+        );
+        let filtered = all;
+        let topic = "";
+        if (topicMatch) {
+          topic = String(topicMatch[1] || "").trim();
+          const t = topic.toLowerCase();
+          filtered = all.filter((c) =>
+            `${c.question} ${c.answer} ${c.category}`.toLowerCase().includes(t)
+          );
+        }
+        const total = all.length;
+        const count = filtered.length;
+        const preview = filtered
+          .slice(0, Math.min(3, count))
+          .map(
+            (c) => `• ${c.category || "General"}: ${c.question?.slice(0, 60)}`
+          )
+          .join("\n");
+        const msgText = topic
+          ? `You have ${count} flashcards for ${topic}. Total flashcards: ${total}.${
+              count ? `\n${preview}` : ""
+            }`
+          : `You have ${count} flashcards.${count ? `\n${preview}` : ""}`;
+        const msg: ChatMessage = { role: "assistant", content: msgText };
+        setMessages((p) => [...p, msg]);
+        speakMessageWithElevenLabs(msgText);
+        return true;
+      }
+
+      // Flashcards - Specific count pattern (e.g., "make 10 flashcards on drawing") - with typo tolerance
+      if (
+        /(make|create|generate)\s+(\d+)\s+(?:flashcards?|fladhcards?|flashcard)\s+(?:on|about|of)\s+(.+)/i.test(
+          s
+        )
+      ) {
+        console.log(`🎴 [Intent] Matched specific count flashcard pattern`);
+        const match = s.match(
+          /(make|create|generate)\s+(\d+)\s+(?:flashcards?|fladhcards?|flashcard)\s+(?:on|about|of)\s+(.+)/i
+        );
+        if (match) {
+          const count = parseInt(match[2]);
+          const topic = match[3].trim();
+
+          console.log(`🎴 [Intent] Creating ${count} flashcards on: ${topic}`);
+
+          // Generate multiple sets to reach the requested count
+          let allCards: any[] = [];
+          const setsNeeded = Math.ceil(count / 5); // Generate in sets of 5
+
+          for (let i = 0; i < setsNeeded; i++) {
+            const cards = await generateFlashcards(topic);
+            if (Array.isArray(cards) && cards.length > 0) {
+              allCards = allCards.concat(cards);
+            }
+          }
+
+          if (allCards.length > 0) {
+            // Limit to requested count and remove duplicates
+            const uniqueCards = allCards.filter(
+              (card, index, self) =>
+                index === self.findIndex((c) => c.question === card.question)
+            );
+            const limitedCards = uniqueCards.slice(0, count);
+
+            onFlashcardsUpdate(
+              limitedCards.map((c: any) => ({
+                question: c.question || c.front || "Question",
+                answer: c.answer || c.back || "Answer",
+                category: c.category || "General",
+              }))
+            );
+            const msg: ChatMessage = {
+              role: "assistant",
+              content: `Created ${limitedCards.length} flashcards about ${topic}. They're in the Flash Cards tab.`,
+            };
+            setMessages((p) => [...p, msg]);
+            speakMessageWithElevenLabs(
+              `I made ${limitedCards.length} flashcards about ${topic}. Check the Flash Cards tab.`
+            );
+            return true;
+          }
+        }
+      }
+
+      // Complex command pattern (e.g., "make 1 note on butterfly and 5 flashcard on bike")
+      if (
+        /(make|create|generate)\s+(\d+)\s+(?:notes?|note)\s+(?:on|about|of)\s+(.+?)\s+and\s+(\d+)\s+(?:flashcards?|fladhcards?|flashcard)\s+(?:on|about|of)\s+(.+)/i.test(
+          s
+        )
+      ) {
+        console.log(`📝 [Intent] Matched complex command pattern`);
+        const match = s.match(
+          /(make|create|generate)\s+(\d+)\s+(?:notes?|note)\s+(?:on|about|of)\s+(.+?)\s+and\s+(\d+)\s+(?:flashcards?|fladhcards?|flashcard)\s+(?:on|about|of)\s+(.+)/i
+        );
+        if (match) {
+          const noteCount = parseInt(match[2]);
+          const noteTopic = match[3].trim();
+          const flashcardCount = parseInt(match[4]);
+          const flashcardTopic = match[5].trim();
+
+          console.log(
+            `📝 [Intent] Creating ${noteCount} notes on: ${noteTopic} and ${flashcardCount} flashcards on: ${flashcardTopic}`
+          );
+
+          // Create notes
+          const notes = await generateNotesWithGemini(noteTopic, "chat-input");
+          if (Array.isArray(notes) && notes.length > 0) {
+            const limitedNotes = notes.slice(0, noteCount);
+            onNotesUpdate(limitedNotes);
+          }
+
+          // Create flashcards
+          let allCards: any[] = [];
+          const setsNeeded = Math.ceil(flashcardCount / 5);
+
+          for (let i = 0; i < setsNeeded; i++) {
+            const cards = await generateFlashcards(flashcardTopic);
+            if (Array.isArray(cards) && cards.length > 0) {
+              allCards = allCards.concat(cards);
+            }
+          }
+
+          if (allCards.length > 0) {
+            const uniqueCards = allCards.filter(
+              (card, index, self) =>
+                index === self.findIndex((c) => c.question === card.question)
+            );
+            const limitedCards = uniqueCards.slice(0, flashcardCount);
+
+            onFlashcardsUpdate(
+              limitedCards.map((c: any) => ({
+                question: c.question || c.front || "Question",
+                answer: c.answer || c.back || "Answer",
+                category: c.category || "General",
+              }))
+            );
+          }
+
+          const msg: ChatMessage = {
+            role: "assistant",
+            content: `Created ${noteCount} notes about ${noteTopic} and ${flashcardCount} flashcards about ${flashcardTopic}. Check your Notes Manager and Flash Cards tab.`,
+          };
+          setMessages((p) => [...p, msg]);
+          speakMessageWithElevenLabs(
+            `I created ${noteCount} notes about ${noteTopic} and ${flashcardCount} flashcards about ${flashcardTopic}.`
+          );
+          return true;
+        }
+      }
+
+      // Notes - Specific count pattern (e.g., "make 1 note on bike")
+      if (
+        /(make|create|generate)\s+(\d+)\s+notes?\s+(?:on|about|of)\s+(.+)/i.test(
+          s
+        )
+      ) {
+        const match = s.match(
+          /(make|create|generate)\s+(\d+)\s+notes?\s+(?:on|about|of)\s+(.+)/i
+        );
+        if (match) {
+          const count = parseInt(match[2]);
+          const topic = match[3].trim();
+
+          console.log(`📝 [Intent] Creating ${count} notes on: ${topic}`);
+
+          const notes = await generateNotesWithGemini(topic, "chat-input");
+          if (Array.isArray(notes) && notes.length > 0) {
+            // Limit to requested count
+            const limitedNotes = notes.slice(0, count);
+            onNotesUpdate(limitedNotes);
+            const msg: ChatMessage = {
+              role: "assistant",
+              content: `Created ${limitedNotes.length} notes about ${topic}. View them in Notes Manager.`,
+            };
+            setMessages((p) => [...p, msg]);
+            speakMessageWithElevenLabs(
+              `Your notes about ${topic} are ready in the Notes Manager.`
+            );
+            return true;
+          }
+        }
+      }
+
+      // Flashcards - Simple pattern (e.g., "make flashcards on react")
+      if (
+        /(make|create|generate)\s+(?:flashcards?|fladhcards?|flashcard)\s+(?:on|about|of)\s+(.+)/i.test(
+          s
+        )
+      ) {
+        console.log(`🎴 [Intent] Matched simple flashcard pattern`);
+        const match = s.match(
+          /(make|create|generate)\s+(?:flashcards?|fladhcards?|flashcard)\s+(?:on|about|of)\s+(.+)/i
+        );
+        if (match) {
+          const topic = match[2].trim();
+
+          console.log(`🎴 [Intent] Creating flashcards on: ${topic}`);
+
+          const cards = await generateFlashcards(topic);
+          if (Array.isArray(cards) && cards.length > 0) {
+            onFlashcardsUpdate(
+              cards.map((c: any) => ({
+                question: c.question || c.front || "Question",
+                answer: c.answer || c.back || "Answer",
+                category: c.category || "General",
+              }))
+            );
+            const msg: ChatMessage = {
+              role: "assistant",
+              content: `Created ${cards.length} flashcards about ${topic}. They're in the Flash Cards tab.`,
+            };
+            setMessages((p) => [...p, msg]);
+            speakMessageWithElevenLabs(
+              `I made ${cards.length} flashcards about ${topic}. Check the Flash Cards tab.`
+            );
+            return true;
+          }
+        }
+      }
+
+      // Flashcards - Fallback pattern (with typo tolerance)
+      if (
+        /(make|create|generate)\s+(some\s+)?(?:flashcards?|fladhcards?|flashcard)\b/i.test(
+          s
+        )
+      ) {
+        console.log(`🎴 [Intent] Matched fallback flashcard pattern`);
         const content = after(
-          /flashcards?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
+          /(?:flashcards?|fladhcards?|flashcard)\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i
         );
         if (content.length < 15) return false; // need some content
         const cards = await generateFlashcards(content);
@@ -534,12 +913,39 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
         return true;
       }
 
-      // Notes
+      // Notes - Simple pattern (e.g., "make notes on snow")
+      if (/(make|create|generate)\s+notes?\s+(?:on|about|of)\s+(.+)/i.test(s)) {
+        console.log(`📝 [Intent] Matched simple notes pattern`);
+        const match = s.match(
+          /(make|create|generate)\s+notes?\s+(?:on|about|of)\s+(.+)/i
+        );
+        if (match) {
+          const topic = match[2].trim();
+
+          console.log(`📝 [Intent] Creating notes on: ${topic}`);
+
+          const notes = await generateNotesWithGemini(topic, "chat-input");
+          if (Array.isArray(notes) && notes.length > 0) {
+            onNotesUpdate(notes);
+            const msg: ChatMessage = {
+              role: "assistant",
+              content: `Created ${notes.length} notes about ${topic}. View them in Notes Manager.`,
+            };
+            setMessages((p) => [...p, msg]);
+            speakMessageWithElevenLabs(
+              `Your notes about ${topic} are ready in the Notes Manager.`
+            );
+            return true;
+          }
+        }
+      }
+
+      // Notes - Fallback pattern
       if (/(make|create|generate)\s+(study\s+)?notes?\b/i.test(s)) {
         const content =
           after(/notes?\s*(?:from|about|on|for)?\s*[:\-]?\s*(.*)$/i) || s;
         if (content.length < 30) return false;
-        const notes = await generateNotesFromContent(content, "chat-input");
+        const notes = await generateNotesWithGemini(content, "chat-input");
         if (Array.isArray(notes) && notes.length > 0) {
           onNotesUpdate(notes);
           const msg: ChatMessage = {
@@ -643,6 +1049,7 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
       return false;
     }
 
+    console.log(`🔍 [IntentHandler] No patterns matched for: "${s}"`);
     return false;
   };
 

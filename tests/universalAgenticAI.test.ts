@@ -25,6 +25,29 @@ vi.mock("../src/services/geminiAI", () => ({
     success: true,
     result: "Mock Gemini response",
   }),
+  generateNotesWithGemini: vi
+    .fn()
+    .mockImplementation((content: string, source: string) =>
+      Promise.resolve([
+        {
+          title: `Study Notes: ${source || "topic"}`,
+          content: `# Study Notes: ${content}`,
+          category: "Academic",
+          tags: ["structured", "academic"],
+        },
+      ])
+    ),
+  generateFlashcardsWithGemini: vi
+    .fn()
+    .mockImplementation((topic: string, count: number = 5) =>
+      Promise.resolve(
+        Array.from({ length: count }, (_, i) => ({
+          question: `Question ${i + 1} about ${topic}?`,
+          answer: `Answer ${i + 1} about ${topic}.`,
+          category: topic,
+        }))
+      )
+    ),
 }));
 
 describe("Universal Agentic AI - JavaScript Flashcards Test", () => {
