@@ -3,6 +3,7 @@
 
 import { TaskAction, TaskRequest } from "./taskUnderstanding";
 import { NotesStorage, FlashcardStorage, ScheduleStorage } from "./storage";
+import { generateFlashcardsWithGemini } from "../services/geminiAI";
 
 export interface TaskResult {
   success: boolean;
@@ -211,24 +212,43 @@ export class TaskExecutor {
     }
 
     if (action.target === "flashcards") {
-      const topic = action.data?.topic || "General";
-      const count = action.data?.count || 5;
+      const topic = (action.data?.topic || "General").toString();
+      const count = Number(action.data?.count ?? 8) || 8;
 
-      const flashcards = [];
-      for (let i = 1; i <= count; i++) {
-        flashcards.push({
-          question: `Question ${i} about ${topic}?`,
-          answer: `Answer ${i} about ${topic}.`,
+      console.log(
+        `🤖 [TaskExecutor] Requesting AI to generate ${count} flashcards for topic: "${topic}"`
+      );
+
+      // Try Gemini first; if it returns nothing, fall back to basic generation
+      let aiCards: Array<{ question: string; answer: string; category?: string }> = [];
+      try {
+        aiCards = await generateFlashcardsWithGemini(topic, "TaskExecutor", {
+          count,
           category: topic,
         });
+      } catch (e) {
+        console.warn("⚠️ [TaskExecutor] Gemini generation failed, will fallback:", e);
       }
 
-      const saved = FlashcardStorage.addBatch(flashcards);
+      const toSave = (aiCards && aiCards.length
+        ? aiCards
+        : Array.from({ length: count }, (_, i) => ({
+            question: `What is a key concept of ${topic}? (Card ${i + 1})`,
+            answer: `One key concept in ${topic} is ...`,
+            category: topic,
+          }))
+      ).map((c) => ({
+        question: c.question,
+        answer: c.answer,
+        category: c.category || topic,
+      }));
+
+      const saved = FlashcardStorage.addBatch(toSave);
       return {
         success: true,
-        message: `Created ${count} flashcards about ${topic}.`,
+        message: `Created ${saved.length} flashcards about ${topic}.`,
         data: saved,
-        count: count,
+        count: saved.length,
       };
     }
 
