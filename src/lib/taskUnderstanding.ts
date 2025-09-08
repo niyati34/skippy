@@ -29,6 +29,21 @@ export class TaskUnderstanding {
 
     console.log(`🧠 [TaskUnderstanding] Analyzing: "${userInput}"`);
 
+    // 🚀 NEW: Parse all actions directly from the full sentence using robust patterns
+    // This handles compound commands without relying on fragile connector splitting
+    const parsedActions = this.parseAllActions(userInput);
+    if (parsedActions.length > 0) {
+      const msg =
+        parsedActions.length > 1
+          ? `Compound request: ${parsedActions.length} actions identified`
+          : `Request understood: ${parsedActions[0].type} ${parsedActions[0].target}`;
+      return {
+        actions: parsedActions,
+        message: msg,
+        confidence: parsedActions.length > 1 ? 0.85 : 0.8,
+      };
+    }
+
     // 🚀 FIRST: Check for compound commands (multiple actions in one request)
     if (this.isCompoundRequest(input)) {
       return this.handleCompoundRequest(userInput); // Pass original case for proper parsing
@@ -71,6 +86,177 @@ export class TaskUnderstanding {
 
     // Fallback - try to understand what user wants
     return this.guessIntent(input);
+  }
+
+  // 🚀 NEW: Comprehensive action parser that extracts all actions/targets from the full input
+  // Supports: create/make/generate, implicit "10 flashcards ...", delete/remove, search/list/show, convert X to Y
+  private static parseAllActions(userInput: string): TaskAction[] {
+    const actions: TaskAction[] = [];
+    const text = userInput.trim();
+
+    // Helper maps
+    const normalizeTarget = (raw: string): TaskAction["target"] => {
+      const r = raw.toLowerCase();
+      if (/^flash/.test(r) || /^card/.test(r)) return "flashcards";
+      if (/^note/.test(r) || /^not/.test(r)) return "notes";
+      if (/^schedule|^event/.test(r)) return "schedule";
+      if (r === "everything" || r === "all") return "all";
+      return "content"; // fallback when used in convert
+    };
+
+    const extractTopic = (seg?: string) => {
+      if (!seg) return undefined;
+      const m = seg.match(
+        /(?:about|on|for|of|off|related(?:\s+to)?)\s+([^,.;]+)/i
+      );
+      if (m) return m[1].trim();
+      // Fallback: last meaningful words
+      const words = seg
+        .split(/\s+/)
+        .filter(
+          (w) =>
+            w.length > 2 &&
+            !/^(create|make|generate|add|write|delete|remove|clear|drop|erase|trash|wipe|find|search|show|list|get)$/i.test(
+              w
+            )
+        );
+      return words.length ? words[words.length - 1] : undefined;
+    };
+
+    const parseNumberWord = (word?: string): number | undefined => {
+      if (!word) return undefined;
+      const map: Record<string, number> = {
+        one: 1,
+        two: 2,
+        three: 3,
+        four: 4,
+        five: 5,
+        six: 6,
+        seven: 7,
+        eight: 8,
+        nine: 9,
+        ten: 10,
+        eleven: 11,
+        twelve: 12,
+        fifteen: 15,
+        twenty: 20,
+      };
+      const v = map[word.toLowerCase()];
+      return v;
+    };
+
+    // 1) Explicit create/make/generate
+    const createRegex =
+      /(create|make|generate|add|write)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s*)?(notes?|flashcards?|cards?|schedule|events?)\b([^]*)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = createRegex.exec(text)) !== null) {
+      const [, , cntRaw, targetRaw, tail] = m;
+      const t = normalizeTarget(targetRaw);
+      let count: number | undefined = undefined;
+      if (cntRaw)
+        count = /\d+/.test(cntRaw)
+          ? parseInt(cntRaw, 10)
+          : parseNumberWord(cntRaw);
+      // Limit topic extraction to the current clause (stop at connectors or another action verb)
+      const tailForTopic = (tail || "")
+        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
+        .trim();
+      const topic = extractTopic(tailForTopic);
+      const data: any = {};
+      if (topic) data.topic = topic;
+      if (t === "flashcards" && count) data.count = count;
+      if (t === "schedule" && topic) data.task = topic;
+      actions.push({ type: "create", target: t, data, priority: "high" });
+    }
+
+    // 2) Implicit create: "10 flashcards of react", "1 note for car"
+    const implicitCreateRegex =
+      /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s+(flashcards?|cards?|notes?)\b([^]*)/gi;
+    while ((m = implicitCreateRegex.exec(text)) !== null) {
+      const [, cntRaw, targetRaw, tail] = m;
+      const t = normalizeTarget(targetRaw);
+      let count: number | undefined = undefined;
+      if (cntRaw)
+        count = /\d+/.test(cntRaw)
+          ? parseInt(cntRaw, 10)
+          : parseNumberWord(cntRaw);
+      const tailForTopic = (tail || "")
+        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
+        .trim();
+      const topic = extractTopic(tailForTopic) || extractTopic(text);
+      const data: any = {};
+      if (topic) data.topic = topic;
+      if (t === "flashcards" && count) data.count = count;
+      actions.push({ type: "create", target: t, data, priority: "high" });
+    }
+
+    // 3) Delete/remove/clear
+    // Prefer specific targets like "delete all my notes" -> target: notes
+    const deleteSpecificRegex =
+      /(delete|remove|clear|drop|erase|trash|wipe)\s+(?:all\s+(?:of\s+)?(?:my\s+|the\s+)?)?(notes?|flashcards?|cards?|schedule|events?)\b([^]*)/gi;
+    while ((m = deleteSpecificRegex.exec(text)) !== null) {
+      const [, , targetRaw, tail] = m;
+      const t = normalizeTarget(targetRaw);
+      const tailForTopic = (tail || "")
+        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
+        .trim();
+      const topic = extractTopic(tailForTopic);
+      const data = topic ? { topic } : undefined;
+      actions.push({ type: "delete", target: t, data, priority: "high" });
+    }
+
+    // Generic delete everything: "delete all" or "delete everything" (but not "delete all my notes")
+    const deleteAllRegex =
+      /(delete|remove|clear|drop|erase|trash|wipe)\s+(everything\b|all\b(?!\s+(?:of\s+)?(?:my\s+|the\s+)?(?:notes?|flashcards?|cards?|schedule|events?)))\b([^]*)/gi;
+    while ((m = deleteAllRegex.exec(text)) !== null) {
+      const [, , _targetAll, tail] = m;
+      const tailForTopic = (tail || "")
+        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
+        .trim();
+      const topic = extractTopic(tailForTopic);
+      const data = topic ? { topic } : undefined;
+      actions.push({ type: "delete", target: "all", data, priority: "high" });
+    }
+
+    // 4) Search/list/show/get
+    const searchRegex =
+      /(find|search|show|list|get)\s+(notes?|flashcards?|cards?|schedule|events?|everything|all)\b/gi;
+    while ((m = searchRegex.exec(text)) !== null) {
+      const [, , targetRaw] = m;
+      const t = normalizeTarget(targetRaw);
+      actions.push({
+        type: "search",
+        target: t === "content" ? "all" : t,
+        priority: "medium",
+      });
+    }
+
+    // 5) Convert: "convert notes to flashcards", "make flashcards from notes"
+    const convertRegex =
+      /(convert|make|create|generate)\s+(?:from\s+)?(notes?|flashcards?|cards?)\s+(?:to|into)\s+(notes?|flashcards?|cards?)\b([^]*)/gi;
+    while ((m = convertRegex.exec(text)) !== null) {
+      const [, , fromRaw, toRaw, tail] = m;
+      const from = normalizeTarget(fromRaw);
+      const to = normalizeTarget(toRaw);
+      const topic = extractTopic(tail);
+      actions.push({
+        type: "convert",
+        target: "content",
+        data: { from, to, topic },
+        priority: "high",
+      });
+    }
+
+    // Remove obvious duplicates by stringifying stable keys
+    const seen = new Set<string>();
+    const deduped = actions.filter((a) => {
+      const key = JSON.stringify({ t: a.type, g: a.target, d: a.data || {} });
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return deduped;
   }
 
   // 🚀 NEW: Detect compound requests with multiple actions
@@ -842,12 +1028,28 @@ export class TaskUnderstanding {
   }
 
   private static extractTopic(input: string): string {
-    // Extract topic from input like "create notes about history" -> "history"
-    const aboutMatch = input.match(/(?:about|on|for|of)\s+([^,.;]+)/i);
+    // Prefer explicit prepositions, but only within this clause (stop at connectors)
+    const clause = (input || "")
+      .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
+      .trim();
+    const aboutMatch = clause.match(
+      /(?:about|on|for|of|related(?:\s+to)?)\s+([^,.;]+)/i
+    );
     if (aboutMatch) return aboutMatch[1].trim();
 
-    // If no "about" found, take last meaningful word
-    const words = input.split(/\s+/).filter((w) => w.length > 3);
+    // Strip action/target words and count to avoid leaking them into topic
+    const cleaned = clause
+      .replace(
+        /\b(create|make|generate|add|write|delete|remove|clear|drop|erase|trash|wipe|find|search|show|list|get)\b/gi,
+        ""
+      )
+      .replace(/\b(\d+)\b/g, "")
+      .replace(/\b(flashcards?|cards?|notes?|schedule|events?)\b/gi, "")
+      .trim();
+
+    if (cleaned) return cleaned;
+    // Fallback: last meaningful token
+    const words = clause.split(/\s+/).filter((w) => w.length > 2);
     return words[words.length - 1] || "general";
   }
 
@@ -1071,13 +1273,18 @@ export class TaskUnderstanding {
 
   // Convert request detection (like notes to flashcards)
   private static isConvertRequest(input: string): boolean {
-    return (
-      (input.includes("from") || input.includes("convert")) &&
-      (this.matchesNotes(input) || this.matchesFlashcards(input)) &&
-      (input.includes("make") ||
-        input.includes("create") ||
-        input.includes("generate"))
-    );
+    // Recognize phrasing such as:
+    // - "convert notes to flashcards"
+    // - "make flashcards from notes"
+    // - "create from notes to flashcards"
+    if (
+      /(convert\s+\w+\s+(to|into)\s+\w+)|(make|create|generate).*from\s+\w+\s+(to|into)\s+\w+/i.test(
+        input
+      )
+    ) {
+      return this.matchesNotes(input) || this.matchesFlashcards(input);
+    }
+    return false;
   }
 
   // Handle navigation requests
