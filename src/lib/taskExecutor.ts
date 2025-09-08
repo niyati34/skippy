@@ -49,6 +49,8 @@ export class TaskExecutor {
         return this.executeSearch(action);
       case "update":
         return this.executeUpdate(action);
+      case "convert":
+        return this.executeConvert(action);
       default:
         return {
           success: false,
@@ -310,5 +312,60 @@ export class TaskExecutor {
   private static async executeUpdate(action: TaskAction): Promise<TaskResult> {
     // For now, just return search results
     return this.executeSearch(action);
+  }
+
+  // Minimal convert support: notes -> flashcards (topic-scoped if provided)
+  private static async executeConvert(action: TaskAction): Promise<TaskResult> {
+    const data = (action.data || {}) as any;
+    const from = (data.from || "").toString();
+    const to = (data.to || "").toString();
+    const topic = data.topic ? String(data.topic) : undefined;
+
+    if (from === "notes" && to.match(/^flash/)) {
+      const notes = NotesStorage.load();
+      const filter = (n: any) => {
+        if (!topic) return true;
+        const t = topic.toLowerCase();
+        return (
+          (n.title || "").toLowerCase().includes(t) ||
+          (n.content || "").toLowerCase().includes(t) ||
+          (n.category || "").toLowerCase().includes(t)
+        );
+      };
+      const relevant = notes.filter(filter);
+      if (relevant.length === 0) {
+        return {
+          success: false,
+          message: `No notes found${topic ? ` about "${topic}"` : ""} to convert.`,
+        };
+      }
+
+      // Generate a few basic Q/A from the first relevant note content
+      const chosen = relevant[0];
+      const topicLabel = topic || chosen.category || "General";
+      const lines = String(chosen.content || "")
+        .split(/\n+/)
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+        .slice(0, 10);
+      const cards = lines.slice(0, 5).map((line: string, i: number) => ({
+        question: `Q${i + 1}: What about ${topicLabel}?`,
+        answer: line,
+        category: topicLabel,
+      }));
+
+      const saved = FlashcardStorage.addBatch(cards);
+      return {
+        success: true,
+        message: `Converted notes${topic ? ` about "${topic}"` : ""} into ${saved.length} flashcards.`,
+        data: saved,
+        count: saved.length,
+      };
+    }
+
+    return {
+      success: false,
+      message: `Unsupported convert action: ${from} -> ${to}`,
+    };
   }
 }
