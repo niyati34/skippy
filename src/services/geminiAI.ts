@@ -126,6 +126,40 @@ async function callGemini(
   }
 }
 
+// Simple retry wrapper with exponential backoff for transient 503s
+async function callGeminiWithRetry(
+  messages: Array<{ role: string; content: string }>,
+  options: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    responseMimeType?: string;
+  } = {},
+  retries = 2,
+  initialDelayMs = 800
+): Promise<string> {
+  let attempt = 0;
+  let delay = initialDelayMs;
+  while (true) {
+    try {
+      return await callGemini(messages, options);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      const is503 = /\b503\b|UNAVAILABLE|overloaded/i.test(msg);
+      if (is503 && attempt < retries) {
+        attempt++;
+        console.warn(
+          `⏳ [GEMINI] 503 detected, retry ${attempt}/${retries} in ${delay}ms`
+        );
+        await new Promise((r) => setTimeout(r, delay));
+        delay *= 2;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 /**
  * Generate timetable data using Gemini AI
  */
@@ -310,7 +344,7 @@ ${cleanedContent}
 Return JSON only:`;
 
   try {
-    const response = await callGemini(
+    const response = await callGeminiWithRetry(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -443,7 +477,7 @@ Focus on:
 Return exactly 1-3 high-quality notes.`;
 
   try {
-    const response = await callGemini(
+    const response = await callGeminiWithRetry(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

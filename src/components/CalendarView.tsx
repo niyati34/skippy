@@ -51,9 +51,21 @@ const CalendarView = ({ items = [], onItemsUpdate }: CalendarViewProps) => {
     const formattedStoredItems: CalendarItem[] = storedItems.map((item) => ({
       id: item.id,
       title: item.title,
-      date: item.time.split("T")[0], // Extract date from datetime
-      time: item.time.split("T")[1]?.substring(0, 5), // Extract time (HH:MM)
-      type: "study", // Default type for stored items
+      date: item.date, // Stored as YYYY-MM-DD
+      time: item.time, // Stored as HH:mm
+      type:
+        (item as any).type &&
+        [
+          "assignment",
+          "exam",
+          "study",
+          "reminder",
+          "class",
+          "project",
+          "note",
+        ].includes((item as any).type)
+          ? ((item as any).type as CalendarItem["type"])
+          : ("study" as const),
       priority: "medium",
       description: `Scheduled item`,
       source: "storage",
