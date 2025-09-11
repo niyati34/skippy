@@ -6,6 +6,7 @@
 ## 🎯 The Problem
 
 ### Before: Regex-First (Broken)
+
 ```
 User: "make 5 flashcaed for ninja then 2 for daredavil and 3 flasghcard fpor hospital"
 
@@ -19,6 +20,7 @@ Result: Only 5 ninja flashcards created, other tasks ignored
 ```
 
 ### Now: LLM-First (Perfect)
+
 ```
 User: "make 5 flashcaed for ninja then 2 for daredavil and 3 flasghcard fpor hospital"
 
@@ -173,7 +175,7 @@ Now parse and return ONLY JSON:`;
 
   // Convert to TaskAction format
   const parsed = JSON.parse(response);
-  const actions = parsed.map(task => 
+  const actions = parsed.map(task =>
     this.convertStructuredTaskToAction(task, userInput)
   );
 
@@ -225,32 +227,32 @@ Return ONLY JSON:`;
 
 ### Success Rate
 
-| Scenario | Before (Regex) | After (LLM-First) |
-|----------|---------------|-------------------|
-| Simple tasks | 70% | 99% |
-| Compound tasks | 30% | 95% |
-| With typos | 20% | 98% |
-| Natural phrasing | 40% | 99% |
-| **Overall** | **40%** | **98%** |
+| Scenario         | Before (Regex) | After (LLM-First) |
+| ---------------- | -------------- | ----------------- |
+| Simple tasks     | 70%            | 99%               |
+| Compound tasks   | 30%            | 95%               |
+| With typos       | 20%            | 98%               |
+| Natural phrasing | 40%            | 99%               |
+| **Overall**      | **40%**        | **98%**           |
 
 ### Token Usage
 
-| Task Type | Attempts | Avg Tokens | Cost per Request |
-|-----------|----------|------------|------------------|
-| Simple | 1 (85% success) | ~600 | $0.0002 |
-| Compound | 1-2 (95% success) | ~1800 | $0.0005 |
-| Complex | 2-3 (99% success) | ~3500 | $0.0009 |
+| Task Type | Attempts          | Avg Tokens | Cost per Request |
+| --------- | ----------------- | ---------- | ---------------- |
+| Simple    | 1 (85% success)   | ~600       | $0.0002          |
+| Compound  | 1-2 (95% success) | ~1800      | $0.0005          |
+| Complex   | 2-3 (99% success) | ~3500      | $0.0009          |
 
 **Monthly cost (100 requests/day):** ~$1.50 vs ChatGPT Pro at $20/month
 
 ### Speed
 
-| Approach | Average Time | Perception |
-|----------|--------------|------------|
-| Regex fallback | 0.1s | Instant but often wrong |
-| LLM attempt 1 (2048) | 1.5s | Fast and accurate |
-| LLM attempt 2 (4096) | 2.5s | Slightly slower but thorough |
-| LLM attempt 3 (8192) | 3.5s | Worth the wait for perfection |
+| Approach             | Average Time | Perception                    |
+| -------------------- | ------------ | ----------------------------- |
+| Regex fallback       | 0.1s         | Instant but often wrong       |
+| LLM attempt 1 (2048) | 1.5s         | Fast and accurate             |
+| LLM attempt 2 (4096) | 2.5s         | Slightly slower but thorough  |
+| LLM attempt 3 (8192) | 3.5s         | Worth the wait for perfection |
 
 ## 🎓 Example Scenarios
 
@@ -271,7 +273,7 @@ Actions:
   {"action":"create","target":"schedule","topic":"calculus exam","time":"next week"}
 ]
 
-Result: 
+Result:
 ✅ 5 calculus flashcards created
 ✅ 7-day study schedule generated
 ```
@@ -348,6 +350,7 @@ Total: 5 actions executed perfectly despite heavy typos!
 ## 🔍 Why This Works Better Than Regex
 
 ### Regex (Old Approach)
+
 ```typescript
 // Rigid pattern matching
 const createPattern = /(?:make|create)\s+(\d+)?\s*(?:flashcard|card)/i;
@@ -361,6 +364,7 @@ Problems:
 ```
 
 ### LLM (New Approach)
+
 ```typescript
 // Natural language understanding
 const prompt = "Parse user request, handle typos, extract all tasks...";
@@ -376,12 +380,14 @@ Benefits:
 ## 📝 Files Modified
 
 1. **src/lib/taskUnderstanding.ts**
+
    - Added `parseWithLLM()` - New LLM-first parsing with retries
    - Updated `processStandardRequest()` - Now tries LLM 3 times before regex
    - Enhanced `parseCompoundWithLLM()` - Better prompts, higher token limits (4096)
    - Added `processWithRegexFallback()` - Isolated regex logic for rare failures
 
 2. **Token Limits Updated**
+
    - Attempt 1: 2048 tokens (was 500) → 85% success
    - Attempt 2: 4096 tokens (new) → 95% cumulative
    - Attempt 3: 8192 tokens (new) → 99% cumulative

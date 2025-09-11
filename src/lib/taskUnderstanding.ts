@@ -208,16 +208,22 @@ export class TaskUnderstanding {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         console.log(`🤖 [TaskUnderstanding] LLM attempt ${attempt}/3`);
-        
+
         const llmResult = await this.parseWithLLM(userInput, attempt);
-        
+
         if (llmResult && llmResult.actions.length > 0) {
-          console.log(`✅ [TaskUnderstanding] LLM succeeded on attempt ${attempt}:`, llmResult);
+          console.log(
+            `✅ [TaskUnderstanding] LLM succeeded on attempt ${attempt}:`,
+            llmResult
+          );
           return llmResult;
         }
       } catch (error) {
-        console.warn(`⚠️ [TaskUnderstanding] LLM attempt ${attempt} failed:`, error);
-        
+        console.warn(
+          `⚠️ [TaskUnderstanding] LLM attempt ${attempt} failed:`,
+          error
+        );
+
         // On last attempt, log the failure
         if (attempt === 3) {
           console.error(`❌ [TaskUnderstanding] All LLM attempts exhausted`);

@@ -548,18 +548,18 @@ Return ONLY a valid JSON array with 1-3 high-quality notes. No other text.`;
 
     // Clean up the response before parsing
     let cleanedResponse = response.trim();
-    
+
     // Remove common artifacts
     cleanedResponse = cleanedResponse
-      .replace(/```json\n?|```/g, '') // Remove code fences
-      .replace(/^[^[\{]*/, '') // Remove leading text before JSON
-      .replace(/[^\}\]]*$/, ''); // Remove trailing text after JSON
-    
+      .replace(/```json\n?|```/g, "") // Remove code fences
+      .replace(/^[^[\{]*/, "") // Remove leading text before JSON
+      .replace(/[^\}\]]*$/, ""); // Remove trailing text after JSON
+
     // Fix common JSON issues
     cleanedResponse = cleanedResponse
-      .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
-      .replace(/\n/g, '\\n') // Escape newlines in content
-      .replace(/\\n/g, '\\n'); // Ensure proper escaping
+      .replace(/,(\s*[}\]])/g, "$1") // Remove trailing commas
+      .replace(/\n/g, "\\n") // Escape newlines in content
+      .replace(/\\n/g, "\\n"); // Ensure proper escaping
 
     // Robust JSON extraction with cleanup
     const tryParsers: Array<() => any[]> = [
@@ -888,16 +888,15 @@ ${content.substring(0, 2000)}`;
 
     // Clean up the response before parsing
     let cleanedResponse = response.trim();
-    
+
     // Remove common artifacts
     cleanedResponse = cleanedResponse
-      .replace(/```json\n?|```/g, '') // Remove code fences
-      .replace(/^[^[\{]*/, '') // Remove leading text before JSON
-      .replace(/[^\}\]]*$/, ''); // Remove trailing text after JSON
-    
+      .replace(/```json\n?|```/g, "") // Remove code fences
+      .replace(/^[^[\{]*/, "") // Remove leading text before JSON
+      .replace(/[^\}\]]*$/, ""); // Remove trailing text after JSON
+
     // Fix common JSON issues
-    cleanedResponse = cleanedResponse
-      .replace(/,(\s*[}\]])/g, '$1'); // Remove trailing commas
+    cleanedResponse = cleanedResponse.replace(/,(\s*[}\]])/g, "$1"); // Remove trailing commas
 
     // Robust JSON extraction with cleanup
     const tryParsers: Array<() => any[]> = [

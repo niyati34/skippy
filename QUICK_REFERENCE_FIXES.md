@@ -4,17 +4,18 @@
 
 ### Before → After
 
-| Issue | Before | After |
-|-------|--------|-------|
-| Token Limits | 1K-2K (too low) | 4K-16K (retry) |
+| Issue            | Before            | After                    |
+| ---------------- | ----------------- | ------------------------ |
+| Token Limits     | 1K-2K (too low)   | 4K-16K (retry)           |
 | MAX_TOKENS Error | Immediate failure | 3 retries with 2x tokens |
-| JSON Parsing | Single attempt | 4 fallback strategies |
-| Success Rate | 40% | 98% |
-| JSON Failures | 60% | 5% |
+| JSON Parsing     | Single attempt    | 4 fallback strategies    |
+| Success Rate     | 40%               | 98%                      |
+| JSON Failures    | 60%               | 5%                       |
 
 ## 🎯 How It Works
 
 ### Retry Strategy
+
 ```
 Attempt 1: 4,096 tokens  → 85% success
 Attempt 2: 8,192 tokens  → 95% cumulative
@@ -23,10 +24,11 @@ Fallback:  Basic parsing → 100% (degraded)
 ```
 
 ### JSON Parsing
+
 ```
 1. Clean response (remove code fences, trailing commas)
 2. Try cleaned version
-3. Try original version  
+3. Try original version
 4. Try regex extraction
 5. Try first object extraction
 6. Fallback note (last resort)
@@ -35,27 +37,31 @@ Fallback:  Basic parsing → 100% (degraded)
 ## 📝 Test Commands
 
 ### Simple (Should work 100%)
+
 ```
 make 5 flashcards about AI
 create notes about quantum physics
 ```
 
 ### Compound (Should work 98%)
+
 ```
 make 5 flashcards for ninja then 2 for daredevil
 create notes on physics and chemistry then make schedule
 ```
 
 ### Complex (Should work 95%)
+
 ```
-create 5 flashcards about AI focusing on neural networks, ML algorithms, 
-deep learning, NLP, and computer vision then make 3 detailed notes about 
+create 5 flashcards about AI focusing on neural networks, ML algorithms,
+deep learning, NLP, and computer vision then make 3 detailed notes about
 each topic and finally create a comprehensive 90-day study schedule
 ```
 
 ## 🔍 Debugging
 
 ### Success Logs
+
 ```
 ✅ [AdvancedTaskAnalyzer] Analysis succeeded on attempt 1
 ✅ [AdvancedTaskAnalyzer] Decomposition succeeded on attempt 2, got 7 actions
@@ -63,6 +69,7 @@ each topic and finally create a comprehensive 90-day study schedule
 ```
 
 ### Retry Logs
+
 ```
 ⚠️ [AdvancedTaskAnalyzer] Analysis attempt 1 failed: MAX_TOKENS
 🔄 [AdvancedTaskAnalyzer] Retrying with 8192 tokens...
@@ -70,6 +77,7 @@ each topic and finally create a comprehensive 90-day study schedule
 ```
 
 ### Failure Logs (Rare)
+
 ```
 ❌ [AdvancedTaskAnalyzer] All attempts failed, using basic analysis
 ⚠️ [GEMINI] All parsers failed, creating fallback note
@@ -78,17 +86,20 @@ each topic and finally create a comprehensive 90-day study schedule
 ## 💡 Tips
 
 ### For Best Results
+
 - Use clear, specific topics
 - Separate tasks with "then", "and", "also"
 - Specify counts when needed (e.g., "5 flashcards")
 
 ### Token Usage by Task Type
+
 - Simple: ~2K tokens
-- Compound (2-3 tasks): ~6K tokens  
+- Compound (2-3 tasks): ~6K tokens
 - Complex (5+ tasks): ~12K tokens
 - Very complex: ~20K tokens
 
 ### Cost Estimate
+
 - 100 requests/day = ~$0.20/day
 - 3000 requests/month = ~$6/month
 - Still way cheaper than ChatGPT Pro ($20/month)

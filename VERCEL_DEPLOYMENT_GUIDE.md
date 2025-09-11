@@ -42,6 +42,7 @@ GEMINI_API_KEY = your-gemini-api-key-here
 ```
 
 > ⚠️ **Get your keys from:**
+>
 > - OpenRouter: https://openrouter.ai/keys
 > - Gemini: https://aistudio.google.com/app/apikey
 

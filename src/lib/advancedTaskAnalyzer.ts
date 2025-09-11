@@ -250,8 +250,10 @@ Return a JSON object with your analysis:`;
     let tokenLimit = 4096; // Start high for complex requests
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`🔄 [AdvancedTaskAnalyzer] Analysis attempt ${attempt}/3 with ${tokenLimit} tokens`);
-        
+        console.log(
+          `🔄 [AdvancedTaskAnalyzer] Analysis attempt ${attempt}/3 with ${tokenLimit} tokens`
+        );
+
         const response = await callGemini(messages, {
           temperature: 0.3,
           maxTokens: tokenLimit,
@@ -259,28 +261,40 @@ Return a JSON object with your analysis:`;
         });
 
         const parsed = JSON.parse(response);
-        console.log(`✅ [AdvancedTaskAnalyzer] Analysis succeeded on attempt ${attempt}`);
+        console.log(
+          `✅ [AdvancedTaskAnalyzer] Analysis succeeded on attempt ${attempt}`
+        );
         return parsed;
       } catch (error: any) {
-        console.error(`⚠️ [AdvancedTaskAnalyzer] Analysis attempt ${attempt} failed:`, error);
-        
+        console.error(
+          `⚠️ [AdvancedTaskAnalyzer] Analysis attempt ${attempt} failed:`,
+          error
+        );
+
         // If MAX_TOKENS, retry with more tokens
-        if (error.message?.includes('MAX_TOKENS') || error.message?.includes('no text in response')) {
+        if (
+          error.message?.includes("MAX_TOKENS") ||
+          error.message?.includes("no text in response")
+        ) {
           if (attempt < 3) {
             tokenLimit = tokenLimit * 2; // Double the limit
-            console.log(`🔄 [AdvancedTaskAnalyzer] Retrying with ${tokenLimit} tokens...`);
+            console.log(
+              `🔄 [AdvancedTaskAnalyzer] Retrying with ${tokenLimit} tokens...`
+            );
             continue;
           }
         }
-        
+
         // On final attempt or other errors, return basic analysis
         if (attempt === 3) {
-          console.error("❌ [AdvancedTaskAnalyzer] All analysis attempts failed, using basic analysis");
+          console.error(
+            "❌ [AdvancedTaskAnalyzer] All analysis attempts failed, using basic analysis"
+          );
           return this.createBasicAnalysis(userInput);
         }
       }
     }
-    
+
     return this.createBasicAnalysis(userInput);
   }
 
@@ -322,8 +336,10 @@ Return a JSON array of actions:`;
     let tokenLimit = 4096; // Start high for decomposition
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`🔄 [AdvancedTaskAnalyzer] Decomposition attempt ${attempt}/3 with ${tokenLimit} tokens`);
-        
+        console.log(
+          `🔄 [AdvancedTaskAnalyzer] Decomposition attempt ${attempt}/3 with ${tokenLimit} tokens`
+        );
+
         const response = await callGemini(messages, {
           temperature: 0.2,
           maxTokens: tokenLimit,
@@ -335,85 +351,97 @@ Return a JSON array of actions:`;
           this.validateAndEnhanceAction(action, index)
         );
 
-        console.log(`✅ [AdvancedTaskAnalyzer] Decomposition succeeded on attempt ${attempt}, got ${actions.length} actions`);
+        console.log(
+          `✅ [AdvancedTaskAnalyzer] Decomposition succeeded on attempt ${attempt}, got ${actions.length} actions`
+        );
 
         // Heuristic post-processing: elevate roadmap intents
-      const lowerInput = userInput.toLowerCase();
-      const isRoadmapIntent =
-        /visual\s+roadmap|learning\s+path|study\s+plan|roadmap\s+for/.test(
-          lowerInput
-        ) ||
-        (lowerInput.startsWith("create") && lowerInput.includes("roadmap"));
+        const lowerInput = userInput.toLowerCase();
+        const isRoadmapIntent =
+          /visual\s+roadmap|learning\s+path|study\s+plan|roadmap\s+for/.test(
+            lowerInput
+          ) ||
+          (lowerInput.startsWith("create") && lowerInput.includes("roadmap"));
 
-      if (isRoadmapIntent) {
-        const hasRoadmap = actions.some(
-          (a) => a.type === "roadmap" || a.target === "roadmap"
-        );
-        if (!hasRoadmap) {
-          // Transform first create/content action into roadmap action
-          const createIdx = actions.findIndex((a) => a.type === "create");
-          if (createIdx !== -1) {
-            actions[createIdx].type = "roadmap";
-            actions[createIdx].target = "learning-path";
-            actions[createIdx].data = {
-              topic: userInput
-                .replace(/create|visual|roadmap|for/gi, " ")
-                .trim(),
-              sourceText: userInput,
-              style: lowerInput.includes("visual") ? "visual" : "standard",
-            };
-            actions[createIdx].metadata = {
-              ...(actions[createIdx].metadata || {}),
-              difficulty: analysis?.context?.difficulty || "mixed",
-              estimatedTime: "15-30 minutes",
-              tools: [
-                ...new Set([
-                  ...(actions[createIdx].metadata?.tools || []),
-                  "visual-roadmap",
-                ]),
-              ],
-            };
-          } else {
-            actions.unshift({
-              type: "roadmap",
-              target: "learning-path",
-              priority: "medium",
-              data: {
-                topic: userInput.replace(/roadmap|create|for/gi, " ").trim(),
+        if (isRoadmapIntent) {
+          const hasRoadmap = actions.some(
+            (a) => a.type === "roadmap" || a.target === "roadmap"
+          );
+          if (!hasRoadmap) {
+            // Transform first create/content action into roadmap action
+            const createIdx = actions.findIndex((a) => a.type === "create");
+            if (createIdx !== -1) {
+              actions[createIdx].type = "roadmap";
+              actions[createIdx].target = "learning-path";
+              actions[createIdx].data = {
+                topic: userInput
+                  .replace(/create|visual|roadmap|for/gi, " ")
+                  .trim(),
                 sourceText: userInput,
-              },
-              complexity: Math.max(3, Math.min(9, analysis?.complexity || 5)),
-              dependencies: [],
-              metadata: {
+                style: lowerInput.includes("visual") ? "visual" : "standard",
+              };
+              actions[createIdx].metadata = {
+                ...(actions[createIdx].metadata || {}),
+                difficulty: analysis?.context?.difficulty || "mixed",
                 estimatedTime: "15-30 minutes",
-                difficulty: "mixed",
-                tools: ["visual-roadmap"],
-              },
-            });
+                tools: [
+                  ...new Set([
+                    ...(actions[createIdx].metadata?.tools || []),
+                    "visual-roadmap",
+                  ]),
+                ],
+              };
+            } else {
+              actions.unshift({
+                type: "roadmap",
+                target: "learning-path",
+                priority: "medium",
+                data: {
+                  topic: userInput.replace(/roadmap|create|for/gi, " ").trim(),
+                  sourceText: userInput,
+                },
+                complexity: Math.max(3, Math.min(9, analysis?.complexity || 5)),
+                dependencies: [],
+                metadata: {
+                  estimatedTime: "15-30 minutes",
+                  difficulty: "mixed",
+                  tools: ["visual-roadmap"],
+                },
+              });
+            }
           }
         }
-      }
-      return actions;
+        return actions;
       } catch (error: any) {
-        console.error(`⚠️ [AdvancedTaskAnalyzer] Decomposition attempt ${attempt} failed:`, error);
-        
+        console.error(
+          `⚠️ [AdvancedTaskAnalyzer] Decomposition attempt ${attempt} failed:`,
+          error
+        );
+
         // If MAX_TOKENS, retry with more tokens
-        if (error.message?.includes('MAX_TOKENS') || error.message?.includes('no text in response')) {
+        if (
+          error.message?.includes("MAX_TOKENS") ||
+          error.message?.includes("no text in response")
+        ) {
           if (attempt < 3) {
             tokenLimit = tokenLimit * 2; // Double the limit
-            console.log(`🔄 [AdvancedTaskAnalyzer] Retrying decomposition with ${tokenLimit} tokens...`);
+            console.log(
+              `🔄 [AdvancedTaskAnalyzer] Retrying decomposition with ${tokenLimit} tokens...`
+            );
             continue;
           }
         }
-        
+
         // On final attempt or other errors, return basic actions
         if (attempt === 3) {
-          console.error("❌ [AdvancedTaskAnalyzer] All decomposition attempts failed, using basic actions");
+          console.error(
+            "❌ [AdvancedTaskAnalyzer] All decomposition attempts failed, using basic actions"
+          );
           return this.createBasicActions(userInput);
         }
       }
     }
-    
+
     return this.createBasicActions(userInput);
   }
 

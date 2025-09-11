@@ -60,6 +60,7 @@ git push origin --delete feat/new-major-feature
 ## 🎯 Quick Commands for You
 
 ### Daily Workflow
+
 ```bash
 # Start work
 git checkout main
@@ -72,6 +73,7 @@ git push origin main
 ```
 
 ### Check Current Status
+
 ```bash
 git status           # See what changed
 git branch           # See all branches
@@ -79,6 +81,7 @@ git log --oneline -5 # See recent commits
 ```
 
 ### Clean Up Old Branches
+
 ```bash
 # See all local branches
 git branch
@@ -132,6 +135,7 @@ git branch --merged main | grep -v "main" | xargs git branch -d
 ## ⚠️ When to Use Pull Requests
 
 Only use PRs when:
+
 - Working with a team
 - Need code review from others
 - Contributing to open source projects
