@@ -318,9 +318,10 @@ CRITICAL RULES:
 4. Extract topics: "about AI" → topic: "AI"
 5. For compound requests (multiple actions), return ALL actions in the array
 6. Use plural targets: "flashcards" not "flashcard", "notes" not "note"
-7. Infer missing details from context
-8. ONLY use "convert" when explicitly converting FROM something (e.g., "from my notes")
-9. Return ONLY compact JSON - no explanations, no code fences, no extra text
+7. Map "open/view/show/display" verbs to "search" action with the topic specified
+8. Infer missing details from context
+9. ONLY use "convert" when explicitly converting FROM something (e.g., "from my notes")
+10. Return ONLY compact JSON - no explanations, no code fences, no extra text
 
 USER INPUT: "${userInput}"
 
@@ -337,6 +338,15 @@ Output: [{"action":"delete","target":"notes","topic":"all"}]
 
 Input: "show me physics flashcards"
 Output: [{"action":"search","target":"flashcards","topic":"physics"}]
+
+Input: "open ice-cream notes"
+Output: [{"action":"search","target":"notes","topic":"ice-cream"}]
+
+Input: "view my biology flashcards"
+Output: [{"action":"search","target":"flashcards","topic":"biology"}]
+
+Input: "display javascript notes"
+Output: [{"action":"search","target":"notes","topic":"javascript"}]
 
 Input: "convert my AI notes to flashcards"
 Output: [{"action":"convert","target":"content","from":"notes","to":"flashcards","topic":"AI"}]
@@ -477,7 +487,8 @@ RULES:
 5. Use plural targets: "flashcards", "notes", "schedule"
 6. For "create X about Y", use action:"create"
 7. For "convert from notes", use action:"convert"
-8. Return ONLY compact JSON array - no text
+8. For "open/view/show/display X", use action:"search" with topic X
+9. Return ONLY compact JSON array - no text
 
 Examples:
 
@@ -489,6 +500,9 @@ Output: [{"action":"delete","target":"notes","topic":"all"},{"action":"create","
 
 Input: "show physics flashcards then make 5 more about chemistry"
 Output: [{"action":"search","target":"flashcards","topic":"physics"},{"action":"create","target":"flashcards","count":5,"topic":"chemistry"}]
+
+Input: "open my javascript notes then view biology flashcards"
+Output: [{"action":"search","target":"notes","topic":"javascript"},{"action":"search","target":"flashcards","topic":"biology"}]
 
 Now return ONLY the JSON array:`;
 
