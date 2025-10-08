@@ -2,6 +2,7 @@
 // Understands any request and converts it to executable actions
 import * as chrono from "chrono-node";
 import { callGemini } from "../services/geminiAI";
+import { AdvancedTaskController } from "./advancedTaskController";
 
 export interface TaskAction {
   type:
@@ -25,11 +26,182 @@ export interface TaskRequest {
 }
 
 export class TaskUnderstanding {
-  // Main method - understands any user request
+  // Main method - understands any user request with unlimited capabilities
   static async understandRequest(userInput: string): Promise<TaskRequest> {
     const input = userInput.toLowerCase().trim();
 
     console.log(`🧠 [TaskUnderstanding] Analyzing: "${userInput}"`);
+
+    // 🚀 ADVANCED: Check if this should use unlimited processing capabilities
+    const complexityCheck =
+      AdvancedTaskController.validateRequestComplexity(userInput);
+
+    if (
+      complexityCheck.complexity === "high" ||
+      this.shouldUseAdvancedProcessing(userInput)
+    ) {
+      console.log(
+        `🚀 [TaskUnderstanding] Routing to Advanced Controller for unlimited processing`
+      );
+
+      try {
+        const advancedResult =
+          await AdvancedTaskController.processAdvancedRequest(userInput);
+
+        if (advancedResult.success && advancedResult.executionResults) {
+          // Convert advanced results to TaskAction format for compatibility
+          const actions =
+            this.convertAdvancedResultsToTaskActions(advancedResult);
+          return {
+            actions,
+            message: advancedResult.message,
+            confidence: actions.length > 0 ? 0.95 : 0.5,
+          };
+        }
+
+        console.log(
+          `⚠️ [TaskUnderstanding] Advanced processing failed, falling back to standard`
+        );
+      } catch (error) {
+        console.error(
+          `❌ [TaskUnderstanding] Advanced processing error:`,
+          error
+        );
+      }
+    }
+
+    // Standard processing for simpler requests or fallback
+    return await this.processStandardRequest(userInput);
+  }
+
+  /**
+   * Check if request should use advanced unlimited processing
+   */
+  private static shouldUseAdvancedProcessing(input: string): boolean {
+    const advancedKeywords = [
+      "analyze",
+      "summarize",
+      "research",
+      "investigate",
+      "explain",
+      "connect",
+      "recommend",
+      "optimize",
+      "enhance",
+      "reflect",
+      "assess",
+      "practice",
+      "generate",
+      "build",
+      "develop",
+      "design",
+      "construct",
+      "improve",
+      "synthesize",
+      "critique",
+      "evaluate",
+      "compare",
+      "contrast",
+    ];
+
+    const hasAdvancedKeywords = advancedKeywords.some((keyword) =>
+      input.toLowerCase().includes(keyword)
+    );
+
+    const hasComplexStructure =
+      input.includes(" and ") &&
+      (input.match(/create|make|schedule|delete|analyze/gi) || []).length > 1;
+
+    const hasAdvancedIntent =
+      /advanced|complex|comprehensive|detailed|thorough/.test(
+        input.toLowerCase()
+      );
+
+    return hasAdvancedKeywords || hasComplexStructure || hasAdvancedIntent;
+  }
+
+  /**
+   * Convert advanced results back to TaskAction format for compatibility
+   */
+  private static convertAdvancedResultsToTaskActions(
+    result: any
+  ): TaskAction[] {
+    if (!result.executionResults) return [];
+
+    return result.executionResults
+      .filter((r: any) => r.success)
+      .map((r: any, index: number) => {
+        const analysisAction = result.analysisResult?.actions?.[index];
+
+        return {
+          type: this.mapAdvancedTypeToStandard(
+            analysisAction?.type || "create"
+          ),
+          target: this.mapAdvancedTargetToStandard(
+            analysisAction?.target || "all"
+          ),
+          data: {
+            ...analysisAction?.data,
+            result: r.data,
+            message: r.message,
+            advanced: true,
+          },
+          priority: "high" as const,
+        };
+      });
+  }
+
+  /**
+   * Map advanced operation types to standard TaskAction types
+   */
+  private static mapAdvancedTypeToStandard(
+    advancedType: string
+  ): TaskAction["type"] {
+    const mappings: Record<string, TaskAction["type"]> = {
+      analyze: "analyze",
+      summarize: "analyze",
+      research: "search",
+      generate: "create",
+      build: "create",
+      develop: "create",
+      enhance: "update",
+      optimize: "update",
+      practice: "search",
+      quiz: "search",
+      schedule: "create",
+      track: "list",
+    };
+
+    return mappings[advancedType] || "create";
+  }
+
+  /**
+   * Map advanced target types to standard TaskAction targets
+   */
+  private static mapAdvancedTargetToStandard(
+    advancedTarget: string
+  ): TaskAction["target"] {
+    const mappings: Record<string, TaskAction["target"]> = {
+      content: "content",
+      "knowledge-base": "notes",
+      concepts: "notes",
+      "mind-maps": "notes",
+      "study-plans": "schedule",
+      "learning-paths": "schedule",
+      "practice-sessions": "flashcards",
+      assessments: "flashcards",
+    };
+
+    return mappings[advancedTarget] || "all";
+  }
+
+  /**
+   * Process standard requests (existing logic preserved)
+   */
+  private static async processStandardRequest(
+    userInput: string
+  ): Promise<TaskRequest> {
+    const input = userInput.toLowerCase().trim();
 
     // 🚀 FIRST: Check for compound commands (multiple actions in one request)
     if (this.isCompoundRequest(input)) {
@@ -149,13 +321,17 @@ Rules:
 2. Handle pronouns like "it" by inferring the topic from context
 3. For schedule tasks, extract time/date information
 4. For create tasks with counts (like "5 flashcards"), include the count
-5. For phrases like "make N flashcards from notes of X", use action "convert" with data {"from":"notes","to":"flashcards","topic":"X","count":N}
-6. Always use plural target names: "notes", "flashcards", "schedule" (never "note" or "flashcard")
-7. Only output a valid JSON array - no explanations
+5. ONLY use "convert" action when explicitly mentioned "from notes" or "from my notes"
+6. For phrases like "make 5 flashcards about X" or "create flashcards related to Y", use action "create"
+7. Always use plural target names: "notes", "flashcards", "schedule" (never "note" or "flashcard")
+8. Only output a valid JSON array - no explanations
 
 Examples:
 Input: "delete all flashcards and create 5 about physics"
 Output: [{"action":"delete","target":"flashcards","topic":"all"},{"action":"create","target":"flashcards","count":5,"topic":"physics"}]
+
+Input: "make 5 flashcards related to onion and 5 related to tomato"
+Output: [{"action":"create","target":"flashcards","count":5,"topic":"onion"},{"action":"create","target":"flashcards","count":5,"topic":"tomato"}]
 
 Input: "schedule physics review Friday 6pm and create 3 flashcards about it"
 Output: [{"action":"schedule","target":"schedule","topic":"physics review","time":"Friday 6pm"},{"action":"create","target":"flashcards","count":3,"topic":"physics review"}]

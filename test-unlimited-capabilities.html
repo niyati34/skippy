@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Advanced Task Processing Demo - Unlimited Capabilities</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #333;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .header h1 {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        color: #666;
+        font-size: 1.1rem;
+      }
+
+      .demo-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        border-left: 5px solid #667eea;
+      }
+
+      .demo-section h3 {
+        color: #667eea;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+      }
+
+      .test-command {
+        background: #2d3748;
+        color: #e2e8f0;
+        padding: 15px;
+        border-radius: 10px;
+        font-family: "Courier New", monospace;
+        margin: 10px 0;
+        position: relative;
+        overflow-x: auto;
+      }
+
+      .test-command::before {
+        content: "🚀";
+        position: absolute;
+        left: -5px;
+        top: -5px;
+        background: #667eea;
+        border-radius: 50%;
+        padding: 5px;
+        font-size: 12px;
+      }
+
+      .capability-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+
+      .capability-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        border: 2px solid transparent;
+        transition: all 0.3s ease;
+      }
+
+      .capability-card:hover {
+        border-color: #667eea;
+        transform: translateY(-5px);
+      }
+
+      .capability-card h4 {
+        color: #667eea;
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+      }
+
+      .capability-list {
+        list-style: none;
+      }
+
+      .capability-list li {
+        padding: 5px 0;
+        position: relative;
+        padding-left: 20px;
+      }
+
+      .capability-list li::before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: #48bb78;
+        font-weight: bold;
+      }
+
+      .run-button {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        margin: 10px 5px;
+      }
+
+      .run-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+      }
+
+      .results {
+        background: #1a202c;
+        color: #e2e8f0;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: "Courier New", monospace;
+      }
+
+      .results h4 {
+        color: #68d391;
+        margin-bottom: 10px;
+      }
+
+      .success {
+        color: #68d391;
+      }
+
+      .error {
+        color: #feb2b2;
+      }
+
+      .warning {
+        color: #faf089;
+      }
+
+      .info {
+        color: #90cdf4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🧠 Advanced Task Processing Demo</h1>
+        <p>Unlimited Capabilities - AI-Powered Task Analysis & Execution</p>
+      </div>
+
+      <div class="demo-section">
+        <h3>🚀 Core Capabilities Overview</h3>
+        <div class="capability-grid">
+          <div class="capability-card">
+            <h4>📚 Content Operations</h4>
+            <ul class="capability-list">
+              <li>Create, analyze, summarize</li>
+              <li>Generate from any source</li>
+              <li>Convert between formats</li>
+              <li>Enhance and optimize</li>
+            </ul>
+          </div>
+          <div class="capability-card">
+            <h4>🔬 Research & Analysis</h4>
+            <ul class="capability-list">
+              <li>Deep topic investigation</li>
+              <li>Pattern recognition</li>
+              <li>Concept connections</li>
+              <li>Critical evaluation</li>
+            </ul>
+          </div>
+          <div class="capability-card">
+            <h4>📅 Planning & Organization</h4>
+            <ul class="capability-list">
+              <li>Intelligent scheduling</li>
+              <li>Learning path design</li>
+              <li>Progress tracking</li>
+              <li>Goal optimization</li>
+            </ul>
+          </div>
+          <div class="capability-card">
+            <h4>🎯 Learning Enhancement</h4>
+            <ul class="capability-list">
+              <li>Personalized practice</li>
+              <li>Adaptive assessments</li>
+              <li>Metacognitive reflection</li>
+              <li>Learning recommendations</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h3>🎮 Demo Commands - Try These Unlimited Capabilities</h3>
+
+        <h4>Basic Content Creation (Enhanced)</h4>
+        <div class="test-command">
+          analyze quantum physics concepts and create comprehensive study
+          materials with 10 flashcards and detailed notes including practice
+          problems
+        </div>
+        <button
+          class="run-button"
+          onclick="runCommand('analyze quantum physics concepts and create comprehensive study materials with 10 flashcards and detailed notes including practice problems')"
+        >
+          Run Enhanced Creation
+        </button>
+
+        <h4>Research & Investigation</h4>
+        <div class="test-command">
+          research the latest developments in artificial intelligence and
+          machine learning, summarize key findings, and create a learning
+          roadmap for beginners
+        </div>
+        <button
+          class="run-button"
+          onclick="runCommand('research the latest developments in artificial intelligence and machine learning, summarize key findings, and create a learning roadmap for beginners')"
+        >
+          Run Research Command
+        </button>
+
+        <h4>Complex Multi-Stage Processing</h4>
+        <div class="test-command">
+          investigate renewable energy technologies, compare solar vs wind power
+          efficiency, analyze environmental impact, create educational content,
+          and schedule weekly study sessions
+        </div>
+        <button
+          class="run-button"
+          onclick="runCommand('investigate renewable energy technologies, compare solar vs wind power efficiency, analyze environmental impact, create educational content, and schedule weekly study sessions')"
+        >
+          Run Complex Analysis
+        </button>
+
+        <h4>Educational Psychology Integration</h4>
+        <div class="test-command">
+          design a personalized learning experience for calculus, assess current
+          knowledge gaps, create adaptive practice sessions, and recommend
+          optimal study strategies
+        </div>
+        <button
+          class="run-button"
+          onclick="runCommand('design a personalized learning experience for calculus, assess current knowledge gaps, create adaptive practice sessions, and recommend optimal study strategies')"
+        >
+          Run Learning Design
+        </button>
+
+        <h4>Advanced Knowledge Synthesis</h4>
+        <div class="test-command">
+          synthesize information about climate change from multiple
+          perspectives, create mind maps showing interconnections, generate
+          debate preparation materials, and develop critical thinking exercises
+        </div>
+        <button
+          class="run-button"
+          onclick="runCommand('synthesize information about climate change from multiple perspectives, create mind maps showing interconnections, generate debate preparation materials, and develop critical thinking exercises')"
+        >
+          Run Synthesis Command
+        </button>
+
+        <h4>Unlimited Task Complexity</h4>
+        <div class="test-command">
+          build a comprehensive computer science curriculum covering algorithms,
+          data structures, programming paradigms, and software engineering, with
+          progressive assessments and real-world projects
+        </div>
+        <button
+          class="run-button"
+          onclick="runCommand('build a comprehensive computer science curriculum covering algorithms, data structures, programming paradigms, and software engineering, with progressive assessments and real-world projects')"
+        >
+          Run Curriculum Builder
+        </button>
+      </div>
+
+      <div class="demo-section">
+        <h3>🧪 System Architecture Features</h3>
+        <div class="capability-grid">
+          <div class="capability-card">
+            <h4>Multi-Stage AI Analysis</h4>
+            <ul class="capability-list">
+              <li>Intent classification</li>
+              <li>Deep decomposition</li>
+              <li>Dependency resolution</li>
+              <li>Optimization strategies</li>
+            </ul>
+          </div>
+          <div class="capability-card">
+            <h4>Educational Psychology</h4>
+            <ul class="capability-list">
+              <li>Learning theory alignment</li>
+              <li>Cognitive load optimization</li>
+              <li>Personalization algorithms</li>
+              <li>Metacognitive support</li>
+            </ul>
+          </div>
+          <div class="capability-card">
+            <h4>Unlimited Operations</h4>
+            <ul class="capability-list">
+              <li>32+ operation types</li>
+              <li>25+ target categories</li>
+              <li>Dynamic mapping</li>
+              <li>Fallback mechanisms</li>
+            </ul>
+          </div>
+          <div class="capability-card">
+            <h4>Intelligent Execution</h4>
+            <ul class="capability-list">
+              <li>Context-aware processing</li>
+              <li>AI-enhanced operations</li>
+              <li>Result optimization</li>
+              <li>Progress insights</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="results" class="results" style="display: none">
+        <h4>🔍 Execution Results</h4>
+        <div id="resultsContent"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Import the advanced task system
+      import { AdvancedTaskController } from "./src/lib/advancedTaskController.js";
+
+      window.runCommand = async function (command) {
+        const resultsDiv = document.getElementById("results");
+        const resultsContent = document.getElementById("resultsContent");
+
+        resultsDiv.style.display = "block";
+        resultsContent.innerHTML = `
+                <div class="info">🚀 Processing: "${command}"</div>
+                <div class="warning">⏳ Analyzing with unlimited capabilities...</div>
+            `;
+
+        try {
+          const startTime = Date.now();
+          const result = await AdvancedTaskController.processAdvancedRequest(
+            command
+          );
+          const duration = Date.now() - startTime;
+
+          let output = `
+                    <div class="success">✅ Processing Complete (${duration}ms)</div>
+                    <div class="info">📊 Result: ${result.message}</div>
+                    <div class="info">🎯 Actions: ${result.successfulActions}/${result.totalActions} successful</div>
+                `;
+
+          if (result.insights && result.insights.length > 0) {
+            output += `<div class="info">💡 Insights:</div>`;
+            result.insights.forEach((insight) => {
+              output += `<div class="info">   • ${insight}</div>`;
+            });
+          }
+
+          if (result.nextSuggestions && result.nextSuggestions.length > 0) {
+            output += `<div class="info">🔮 Suggestions:</div>`;
+            result.nextSuggestions.forEach((suggestion) => {
+              output += `<div class="info">   • ${suggestion}</div>`;
+            });
+          }
+
+          if (result.executionResults) {
+            output += `<div class="info">🔧 Execution Details:</div>`;
+            result.executionResults.forEach((execResult, index) => {
+              const status = execResult.success ? "✅" : "❌";
+              output += `<div class="info">   ${status} ${execResult.message}</div>`;
+            });
+          }
+
+          resultsContent.innerHTML = output;
+        } catch (error) {
+          resultsContent.innerHTML = `
+                    <div class="error">❌ Error: ${error.message}</div>
+                    <div class="warning">⚠️ This might be due to missing API keys or network issues</div>
+                    <div class="info">💡 The system architecture is ready - just needs proper API configuration</div>
+                `;
+        }
+      };
+
+      // Show capabilities summary on load
+      window.addEventListener("load", () => {
+        const summary = AdvancedTaskController.getCapabilitySummary();
+        console.log("🧠 Advanced Task System Capabilities:", summary);
+      });
+    </script>
+  </body>
+</html>
