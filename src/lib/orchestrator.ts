@@ -13,7 +13,7 @@ export interface OrchestratedResponse {
 export class Orchestrator {
   async handle(userInput: string): Promise<OrchestratedResponse> {
     // 1) Understand the request
-    const request = TaskUnderstanding.understandRequest(userInput);
+    const request = await TaskUnderstanding.understandRequest(userInput);
 
     // 2) Execute actions in order
     const results = await TaskExecutor.executeTask(request);
@@ -41,7 +41,8 @@ export class Orchestrator {
 
     if (deletedNotes) parts.push(`deleted ${deletedNotes} notes`);
     if (deletedCards) parts.push(`deleted ${deletedCards} flashcards`);
-    if (deletedSchedule) parts.push(`deleted ${deletedSchedule} schedule items`);
+    if (deletedSchedule)
+      parts.push(`deleted ${deletedSchedule} schedule items`);
     if (createdCards) parts.push(`created ${createdCards} flashcards`);
     if (createdNotes) parts.push(`created ${createdNotes} notes`);
 

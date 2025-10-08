@@ -55,6 +55,9 @@ import {
 } from "@/lib/agent";
 import { parseIntent } from "@/lib/intent";
 import { UniversalAgenticAI } from "@/lib/universalAgent";
+import { AgentOrchestrator } from "@/lib/agentOrchestrator";
+import { AgenticBrain } from "@/lib/agenticBrain";
+import { agenticMemory } from "@/lib/agenticMemory";
 import {
   processUploadedFile,
   FileProcessingResult,
@@ -429,6 +432,123 @@ Upload files (PDF, images, text) and I'll extract schedules, create notes, or ma
     setIsLoading(true);
 
     try {
+      // Step 1: Agentic Brain Decision (remembers context and makes smart decisions)
+      try {
+        const agenticBrain = new AgenticBrain();
+        const decision = await agenticBrain.makeDecision(messageText);
+
+        console.log(`🧠 [DashboardAI] Agentic decision:`, decision);
+
+        // Remember this interaction
+        agenticMemory.rememberInteraction(
+          messageText,
+          decision.reasoning,
+          `confidence: ${decision.confidence}`
+        );
+
+        // If brain suggests executable actions, use orchestrator
+        if (decision.primaryAction && decision.primaryAction.length > 0) {
+          const orchestrated = await AgentOrchestrator.run(messageText);
+
+          if (orchestrated?.results?.some((r) => r.success)) {
+            // Update UI stores after execution
+            try {
+              const { NotesStorage, FlashcardStorage, ScheduleStorage } =
+                await import("@/lib/storage");
+              const notes = NotesStorage.load();
+              const fcs = FlashcardStorage.load();
+              const sched = ScheduleStorage.load();
+              if (notes) onNotesUpdate(notes);
+              if (fcs) onFlashcardsUpdate(fcs);
+              if (sched) onScheduleUpdate(sched);
+            } catch {}
+
+            // Create rich response with agentic personality
+            let response = orchestrated.message;
+
+            // Add emotional response for personality
+            if (decision.emotionalResponse) {
+              response += ` ${decision.emotionalResponse}`;
+            }
+
+            // Add proactive suggestions
+            if (decision.proactiveSuggestions.length > 0) {
+              response += `\n\n💡 ${decision.proactiveSuggestions[0]}`;
+            }
+
+            const summaryMsg: ChatMessage = {
+              role: "assistant",
+              content: response,
+            };
+            setMessages((p) => [...p, summaryMsg]);
+            speakMessageWithElevenLabs(response);
+            setIsLoading(false);
+            setInputText("");
+            return;
+          }
+        }
+
+        // If no executable actions but has emotional response, use that for chat
+        if (decision.emotionalResponse && decision.confidence > 0.3) {
+          let chatResponse = decision.emotionalResponse;
+
+          if (decision.proactiveSuggestions.length > 0) {
+            chatResponse += `\n\n💡 Try: "${decision.proactiveSuggestions[0]}"`;
+          }
+
+          const chatMsg: ChatMessage = {
+            role: "assistant",
+            content: chatResponse,
+          };
+          setMessages((p) => [...p, chatMsg]);
+          speakMessageWithElevenLabs(chatResponse);
+          setIsLoading(false);
+          setInputText("");
+          return;
+        }
+      } catch (e) {
+        console.warn("[DashboardAI] Agentic brain failed, falling back.", e);
+      }
+
+      // Primary path: unified orchestrator first. If it yields executable actions, use it and short-circuit.
+      try {
+        const orchestrated = await AgentOrchestrator.run(messageText);
+        if (
+          orchestrated?.request?.actions &&
+          orchestrated.request.actions.length > 0 &&
+          orchestrated.results &&
+          orchestrated.results.length > 0 &&
+          orchestrated.results.some((r) => r.success)
+        ) {
+          // Update UI stores based on storage snapshots after execution
+          try {
+            const { NotesStorage, FlashcardStorage, ScheduleStorage } =
+              await import("@/lib/storage");
+            const notes = NotesStorage.load();
+            const fcs = FlashcardStorage.load();
+            const sched = ScheduleStorage.load();
+            if (notes) onNotesUpdate(notes);
+            if (fcs) onFlashcardsUpdate(fcs);
+            if (sched) onScheduleUpdate(sched);
+          } catch {}
+
+          const summaryMsg: ChatMessage = {
+            role: "assistant",
+            content: orchestrated.message,
+          };
+          setMessages((p) => [...p, summaryMsg]);
+          speakMessageWithElevenLabs(orchestrated.message);
+          setIsLoading(false);
+          setInputText("");
+          return;
+        }
+      } catch (e) {
+        console.warn(
+          "[DashboardAI] Orchestrator primary path failed or no actions.",
+          e
+        );
+      }
+
       // PRIORITY 1: Handle delete commands immediately (most important) - BEFORE UniversalAI
       // Enhanced pattern to catch typos and compound commands
       const deletePattern =

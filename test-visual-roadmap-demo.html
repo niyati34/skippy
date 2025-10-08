@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visual Roadmap Demo - Interactive Learning Paths</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #333;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .header h1 {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+      }
+
+      .demo-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        border-left: 5px solid #667eea;
+      }
+
+      .demo-section h3 {
+        color: #667eea;
+        margin-bottom: 15px;
+        font-size: 1.3rem;
+      }
+
+      .input-section {
+        background: white;
+        padding: 25px;
+        border-radius: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      }
+
+      .input-group {
+        margin-bottom: 20px;
+      }
+
+      .input-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #2d3748;
+      }
+
+      .input-group input,
+      .input-group textarea,
+      .input-group select {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.3s ease;
+      }
+
+      .input-group input:focus,
+      .input-group textarea:focus,
+      .input-group select:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .input-group textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .generate-button {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 1.1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      .generate-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+      }
+
+      .generate-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .quick-topics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      .topic-chip {
+        background: #667eea;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.3s ease;
+      }
+
+      .topic-chip:hover {
+        background: #5a67d8;
+        transform: translateY(-1px);
+      }
+
+      .results {
+        background: #1a202c;
+        color: #e2e8f0;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: "Courier New", monospace;
+        display: none;
+      }
+
+      .results h4 {
+        color: #68d391;
+        margin-bottom: 10px;
+      }
+
+      .success {
+        color: #68d391;
+      }
+
+      .error {
+        color: #feb2b2;
+      }
+
+      .warning {
+        color: #faf089;
+      }
+
+      .info {
+        color: #90cdf4;
+      }
+
+      .roadmap-preview {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-top: 20px;
+        display: none;
+        border: 2px solid #667eea;
+      }
+
+      .roadmap-header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .roadmap-stats {
+        display: flex;
+        justify-content: space-around;
+        margin: 20px 0;
+        flex-wrap: wrap;
+      }
+
+      .stat {
+        background: #f7fafc;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        min-width: 120px;
+        margin: 5px;
+      }
+
+      .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #667eea;
+      }
+
+      .open-roadmap-button {
+        background: linear-gradient(45deg, #48bb78, #38a169);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 10px 5px;
+        transition: all 0.3s ease;
+      }
+
+      .open-roadmap-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(72, 187, 120, 0.3);
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+
+      .feature-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      .feature-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+      }
+
+      .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🗺️ Visual Roadmap Generator</h1>
+        <p>Transform any topic into an interactive visual learning path</p>
+      </div>
+
+      <div class="demo-section">
+        <h3>✨ Key Features</h3>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <h4>Smart Analysis</h4>
+            <p>AI analyzes content to create logical learning progression</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h4>Visual Layout</h4>
+            <p>Interactive nodes with dependencies and connections</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⏱️</div>
+            <h4>Time Estimates</h4>
+            <p>Realistic duration and difficulty assessments</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔗</div>
+            <h4>Resource Links</h4>
+            <p>Curated learning materials for each topic</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-section">
+        <h3>🚀 Generate Your Visual Roadmap</h3>
+
+        <div class="input-group">
+          <label for="topicInput">Learning Topic</label>
+          <input
+            type="text"
+            id="topicInput"
+            placeholder="e.g., Machine Learning, Web Development, Data Science..."
+          />
+        </div>
+
+        <div class="input-group">
+          <label for="contentInput">Content (Optional)</label>
+          <textarea
+            id="contentInput"
+            placeholder="Paste existing content or leave blank for AI generation...
+
+Example format:
+## Prerequisites
+* **Math:** Basic statistics and linear algebra
+* **Programming:** Python fundamentals
+
+## Core Concepts  
+* **Supervised Learning:** Classification and regression
+* **Unsupervised Learning:** Clustering and dimensionality reduction
+
+## Advanced Topics
+* **Deep Learning:** Neural networks and backpropagation
+* **NLP:** Natural language processing techniques"
+          ></textarea>
+        </div>
+
+        <div class="input-group">
+          <label for="difficultySelect">Target Difficulty</label>
+          <select id="difficultySelect">
+            <option value="beginner">Beginner Friendly</option>
+            <option value="intermediate" selected>Intermediate</option>
+            <option value="advanced">Advanced</option>
+            <option value="expert">Expert Level</option>
+          </select>
+        </div>
+
+        <button class="generate-button" onclick="generateRoadmap()">
+          <span id="generateText">🎨 Generate Visual Roadmap</span>
+        </button>
+
+        <div class="quick-topics">
+          <div class="topic-chip" onclick="selectTopic('Machine Learning')">
+            🤖 Machine Learning
+          </div>
+          <div class="topic-chip" onclick="selectTopic('Web Development')">
+            🌐 Web Development
+          </div>
+          <div class="topic-chip" onclick="selectTopic('Data Science')">
+            📊 Data Science
+          </div>
+          <div class="topic-chip" onclick="selectTopic('Cybersecurity')">
+            🔒 Cybersecurity
+          </div>
+          <div class="topic-chip" onclick="selectTopic('Cloud Computing')">
+            ☁️ Cloud Computing
+          </div>
+          <div class="topic-chip" onclick="selectTopic('Mobile Development')">
+            📱 Mobile Development
+          </div>
+        </div>
+      </div>
+
+      <div id="results" class="results">
+        <h4>🔍 Generation Results</h4>
+        <div id="resultsContent"></div>
+      </div>
+
+      <div id="roadmapPreview" class="roadmap-preview">
+        <div class="roadmap-header">
+          <h3 id="roadmapTitle">Generated Roadmap</h3>
+          <p id="roadmapDescription">Interactive learning path</p>
+        </div>
+
+        <div class="roadmap-stats" id="roadmapStats">
+          <!-- Stats will be populated here -->
+        </div>
+
+        <div style="text-align: center; margin-top: 20px">
+          <button
+            class="open-roadmap-button"
+            onclick="openInteractiveRoadmap()"
+          >
+            🚀 Open Interactive Roadmap
+          </button>
+          <button
+            class="open-roadmap-button"
+            onclick="downloadRoadmap()"
+            style="background: linear-gradient(45deg, #805ad5, #6b46c1)"
+          >
+            📥 Download HTML File
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Import the roadmap system (use .ts so Vite can transpile); add direct generator fallback
+      let AdvancedTaskController = null;
+      let VisualRoadmapGenerator = null;
+      try {
+        AdvancedTaskController = (
+          await import("./src/lib/advancedTaskController.ts")
+        ).AdvancedTaskController;
+      } catch (e) {
+        console.warn(
+          "AdvancedTaskController import failed, will fallback later:",
+          e
+        );
+      }
+      try {
+        VisualRoadmapGenerator = (
+          await import("./src/lib/visualRoadmapGenerator.ts")
+        ).VisualRoadmapGenerator;
+      } catch (e) {
+        console.error(
+          "VisualRoadmapGenerator import failed; fallback impossible:",
+          e
+        );
+      }
+
+      let currentRoadmapData = null;
+
+      window.selectTopic = function (topic) {
+        document.getElementById("topicInput").value = topic;
+      };
+
+      window.generateRoadmap = async function () {
+        const topic = document.getElementById("topicInput").value.trim();
+        const content = document.getElementById("contentInput").value.trim();
+        const difficulty = document.getElementById("difficultySelect").value;
+
+        if (!topic) {
+          alert("Please enter a learning topic!");
+          return;
+        }
+
+        const generateButton = document.querySelector(".generate-button");
+        const generateText = document.getElementById("generateText");
+        const resultsDiv = document.getElementById("results");
+        const resultsContent = document.getElementById("resultsContent");
+        const roadmapPreview = document.getElementById("roadmapPreview");
+
+        // Show loading state
+        generateButton.disabled = true;
+        generateText.innerHTML =
+          '<div class="loading"></div>Generating Visual Roadmap...';
+        resultsDiv.style.display = "block";
+        roadmapPreview.style.display = "none";
+
+        resultsContent.innerHTML = `
+                <div class="info">🎨 Creating visual roadmap for: "${topic}"</div>
+                <div class="warning">⏳ Analyzing content structure and dependencies...</div>
+                <div class="warning">🔧 Generating interactive nodes and connections...</div>
+            `;
+
+        try {
+          const startTime = Date.now();
+
+          // Build the command for roadmap generation
+          let command = `create visual roadmap for ${topic}`;
+          if (content) {
+            command += ` using this content: ${content}`;
+          }
+          command += ` with ${difficulty} difficulty level`;
+
+          let usedFallback = false;
+          let duration = 0;
+          try {
+            if (!AdvancedTaskController)
+              throw new Error("AdvancedTaskController unavailable");
+            const result = await AdvancedTaskController.processAdvancedRequest(
+              command
+            );
+            duration = Date.now() - startTime;
+            if (result.success && result.executionResults) {
+              const roadmapResult = result.executionResults.find(
+                (r) => r.data?.roadmap
+              );
+              if (roadmapResult && roadmapResult.data.roadmap) {
+                currentRoadmapData = roadmapResult.data;
+                showRoadmapPreview(roadmapResult.data.roadmap);
+                let output = `
+                  <div class=\"success\">✅ Visual Roadmap Generated! (${duration}ms)</div>
+                  <div class=\"info\">📊 Result: ${roadmapResult.message}</div>
+                  <div class=\"info\">🎯 Nodes: ${roadmapResult.data.roadmap.totalNodes}</div>
+                  <div class=\"info\">⏱️ Duration: ${roadmapResult.data.roadmap.estimatedDuration}</div>
+                  <div class=\"info\">📈 Difficulty: ${roadmapResult.data.roadmap.difficulty}</div>`;
+                if (roadmapResult.insights) {
+                  output += `<div class=\"info\">💡 Insights:</div>`;
+                  roadmapResult.insights.forEach((insight) => {
+                    output += `<div class=\"info\">   • ${insight}</div>`;
+                  });
+                }
+                resultsContent.innerHTML = output;
+              } else {
+                throw new Error("No roadmap data found in results");
+              }
+            } else {
+              throw new Error(result.message || "Unknown error occurred");
+            }
+          } catch (advErr) {
+            console.warn(
+              "Advanced pipeline failed, falling back to direct generator:",
+              advErr
+            );
+            if (!VisualRoadmapGenerator) throw advErr; // cannot fallback
+            usedFallback = true;
+            const fallbackStart = Date.now();
+            const roadmap = await VisualRoadmapGenerator.generateVisualRoadmap(
+              topic,
+              content || `## ${topic} Overview`
+            );
+            const htmlContent =
+              VisualRoadmapGenerator.generateInteractiveHTML(roadmap);
+            currentRoadmapData = {
+              roadmap,
+              htmlContent,
+              interactiveFile: `roadmap-${topic
+                .toLowerCase()
+                .replace(/\s+/g, "-")}.html`,
+            };
+            duration = Date.now() - fallbackStart;
+            showRoadmapPreview(roadmap);
+            resultsContent.innerHTML = `
+              <div class=\"success\">✅ Visual Roadmap Generated (Fallback Mode) (${duration}ms)</div>
+              <div class=\"info\">🎯 Nodes: ${roadmap.totalNodes}</div>
+              <div class=\"info\">⏱️ Duration: ${roadmap.estimatedDuration}</div>
+              <div class=\"info\">📈 Difficulty: ${roadmap.difficulty}</div>
+              <div class=\"warning\">⚠️ Used local generator (AI pipeline unavailable)</div>`;
+          }
+        } catch (error) {
+          resultsContent.innerHTML = `
+                    <div class="error">❌ Error: ${error.message}</div>
+                    <div class="warning">⚠️ This might be due to missing API keys or network issues</div>
+                    <div class="info">💡 Try with simpler content or check your configuration</div>
+                `;
+        } finally {
+          // Reset button state
+          generateButton.disabled = false;
+          generateText.innerHTML = "🎨 Generate Visual Roadmap";
+        }
+      };
+
+      function showRoadmapPreview(roadmap) {
+        const preview = document.getElementById("roadmapPreview");
+        const title = document.getElementById("roadmapTitle");
+        const description = document.getElementById("roadmapDescription");
+        const stats = document.getElementById("roadmapStats");
+
+        title.textContent = roadmap.title;
+        description.textContent = roadmap.description;
+
+        stats.innerHTML = `
+                <div class="stat">
+                    <div class="stat-value">${roadmap.totalNodes}</div>
+                    <div>Learning Nodes</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">${roadmap.estimatedDuration}</div>
+                    <div>Total Duration</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">${roadmap.difficulty}</div>
+                    <div>Difficulty</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">${Math.round(
+                      roadmap.metadata.completionRate
+                    )}%</div>
+                    <div>Progress</div>
+                </div>
+            `;
+
+        preview.style.display = "block";
+      }
+
+      window.openInteractiveRoadmap = function () {
+        if (!currentRoadmapData || !currentRoadmapData.htmlContent) {
+          alert("No roadmap data available!");
+          return;
+        }
+
+        // Open roadmap in new window
+        const newWindow = window.open("", "_blank");
+        newWindow.document.write(currentRoadmapData.htmlContent);
+        newWindow.document.close();
+      };
+
+      window.downloadRoadmap = function () {
+        if (!currentRoadmapData || !currentRoadmapData.htmlContent) {
+          alert("No roadmap data available!");
+          return;
+        }
+
+        // Create download link
+        const blob = new Blob([currentRoadmapData.htmlContent], {
+          type: "text/html",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = currentRoadmapData.interactiveFile || "roadmap.html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      // Pre-fill with sample content for demo
+      document.getElementById(
+        "contentInput"
+      ).value = `## I. Prerequisites and Foundation
+
+* **Programming Skills:** Basic understanding of programming concepts (variables, functions, loops). Python is recommended for beginners.
+* **Mathematics:** Understanding of statistics, probability, and linear algebra will be helpful but not strictly required for introductory courses.
+* **Recommended Resources:** Codecademy, DataCamp, freeCodeCamp
+
+## II. Core Concepts of AI and ML
+
+* **Artificial Intelligence (AI):**  The broad field of creating intelligent agents, which are systems that can reason, learn, and act autonomously.  AI encompasses many subfields, including ML.
+* **Machine Learning (ML):** A subset of AI where systems learn from data without explicit programming.  Instead of relying on hard-coded rules, ML algorithms identify patterns and make predictions based on input data.
+* **Supervised Learning:**  The algorithm learns from labeled data (input data with known outputs). Examples include regression (predicting continuous values) and classification (predicting categorical values).
+* **Unsupervised Learning:** The algorithm learns from unlabeled data, identifying patterns and structures without predefined outputs. Examples include clustering (grouping similar data points) and dimensionality reduction.
+* **Reinforcement Learning:** The algorithm learns through trial and error by interacting with an environment and receiving rewards or penalties.  Examples include game playing and robotics.
+
+## III. Practical Application and Projects
+
+* **Start with Simple Projects:** Begin with smaller projects to build confidence and understanding.  Examples include:
+    * **Linear Regression:** Predict house prices based on features like size and location.
+    * **Logistic Regression:** Classify images of cats and dogs.
+    * **K-Means Clustering:** Group customers based on their purchasing behavior.
+* **Utilize Online Resources:** Kaggle, GitHub, and various online courses offer datasets and project ideas.
+* **Build a Portfolio:** Document your projects and share them on platforms like GitHub to showcase your skills.
+
+## IV. Advanced Topics
+
+* **Deep Learning:** A subset of ML that uses artificial neural networks with multiple layers to learn complex patterns from data.  Requires a deeper understanding of calculus and linear algebra.
+* **Natural Language Processing (NLP):**  Focuses on enabling computers to understand, interpret, and generate human language.
+* **Computer Vision:**  Enables computers to "see" and interpret images and videos.`;
+    </script>
+  </body>
+</html>

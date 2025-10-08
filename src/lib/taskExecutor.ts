@@ -3,6 +3,10 @@
 
 import { TaskAction, TaskRequest } from "./taskUnderstanding";
 import { NotesStorage, FlashcardStorage, ScheduleStorage } from "./storage";
+import {
+  generateFlashcardsWithGemini,
+  generateNotesWithGemini,
+} from "../services/geminiAI";
 
 export interface TaskResult {
   success: boolean;
@@ -40,6 +44,40 @@ export class TaskExecutor {
   private static async executeAction(action: TaskAction): Promise<TaskResult> {
     console.log(`🎯 [TaskExecutor] Executing: ${action.type} ${action.target}`);
 
+    // Defensive guards for unsupported actions
+    if (!action || !action.type || !action.target) {
+      return {
+        success: false,
+        message: "Invalid action - missing type or target",
+        data: null,
+      };
+    }
+
+    const supportedTypes = ["create", "delete", "update", "convert", "search"];
+    const supportedTargets = [
+      "notes",
+      "flashcards",
+      "schedule",
+      "all",
+      "content",
+    ];
+
+    if (!supportedTypes.includes(action.type)) {
+      return {
+        success: false,
+        message: `❌ I can't "${action.type}" yet. I can: create, delete, update, convert, or search your study materials.`,
+        data: null,
+      };
+    }
+
+    if (!supportedTargets.includes(action.target)) {
+      return {
+        success: false,
+        message: `❌ I can't work with "${action.target}". I can help with: notes, flashcards, schedule, or all items.`,
+        data: null,
+      };
+    }
+
     switch (action.type) {
       case "delete":
         return this.executeDelete(action);
@@ -54,7 +92,7 @@ export class TaskExecutor {
       default:
         return {
           success: false,
-          message: `Unknown action type: ${action.type}`,
+          message: `Handler not implemented for ${action.type} ${action.target}. Please try a different command.`,
           data: null,
         };
     }
@@ -69,10 +107,33 @@ export class TaskExecutor {
       .toLowerCase()
       .trim();
 
+    const isAllTopic = (t: string) =>
+      !t || /^(all|everything|\*|any|all items|all of it|entire)$/i.test(t);
+
     const matchTopic = (text?: string) => {
       if (!topic) return true; // if no topic, match all
       const t = (text || "").toLowerCase();
       return t.includes(topic);
+    };
+
+    // Detect if the provided topic actually names collections to delete
+    // e.g. "notes and flashcards", "all schedule items", "calendar & notes"
+    const parseCollectionSelectors = (t: string) => {
+      const set = new Set<"notes" | "flashcards" | "schedule">();
+      const x = (t || "").toLowerCase();
+      if (/\bnotes?\b|\bnots\b|\bnotez\b|\bnotess\b|\bnotebooks?\b/.test(x))
+        set.add("notes");
+      if (
+        /\bflashcards?\b|\bflashcardd\b|\bflash\b|\bcards?\b|\bdecks?\b/.test(x)
+      )
+        set.add("flashcards");
+      if (
+        /\bschedules?\b|\bcalendar(s)?\b|\bcalender(s)?\b|\bevents?\b|\btimetables?\b|\breminders?\b/.test(
+          x
+        )
+      )
+        set.add("schedule");
+      return set;
     };
 
     if (action.target === "all") {
@@ -80,6 +141,53 @@ export class TaskExecutor {
       const notes = NotesStorage.load();
       const flashcards = FlashcardStorage.load();
       const schedule = ScheduleStorage.load();
+
+      if (isAllTopic(topic)) {
+        NotesStorage.save([]);
+        FlashcardStorage.save([]);
+        ScheduleStorage.save([]);
+        const total = notes.length + flashcards.length + schedule.length;
+        return {
+          success: true,
+          message: `Deleted all items: ${notes.length} notes, ${flashcards.length} flashcards, ${schedule.length} schedule items.`,
+          count: total,
+        };
+      }
+
+      // If the topic names collections (e.g., "notes and flashcards"), wipe only those
+      const selectors = parseCollectionSelectors(topic);
+      if (selectors.size > 0) {
+        let removedNotes = 0;
+        let removedFlash = 0;
+        let removedSched = 0;
+
+        if (selectors.has("notes")) {
+          removedNotes = notes.length;
+          NotesStorage.save([]);
+        }
+        if (selectors.has("flashcards")) {
+          removedFlash = flashcards.length;
+          FlashcardStorage.save([]);
+        }
+        if (selectors.has("schedule")) {
+          removedSched = schedule.length;
+          ScheduleStorage.save([]);
+        }
+
+        const parts: string[] = [];
+        if (selectors.has("notes")) parts.push(`${removedNotes} notes`);
+        if (selectors.has("flashcards"))
+          parts.push(`${removedFlash} flashcards`);
+        if (selectors.has("schedule"))
+          parts.push(`${removedSched} schedule items`);
+        const msg = parts.length ? parts.join(", ") : "nothing";
+
+        return {
+          success: true,
+          message: `Deleted all in selected collections: ${msg}.`,
+          count: removedNotes + removedFlash + removedSched,
+        };
+      }
 
       const keptNotes = notes.filter(
         (n) =>
@@ -114,7 +222,7 @@ export class TaskExecutor {
 
     if (action.target === "notes") {
       const items = NotesStorage.load();
-      if (!topic) {
+      if (isAllTopic(topic)) {
         NotesStorage.save([]);
         return {
           success: true,
@@ -140,7 +248,8 @@ export class TaskExecutor {
 
     if (action.target === "flashcards") {
       const items = FlashcardStorage.load();
-      if (!topic) {
+      // Treat empty topic or explicit 'all' as delete all
+      if (isAllTopic(topic)) {
         FlashcardStorage.save([]);
         return {
           success: true,
@@ -165,7 +274,7 @@ export class TaskExecutor {
 
     if (action.target === "schedule") {
       const items = ScheduleStorage.load();
-      if (!topic) {
+      if (isAllTopic(topic)) {
         ScheduleStorage.save([]);
         return {
           success: true,
@@ -192,52 +301,131 @@ export class TaskExecutor {
 
   private static async executeCreate(action: TaskAction): Promise<TaskResult> {
     if (action.target === "notes") {
-      const topic = action.data?.topic || "General";
-      const note = {
-        title: `Notes about ${topic}`,
-        content: `# ${topic}\n\nStudy notes about ${topic}.`,
-        source: "Generated",
-        category: topic,
-        tags: [topic.toLowerCase()],
-      };
+      const topic = (action.data?.topic || "General").toString();
 
-      const saved = NotesStorage.addBatch([note]);
+      // Prefer Gemini-generated rich notes; fallback to a simple template
+      let generatedNotes: Array<{
+        title: string;
+        content: string;
+        category?: string;
+        tags?: string[];
+      }> = [];
+      try {
+        generatedNotes = await generateNotesWithGemini(topic, "TaskExecutor");
+      } catch (e) {
+        console.warn(
+          "⚠️ [TaskExecutor] Gemini notes generation failed, will fallback:",
+          e
+        );
+      }
+
+      const toSave = (
+        generatedNotes && generatedNotes.length
+          ? [generatedNotes[0]] // save only the first to respect singular "note" intent
+          : [
+              {
+                title: `Enhanced Study Notes: ${topic}`,
+                content: `# ${topic}\n\n## Key Concepts\n- Concept 1\n- Concept 2\n- Concept 3\n\n## Summary\nA concise overview of ${topic}.`,
+                category: topic,
+                tags: [topic.toLowerCase(), "generated"],
+              },
+            ]
+      ).map((n) => ({
+        title: n.title || `Study Notes: ${topic}`,
+        content: n.content || `# ${topic}\n\nStudy notes about ${topic}.`,
+        source: n.title?.includes("Gemini") ? "Gemini" : "Generated",
+        category: n.category || topic,
+        tags:
+          Array.isArray(n.tags) && n.tags.length
+            ? n.tags
+            : [topic.toLowerCase()],
+      }));
+
+      const saved = NotesStorage.addBatch(toSave);
       return {
         success: true,
-        message: `Created notes about ${topic}.`,
-        data: saved[0],
-        count: 1,
+        message: `Created ${saved.length} note(s) about ${topic}.`,
+        data: saved,
+        count: saved.length,
       };
     }
 
     if (action.target === "flashcards") {
-      const topic = action.data?.topic || "General";
-      const count = action.data?.count || 5;
+      const topic = (action.data?.topic || "General").toString();
+      const count = Number(action.data?.count ?? 8) || 8;
 
-      const flashcards = [];
-      for (let i = 1; i <= count; i++) {
-        flashcards.push({
-          question: `Question ${i} about ${topic}?`,
-          answer: `Answer ${i} about ${topic}.`,
+      console.log(
+        `🤖 [TaskExecutor] Requesting AI to generate ${count} flashcards for topic: "${topic}"`
+      );
+
+      // Try Gemini first; if it returns nothing, fall back to basic generation
+      let aiCards: Array<{
+        question: string;
+        answer: string;
+        category?: string;
+      }> = [];
+      try {
+        aiCards = await generateFlashcardsWithGemini(topic, "TaskExecutor", {
+          count,
           category: topic,
         });
+      } catch (e) {
+        console.warn(
+          "⚠️ [TaskExecutor] Gemini generation failed, will fallback:",
+          e
+        );
       }
 
-      const saved = FlashcardStorage.addBatch(flashcards);
+      const toSave = (
+        aiCards && aiCards.length
+          ? aiCards
+          : Array.from({ length: count }, (_, i) => ({
+              question: `What is a key concept of ${topic}? (Card ${i + 1})`,
+              answer: `One key concept in ${topic} is ...`,
+              category: topic,
+            }))
+      ).map((c) => ({
+        question: c.question,
+        answer: c.answer,
+        category: c.category || topic,
+      }));
+
+      const saved = FlashcardStorage.addBatch(toSave);
       return {
         success: true,
-        message: `Created ${count} flashcards about ${topic}.`,
+        message: `Created ${saved.length} flashcards about ${topic}.`,
         data: saved,
-        count: count,
+        count: saved.length,
       };
     }
 
     if (action.target === "schedule") {
       const task = action.data?.task || "Study Task";
+      // Prefer a parsed Date (from chrono) if provided
+      const dt: Date | undefined = (action.data?.dateTime as Date) || undefined;
+      const dateFromAction = action.data?.date as string | undefined;
+      const timeFromAction = action.data?.time as string | undefined;
+
+      const fmtLocalDate = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const da = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${da}`;
+      };
+      const fmtLocalTime = (d: Date) => {
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        return `${hh}:${mm}`;
+      };
+
+      const date = dt
+        ? fmtLocalDate(dt)
+        : dateFromAction || fmtLocalDate(new Date());
+      const time = dt ? fmtLocalTime(dt) : timeFromAction || "09:00";
       const scheduleItem = {
         title: task,
-        date: new Date().toISOString().split("T")[0],
-        time: "09:00",
+        date,
+        time,
         type: "assignment" as const,
         source: "Generated",
       };
@@ -320,6 +508,7 @@ export class TaskExecutor {
     const from = (data.from || "").toString();
     const to = (data.to || "").toString();
     const topic = data.topic ? String(data.topic) : undefined;
+    const requestedCount = Math.max(1, Number(data.count ?? 8) || 8);
 
     if (from === "notes" && to.match(/^flash/)) {
       const notes = NotesStorage.load();
@@ -336,19 +525,46 @@ export class TaskExecutor {
       if (relevant.length === 0) {
         return {
           success: false,
-          message: `No notes found${topic ? ` about "${topic}"` : ""} to convert.`,
+          message: `No notes found${
+            topic ? ` about "${topic}"` : ""
+          } to convert.`,
         };
       }
 
-      // Generate a few basic Q/A from the first relevant note content
-      const chosen = relevant[0];
-      const topicLabel = topic || chosen.category || "General";
-      const lines = String(chosen.content || "")
-        .split(/\n+/)
-        .map((s: string) => s.trim())
-        .filter(Boolean)
-        .slice(0, 10);
-      const cards = lines.slice(0, 5).map((line: string, i: number) => ({
+      // Aggregate candidate "answers" from relevant notes' content
+      const topicLabel = topic || relevant[0].category || "General";
+      const candidateLines: string[] = [];
+      for (const n of relevant) {
+        const content = String(n.content || "");
+        // Prefer bullet points and headers, then fall back to sentences
+        const bullets = content
+          .split(/\n+/)
+          .map((s) => s.trim())
+          .filter((s) => /^(-|\*|\d+\.|#)/.test(s))
+          .map((s) =>
+            s
+              .replace(/^[-*]\s*/, "")
+              .replace(/^\d+\.\s*/, "")
+              .replace(/^#+\s*/, "")
+          );
+        const sentences = content
+          .replace(/\n+/g, " ")
+          .split(/(?<=[.!?])\s+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        candidateLines.push(...bullets, ...sentences);
+        if (candidateLines.length >= requestedCount * 2) break; // enough material
+      }
+
+      // Ensure we have at least requestedCount candidates
+      while (candidateLines.length < requestedCount) {
+        candidateLines.push(
+          `Key point about ${topicLabel} #${candidateLines.length + 1}.`
+        );
+      }
+
+      const selected = candidateLines.slice(0, requestedCount);
+      const cards = selected.map((line: string, i: number) => ({
         question: `Q${i + 1}: What about ${topicLabel}?`,
         answer: line,
         category: topicLabel,
@@ -357,7 +573,9 @@ export class TaskExecutor {
       const saved = FlashcardStorage.addBatch(cards);
       return {
         success: true,
-        message: `Converted notes${topic ? ` about "${topic}"` : ""} into ${saved.length} flashcards.`,
+        message: `Converted notes${topic ? ` about "${topic}"` : ""} into ${
+          saved.length
+        } flashcards.`,
         data: saved,
         count: saved.length,
       };

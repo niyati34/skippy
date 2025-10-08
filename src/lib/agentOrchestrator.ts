@@ -7,6 +7,8 @@ import {
   TaskAction,
 } from "./taskUnderstanding";
 import { TaskExecutor, TaskResult } from "./taskExecutor";
+import { ToolRunner } from "./toolRunner";
+import { tools } from "./tools";
 
 export interface OrchestratedResponse {
   success: boolean;
@@ -14,23 +16,58 @@ export interface OrchestratedResponse {
   details: string[]; // per-action messages
   request: TaskRequest;
   results: TaskResult[];
+  actions: TaskAction[]; // standardized: expose parsed actions for UI routing
+  executionResults?: Array<{ action: TaskAction; result: TaskResult }>; // optional detailed mapping
 }
 
 export class AgentOrchestrator {
   // End-to-end entrypoint
   static async run(userInput: string): Promise<OrchestratedResponse> {
     // 1) Understand
-    const understood = TaskUnderstanding.understandRequest(userInput);
+    const understood = await TaskUnderstanding.understandRequest(userInput);
 
     // 2) Execute in sequence
-    const results = await TaskExecutor.executeTask(understood);
+    // If actions map cleanly to built-in tools, prefer ToolRunner; otherwise fallback to TaskExecutor
+    const canUseTools = understood.actions.every((a) => {
+      const key = `${a.type}.${a.target}` as keyof typeof tools;
+      return key in tools;
+    });
+
+    const results: TaskResult[] = [];
+    if (canUseTools) {
+      for (const a of understood.actions) {
+        const key = `${a.type}.${a.target}` as keyof typeof tools;
+        const input = a.data || {};
+        const r = await ToolRunner.run(key, input, {});
+        results.push({
+          success: r.success,
+          message: r.message,
+          data: r.data,
+          count: (r as any).count,
+        });
+      }
+    } else {
+      results.push(...(await TaskExecutor.executeTask(understood)));
+    }
 
     // 3) Summarize into one cohesive line
     const message = this.summarize(understood.actions, results);
     const success = results.every((r) => r.success);
     const details = results.map((r) => r.message);
+    const executionResults = understood.actions.map((action, idx) => ({
+      action,
+      result: results[idx],
+    }));
 
-    return { success, message, details, request: understood, results };
+    return {
+      success,
+      message,
+      details,
+      request: understood,
+      results,
+      actions: understood.actions,
+      executionResults,
+    };
   }
 
   // Create a compact, natural summary like:
@@ -54,7 +91,9 @@ export class AgentOrchestrator {
     actions.forEach((a, idx) => {
       const key = `${a.type}:${a.target}`;
       const result = results[idx];
-      const count = result?.count ?? 0;
+      // Use the actual count from result, or fall back to action count, or default to 1 if successful
+      const count =
+        result?.count ?? (a.data?.count as number) ?? (result?.success ? 1 : 0);
       const topic = (a.data?.topic ||
         a.data?.task ||
         a.data?.from ||

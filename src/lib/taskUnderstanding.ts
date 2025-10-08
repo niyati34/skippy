@@ -1,5 +1,8 @@
 // Task Understanding System - Makes your agent truly capable
 // Understands any request and converts it to executable actions
+import * as chrono from "chrono-node";
+import { callGemini } from "../services/geminiAI";
+import { AdvancedTaskController } from "./advancedTaskController";
 
 export interface TaskAction {
   type:
@@ -23,30 +26,186 @@ export interface TaskRequest {
 }
 
 export class TaskUnderstanding {
-  // Main method - understands any user request
-  static understandRequest(userInput: string): TaskRequest {
+  // Main method - understands any user request with unlimited capabilities
+  static async understandRequest(userInput: string): Promise<TaskRequest> {
     const input = userInput.toLowerCase().trim();
 
     console.log(`🧠 [TaskUnderstanding] Analyzing: "${userInput}"`);
 
-    // 🚀 NEW: Parse all actions directly from the full sentence using robust patterns
-    // This handles compound commands without relying on fragile connector splitting
-    const parsedActions = this.parseAllActions(userInput);
-    if (parsedActions.length > 0) {
-      const msg =
-        parsedActions.length > 1
-          ? `Compound request: ${parsedActions.length} actions identified`
-          : `Request understood: ${parsedActions[0].type} ${parsedActions[0].target}`;
-      return {
-        actions: parsedActions,
-        message: msg,
-        confidence: parsedActions.length > 1 ? 0.85 : 0.8,
-      };
+    // 🚀 ADVANCED: Check if this should use unlimited processing capabilities
+    const complexityCheck =
+      AdvancedTaskController.validateRequestComplexity(userInput);
+
+    if (
+      complexityCheck.complexity === "high" ||
+      this.shouldUseAdvancedProcessing(userInput)
+    ) {
+      console.log(
+        `🚀 [TaskUnderstanding] Routing to Advanced Controller for unlimited processing`
+      );
+
+      try {
+        const advancedResult =
+          await AdvancedTaskController.processAdvancedRequest(userInput);
+
+        if (advancedResult.success && advancedResult.executionResults) {
+          // Convert advanced results to TaskAction format for compatibility
+          const actions =
+            this.convertAdvancedResultsToTaskActions(advancedResult);
+          return {
+            actions,
+            message: advancedResult.message,
+            confidence: actions.length > 0 ? 0.95 : 0.5,
+          };
+        }
+
+        console.log(
+          `⚠️ [TaskUnderstanding] Advanced processing failed, falling back to standard`
+        );
+      } catch (error) {
+        console.error(
+          `❌ [TaskUnderstanding] Advanced processing error:`,
+          error
+        );
+      }
     }
+
+    // Standard processing for simpler requests or fallback
+    return await this.processStandardRequest(userInput);
+  }
+
+  /**
+   * Check if request should use advanced unlimited processing
+   */
+  private static shouldUseAdvancedProcessing(input: string): boolean {
+    const advancedKeywords = [
+      "analyze",
+      "summarize",
+      "research",
+      "investigate",
+      "explain",
+      "connect",
+      "recommend",
+      "optimize",
+      "enhance",
+      "reflect",
+      "assess",
+      "practice",
+      "generate",
+      "build",
+      "develop",
+      "design",
+      "construct",
+      "improve",
+      "synthesize",
+      "critique",
+      "evaluate",
+      "compare",
+      "contrast",
+    ];
+
+    const hasAdvancedKeywords = advancedKeywords.some((keyword) =>
+      input.toLowerCase().includes(keyword)
+    );
+
+    const hasComplexStructure =
+      input.includes(" and ") &&
+      (input.match(/create|make|schedule|delete|analyze/gi) || []).length > 1;
+
+    const hasAdvancedIntent =
+      /advanced|complex|comprehensive|detailed|thorough/.test(
+        input.toLowerCase()
+      );
+
+    return hasAdvancedKeywords || hasComplexStructure || hasAdvancedIntent;
+  }
+
+  /**
+   * Convert advanced results back to TaskAction format for compatibility
+   */
+  private static convertAdvancedResultsToTaskActions(
+    result: any
+  ): TaskAction[] {
+    if (!result.executionResults) return [];
+
+    return result.executionResults
+      .filter((r: any) => r.success)
+      .map((r: any, index: number) => {
+        const analysisAction = result.analysisResult?.actions?.[index];
+
+        return {
+          type: this.mapAdvancedTypeToStandard(
+            analysisAction?.type || "create"
+          ),
+          target: this.mapAdvancedTargetToStandard(
+            analysisAction?.target || "all"
+          ),
+          data: {
+            ...analysisAction?.data,
+            result: r.data,
+            message: r.message,
+            advanced: true,
+          },
+          priority: "high" as const,
+        };
+      });
+  }
+
+  /**
+   * Map advanced operation types to standard TaskAction types
+   */
+  private static mapAdvancedTypeToStandard(
+    advancedType: string
+  ): TaskAction["type"] {
+    const mappings: Record<string, TaskAction["type"]> = {
+      analyze: "analyze",
+      summarize: "analyze",
+      research: "search",
+      generate: "create",
+      build: "create",
+      develop: "create",
+      enhance: "update",
+      optimize: "update",
+      practice: "search",
+      quiz: "search",
+      schedule: "create",
+      track: "list",
+    };
+
+    return mappings[advancedType] || "create";
+  }
+
+  /**
+   * Map advanced target types to standard TaskAction targets
+   */
+  private static mapAdvancedTargetToStandard(
+    advancedTarget: string
+  ): TaskAction["target"] {
+    const mappings: Record<string, TaskAction["target"]> = {
+      content: "content",
+      "knowledge-base": "notes",
+      concepts: "notes",
+      "mind-maps": "notes",
+      "study-plans": "schedule",
+      "learning-paths": "schedule",
+      "practice-sessions": "flashcards",
+      assessments: "flashcards",
+    };
+
+    return mappings[advancedTarget] || "all";
+  }
+
+  /**
+   * Process standard requests (existing logic preserved)
+   */
+  private static async processStandardRequest(
+    userInput: string
+  ): Promise<TaskRequest> {
+    const input = userInput.toLowerCase().trim();
 
     // 🚀 FIRST: Check for compound commands (multiple actions in one request)
     if (this.isCompoundRequest(input)) {
-      return this.handleCompoundRequest(userInput); // Pass original case for proper parsing
+      return await this.handleCompoundRequest(userInput); // Pass original case for proper parsing
     }
 
     // Handle navigate requests
@@ -88,177 +247,6 @@ export class TaskUnderstanding {
     return this.guessIntent(input);
   }
 
-  // 🚀 NEW: Comprehensive action parser that extracts all actions/targets from the full input
-  // Supports: create/make/generate, implicit "10 flashcards ...", delete/remove, search/list/show, convert X to Y
-  private static parseAllActions(userInput: string): TaskAction[] {
-    const actions: TaskAction[] = [];
-    const text = userInput.trim();
-
-    // Helper maps
-    const normalizeTarget = (raw: string): TaskAction["target"] => {
-      const r = raw.toLowerCase();
-      if (/^flash/.test(r) || /^card/.test(r)) return "flashcards";
-      if (/^note/.test(r) || /^not/.test(r)) return "notes";
-      if (/^schedule|^event/.test(r)) return "schedule";
-      if (r === "everything" || r === "all") return "all";
-      return "content"; // fallback when used in convert
-    };
-
-    const extractTopic = (seg?: string) => {
-      if (!seg) return undefined;
-      const m = seg.match(
-        /(?:about|on|for|of|off|related(?:\s+to)?)\s+([^,.;]+)/i
-      );
-      if (m) return m[1].trim();
-      // Fallback: last meaningful words
-      const words = seg
-        .split(/\s+/)
-        .filter(
-          (w) =>
-            w.length > 2 &&
-            !/^(create|make|generate|add|write|delete|remove|clear|drop|erase|trash|wipe|find|search|show|list|get)$/i.test(
-              w
-            )
-        );
-      return words.length ? words[words.length - 1] : undefined;
-    };
-
-    const parseNumberWord = (word?: string): number | undefined => {
-      if (!word) return undefined;
-      const map: Record<string, number> = {
-        one: 1,
-        two: 2,
-        three: 3,
-        four: 4,
-        five: 5,
-        six: 6,
-        seven: 7,
-        eight: 8,
-        nine: 9,
-        ten: 10,
-        eleven: 11,
-        twelve: 12,
-        fifteen: 15,
-        twenty: 20,
-      };
-      const v = map[word.toLowerCase()];
-      return v;
-    };
-
-    // 1) Explicit create/make/generate
-    const createRegex =
-      /(create|make|generate|add|write)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s*)?(notes?|flashcards?|cards?|schedule|events?)\b([^]*)/gi;
-    let m: RegExpExecArray | null;
-    while ((m = createRegex.exec(text)) !== null) {
-      const [, , cntRaw, targetRaw, tail] = m;
-      const t = normalizeTarget(targetRaw);
-      let count: number | undefined = undefined;
-      if (cntRaw)
-        count = /\d+/.test(cntRaw)
-          ? parseInt(cntRaw, 10)
-          : parseNumberWord(cntRaw);
-      // Limit topic extraction to the current clause (stop at connectors or another action verb)
-      const tailForTopic = (tail || "")
-        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
-        .trim();
-      const topic = extractTopic(tailForTopic);
-      const data: any = {};
-      if (topic) data.topic = topic;
-      if (t === "flashcards" && count) data.count = count;
-      if (t === "schedule" && topic) data.task = topic;
-      actions.push({ type: "create", target: t, data, priority: "high" });
-    }
-
-    // 2) Implicit create: "10 flashcards of react", "1 note for car"
-    const implicitCreateRegex =
-      /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)\s+(flashcards?|cards?|notes?)\b([^]*)/gi;
-    while ((m = implicitCreateRegex.exec(text)) !== null) {
-      const [, cntRaw, targetRaw, tail] = m;
-      const t = normalizeTarget(targetRaw);
-      let count: number | undefined = undefined;
-      if (cntRaw)
-        count = /\d+/.test(cntRaw)
-          ? parseInt(cntRaw, 10)
-          : parseNumberWord(cntRaw);
-      const tailForTopic = (tail || "")
-        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
-        .trim();
-      const topic = extractTopic(tailForTopic) || extractTopic(text);
-      const data: any = {};
-      if (topic) data.topic = topic;
-      if (t === "flashcards" && count) data.count = count;
-      actions.push({ type: "create", target: t, data, priority: "high" });
-    }
-
-    // 3) Delete/remove/clear
-    // Prefer specific targets like "delete all my notes" -> target: notes
-    const deleteSpecificRegex =
-      /(delete|remove|clear|drop|erase|trash|wipe)\s+(?:all\s+(?:of\s+)?(?:my\s+|the\s+)?)?(notes?|flashcards?|cards?|schedule|events?)\b([^]*)/gi;
-    while ((m = deleteSpecificRegex.exec(text)) !== null) {
-      const [, , targetRaw, tail] = m;
-      const t = normalizeTarget(targetRaw);
-      const tailForTopic = (tail || "")
-        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
-        .trim();
-      const topic = extractTopic(tailForTopic);
-      const data = topic ? { topic } : undefined;
-      actions.push({ type: "delete", target: t, data, priority: "high" });
-    }
-
-    // Generic delete everything: "delete all" or "delete everything" (but not "delete all my notes")
-    const deleteAllRegex =
-      /(delete|remove|clear|drop|erase|trash|wipe)\s+(everything\b|all\b(?!\s+(?:of\s+)?(?:my\s+|the\s+)?(?:notes?|flashcards?|cards?|schedule|events?)))\b([^]*)/gi;
-    while ((m = deleteAllRegex.exec(text)) !== null) {
-      const [, , _targetAll, tail] = m;
-      const tailForTopic = (tail || "")
-        .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
-        .trim();
-      const topic = extractTopic(tailForTopic);
-      const data = topic ? { topic } : undefined;
-      actions.push({ type: "delete", target: "all", data, priority: "high" });
-    }
-
-    // 4) Search/list/show/get
-    const searchRegex =
-      /(find|search|show|list|get)\s+(notes?|flashcards?|cards?|schedule|events?|everything|all)\b/gi;
-    while ((m = searchRegex.exec(text)) !== null) {
-      const [, , targetRaw] = m;
-      const t = normalizeTarget(targetRaw);
-      actions.push({
-        type: "search",
-        target: t === "content" ? "all" : t,
-        priority: "medium",
-      });
-    }
-
-    // 5) Convert: "convert notes to flashcards", "make flashcards from notes"
-    const convertRegex =
-      /(convert|make|create|generate)\s+(?:from\s+)?(notes?|flashcards?|cards?)\s+(?:to|into)\s+(notes?|flashcards?|cards?)\b([^]*)/gi;
-    while ((m = convertRegex.exec(text)) !== null) {
-      const [, , fromRaw, toRaw, tail] = m;
-      const from = normalizeTarget(fromRaw);
-      const to = normalizeTarget(toRaw);
-      const topic = extractTopic(tail);
-      actions.push({
-        type: "convert",
-        target: "content",
-        data: { from, to, topic },
-        priority: "high",
-      });
-    }
-
-    // Remove obvious duplicates by stringifying stable keys
-    const seen = new Set<string>();
-    const deduped = actions.filter((a) => {
-      const key = JSON.stringify({ t: a.type, g: a.target, d: a.data || {} });
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    return deduped;
-  }
-
   // 🚀 NEW: Detect compound requests with multiple actions
   private static isCompoundRequest(input: string): boolean {
     // Look for connecting words that indicate multiple actions
@@ -273,11 +261,320 @@ export class TaskUnderstanding {
       ",",
     ];
 
+    // Check if any of the connectors exist in the input string
     return connectors.some((connector) => input.includes(connector));
   }
 
   // 🚀 NEW: Handle compound requests by breaking them into multiple actions
-  private static handleCompoundRequest(userInput: string): TaskRequest {
+  private static async handleCompoundRequest(
+    userInput: string
+  ): Promise<TaskRequest> {
+    console.log(
+      `🔀 [TaskUnderstanding] Compound request detected: "${userInput}"`
+    );
+
+    try {
+      // Use LLM to parse the compound command into structured tasks
+      const structuredTasks = await this.parseCompoundWithLLM(userInput);
+      if (structuredTasks && structuredTasks.length > 0) {
+        console.log(
+          `🤖 [TaskUnderstanding] LLM parsed ${structuredTasks.length} tasks:`,
+          structuredTasks
+        );
+
+        const actions: TaskAction[] = [];
+        for (const task of structuredTasks) {
+          const action = this.convertStructuredTaskToAction(task, userInput);
+          if (action) {
+            actions.push(action);
+          }
+        }
+
+        if (actions.length > 0) {
+          return {
+            actions,
+            message: `LLM-parsed compound request: ${actions.length} actions identified`,
+            confidence: 0.9,
+          };
+        }
+      }
+    } catch (error) {
+      console.warn(
+        `⚠️ [TaskUnderstanding] LLM parsing failed, falling back to regex:`,
+        error
+      );
+    }
+
+    // Fallback to original regex-based parsing
+    return this.handleCompoundRequestFallback(userInput);
+  }
+
+  // 🚀 NEW: Parse compound commands using LLM for better understanding
+  private static async parseCompoundWithLLM(userInput: string): Promise<any[]> {
+    const systemPrompt = `You are a task parser for a study buddy app. Extract ALL study tasks from user input.
+
+VALID ACTIONS: create, delete, schedule, update, search, convert
+VALID TARGETS: notes, flashcards, schedule
+
+Rules:
+1. Extract each task as a separate object
+2. Handle pronouns like "it" by inferring the topic from context
+3. For schedule tasks, extract time/date information
+4. For create tasks with counts (like "5 flashcards"), include the count
+5. ONLY use "convert" action when explicitly mentioned "from notes" or "from my notes"
+6. For phrases like "make 5 flashcards about X" or "create flashcards related to Y", use action "create"
+7. Always use plural target names: "notes", "flashcards", "schedule" (never "note" or "flashcard")
+8. Only output a valid JSON array - no explanations
+
+Examples:
+Input: "delete all flashcards and create 5 about physics"
+Output: [{"action":"delete","target":"flashcards","topic":"all"},{"action":"create","target":"flashcards","count":5,"topic":"physics"}]
+
+Input: "make 5 flashcards related to onion and 5 related to tomato"
+Output: [{"action":"create","target":"flashcards","count":5,"topic":"onion"},{"action":"create","target":"flashcards","count":5,"topic":"tomato"}]
+
+Input: "schedule physics review Friday 6pm and create 3 flashcards about it"
+Output: [{"action":"schedule","target":"schedule","topic":"physics review","time":"Friday 6pm"},{"action":"create","target":"flashcards","count":3,"topic":"physics review"}]
+
+Input: "make 5 flashcards from notes of batman"
+Output: [{"action":"convert","target":"content","from":"notes","to":"flashcards","count":5,"topic":"batman"}]
+
+Now parse this input and return ONLY the JSON array:`;
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userInput },
+    ];
+
+    try {
+      const response = await callGemini(messages, {
+        temperature: 0.1,
+        maxTokens: 500,
+        responseMimeType: "application/json",
+      });
+
+      console.log(`🤖 [TaskUnderstanding] LLM raw response:`, response);
+
+      // Parse JSON response
+      const parsedTasks = JSON.parse(response);
+      if (Array.isArray(parsedTasks)) {
+        return parsedTasks;
+      } else {
+        console.warn(
+          `⚠️ [TaskUnderstanding] LLM response is not an array:`,
+          parsedTasks
+        );
+        return [];
+      }
+    } catch (error) {
+      console.error(`❌ [TaskUnderstanding] LLM parsing error:`, error);
+      throw error;
+    }
+  }
+
+  // Convert LLM-parsed structured task to TaskAction
+  private static convertStructuredTaskToAction(
+    task: any,
+    fullInput?: string
+  ): TaskAction | null {
+    if (!task.action || !task.target) {
+      console.warn(`⚠️ [TaskUnderstanding] Invalid task structure:`, task);
+      return null;
+    }
+
+    // Normalize LLM action types to internal executor types
+    const normalizedType =
+      String(task.action).toLowerCase() === "schedule" ? "create" : task.action;
+
+    // Normalize singular targets to plural
+    const rawTarget = String(task.target || "").toLowerCase();
+    const targetMap: Record<
+      string,
+      "notes" | "flashcards" | "schedule" | "all" | "page" | "content"
+    > = {
+      note: "notes",
+      notes: "notes",
+      flashcard: "flashcards",
+      flashcards: "flashcards",
+      card: "flashcards",
+      cards: "flashcards",
+      schedule: "schedule",
+      calendar: "schedule",
+      all: "all",
+      page: "page",
+      content: "content",
+    };
+    const normalizedTarget = targetMap[rawTarget] || (rawTarget as any);
+
+    const action: TaskAction = {
+      type: normalizedType as any,
+      target: normalizedTarget as any,
+      priority: "medium" as const,
+      data: {},
+    };
+
+    // Helper to infer target from arbitrary text (tolerant of typos)
+    const detectTargetFromText = (
+      txt: string | undefined
+    ): "notes" | "flashcards" | "schedule" | null => {
+      const t = (txt || "").toLowerCase();
+      if (!t) return null;
+
+      // Notes: accept common typos
+      if (
+        /(\bnote\b|\bnotes\b|\bnots\b|\bnotez\b|\bnotess\b|\bnotebooks?\b)/i.test(
+          t
+        )
+      )
+        return "notes";
+
+      // Flashcards: accept splits/typos like "flashcardd", "flas h card"
+      if (/(\bflashcards?\b|\bflash\b|\bcards?\b|\bdecks?\b)/i.test(t))
+        return "flashcards";
+      const collapsed = t.replace(/\s+/g, "");
+      if (/fla\w*card\w*/i.test(collapsed)) return "flashcards";
+      const tokens = t.split(/[^a-zA-Z]+/).filter(Boolean);
+      const hasFlashish = tokens.some(
+        (w) => /fl[a-z]{2,4}/i.test(w) || w === "flash"
+      );
+      const hasCardish = tokens.some((w) => /card/i.test(w));
+      if (hasFlashish && hasCardish) return "flashcards";
+
+      // Schedule/calendar
+      if (
+        /(\bschedules?\b|\bcalendar(s)?\b|\bcalender(s)?\b|\bevents?\b|\btimetables?\b|\breminders?\b)/i.test(
+          t
+        )
+      )
+        return "schedule";
+      return null;
+    };
+
+    // Add topic/task data
+    if (task.topic) {
+      action.data.topic = task.topic;
+      if (task.target === "schedule") {
+        action.data.task = task.topic;
+      }
+    }
+
+    // Add count for create/convert actions
+    if (task.count && (task.action === "create" || task.action === "convert")) {
+      action.data.count = task.count;
+    }
+
+    // Add time data for schedule actions
+    if (task.time && String(task.action).toLowerCase() === "schedule") {
+      const dateTime = chrono.parseDate(task.time);
+      if (dateTime) {
+        action.data.dateTime = dateTime;
+        action.data.timeString = task.time;
+      }
+    }
+
+    // Normalize delete targets from topic text (handle typos like "flashcardd")
+    if (normalizedType === "delete") {
+      const rawTarget = String(task.target || "").toLowerCase();
+      const inferredFromTopic = detectTargetFromText(task.topic);
+
+      const allowedTargets = new Set([
+        "notes",
+        "flashcards",
+        "schedule",
+        "all",
+      ]);
+      if (!allowedTargets.has(rawTarget as any) && inferredFromTopic) {
+        action.target = inferredFromTopic as any;
+      }
+
+      // If target is "all" but topic clearly names a collection, retarget to that collection
+      if (rawTarget === "all" && inferredFromTopic) {
+        action.target = inferredFromTopic as any;
+        // treat as delete-all for that collection
+        // Map "create flashcards from notes ..." to convert action when detectable
+      }
+
+      // If topic itself is "all" (or contains it), treat as delete-all for specific target
+      const topicText = String(task.topic || "");
+      if (/\ball\b|\beverything\b|\bentire\b/i.test(topicText)) {
+        action.data = {}; // executor interprets empty topic as delete-all
+      }
+    }
+
+    // Map "create flashcards from notes ..." to convert action when detectable
+    if (
+      normalizedType === "create" &&
+      (normalizedTarget === "flashcards" || normalizedTarget === "content")
+    ) {
+      const t = String(task.topic || "");
+      if (
+        (fullInput && /from\s+notes/i.test(fullInput)) ||
+        /\bnotes\b/i.test(t)
+      ) {
+        // Try to extract core topic (remove 'from notes of' or trailing 'notes')
+        let convTopic = t
+          .replace(/from\s+notes\s+of\s+/i, "")
+          .replace(/\bnotes\b/i, "")
+          .trim();
+        if (!convTopic) convTopic = t.trim();
+        const converted: TaskAction = {
+          type: "convert" as const,
+          target: "content" as const,
+          priority: "medium",
+          data: {
+            from: "notes",
+            to: "flashcards",
+            topic: convTopic,
+            ...(task.count ? { count: task.count } : {}),
+          },
+        };
+        return converted;
+      }
+    }
+
+    // Ensure LLM-provided convert tasks carry normalized from/to into data
+    if (normalizedType === "convert") {
+      const normalize = (
+        v: string | undefined
+      ):
+        | "notes"
+        | "flashcards"
+        | "schedule"
+        | "all"
+        | "page"
+        | "content"
+        | undefined => {
+        const key = String(v || "").toLowerCase();
+        return targetMap[key] || (key ? (key as any) : undefined);
+      };
+
+      const fromNorm = normalize((task as any).from);
+      const toNorm = normalize((task as any).to);
+      if (fromNorm) (action.data as any).from = fromNorm;
+      if (toNorm) (action.data as any).to = toNorm;
+
+      // Heuristics: infer missing endpoints from input/topic/target
+      const ttext = String(task.topic || "");
+      if (!(action.data as any).from) {
+        if (
+          (fullInput && /from\s+notes?/i.test(fullInput)) ||
+          /\bnotes?\b/i.test(ttext)
+        ) {
+          (action.data as any).from = "notes";
+        }
+      }
+      if (!(action.data as any).to) {
+        // If the target of the action is a concrete collection, prefer that
+        if (normalizedTarget === "flashcards")
+          (action.data as any).to = "flashcards";
+      }
+    }
+
+    return action;
+  }
+
+  // Fallback to original regex-based compound handling
+  private static handleCompoundRequestFallback(userInput: string): TaskRequest {
     console.log(
       `🔀 [TaskUnderstanding] Compound request detected: "${userInput}"`
     );
@@ -293,67 +590,71 @@ export class TaskUnderstanding {
       parts
     );
 
-    // Determine global intent (delete vs create) to guide bare-target parts
-    const globalDeleteIntent = this.isDeleteRequest(userInput.toLowerCase());
-    let lastCreateTarget: TaskAction["target"] | undefined = undefined;
+    let lastTopic: string | undefined = undefined;
 
     // Process each part separately
     for (const part of parts) {
-      const trimmed = part.trim();
-      const partResult = this.processSingleAction(trimmed);
-      if (partResult.actions.length > 0) {
-        actions.push(...partResult.actions);
-        confidence = Math.min(confidence, partResult.confidence);
-        // Track last explicit create target to infer for following segments
-        const lastCreate = [...partResult.actions]
-          .reverse()
-          .find((a) => a.type === "create");
-        if (lastCreate) {
-          lastCreateTarget = lastCreate.target;
-        }
-      } else if (globalDeleteIntent) {
-        // If no explicit action but overall it's a delete compound, infer deletes for bare targets
-        const lower = trimmed.toLowerCase();
-        const inferred: TaskAction[] = [];
-        if (this.matchesNotes(lower)) {
-          inferred.push({ type: "delete", target: "notes", priority: "high" });
-        }
-        if (this.matchesFlashcards(lower)) {
-          inferred.push({
-            type: "delete",
-            target: "flashcards",
-            priority: "high",
-          });
-        }
-        if (inferred.length) {
-          console.log(
-            `🧠 [TaskUnderstanding] Inferring DELETE for bare target in compound: "${trimmed}"`,
-            inferred
+      const trimmedPart = part.trim();
+      if (trimmedPart) {
+        // Use the single-action processors, but pass ONLY the relevant part.
+        const partResult = this.processSingleAction(trimmedPart);
+        if (partResult.actions.length > 0) {
+          const currentAction = partResult.actions[0];
+
+          // Enhanced pronoun resolution: if current action has vague topic, inherit from previous
+          const topicIsVague =
+            !currentAction.data?.topic ||
+            currentAction.data?.topic === "" ||
+            currentAction.data?.topic === "it" ||
+            /^(it|that|this|general|a\s+related\s+to\s+it\.?|one|two|three|four|five|six|seven|eight|nine|ten|some|few|several|many|detailed|simple|basic|advanced|quick|short|long|comprehensive|brief|concise|extended|enhanced|summary|practice|study|review)$/i.test(
+              currentAction.data.topic
+            );
+          const refersToPrevious = /\b(it|that|this|related)\b/i.test(
+            trimmedPart
           );
-          actions.push(...inferred);
+
+          if (
+            currentAction.data &&
+            (topicIsVague || refersToPrevious) &&
+            lastTopic
+          ) {
+            console.log(
+              `🧠 [TaskUnderstanding] Inheriting topic "${lastTopic}" for action on "${trimmedPart}"`
+            );
+            currentAction.data.topic = lastTopic;
+
+            // For schedule actions, also update the task field
+            if (currentAction.target === "schedule") {
+              currentAction.data.task = lastTopic;
+            }
+          }
+
+          actions.push(...partResult.actions);
+          confidence = Math.min(confidence, partResult.confidence);
+
+          // Store the last valid topic for the next iteration (enhanced extraction)
+          let extractedTopic = currentAction.data?.topic;
+          if (currentAction.target === "schedule") {
+            extractedTopic =
+              currentAction.data?.task || currentAction.data?.topic;
+          }
+
+          if (
+            extractedTopic &&
+            extractedTopic !== "" &&
+            extractedTopic !== "it" &&
+            !/^(it|that|this|general|a\s+related\s+to\s+it\.?|one|two|three|four|five|six|seven|eight|nine|ten|some|few|several|many|detailed|simple|basic|advanced|quick|short|long|comprehensive|brief|concise|extended|enhanced|summary|practice|study|review)$/i.test(
+              extractedTopic
+            )
+          ) {
+            lastTopic = extractedTopic;
+            console.log(
+              `🧠 [TaskUnderstanding] Updated lastTopic to: "${lastTopic}"`
+            );
+          }
         }
-      } else if (
-        lastCreateTarget &&
-        this.looksLikeCreateContinuation(trimmed)
-      ) {
-        // Infer CREATE action continuing previous target (e.g., "10 related chocolate")
-        const topic = this.extractTopicFromSegment(trimmed);
-        const count = this.extractCountFromSegment(trimmed);
-        const inferred: TaskAction = {
-          type: "create",
-          target: lastCreateTarget,
-          data:
-            lastCreateTarget === "flashcards" ? { topic, count } : { topic },
-          priority: "high",
-        };
-        console.log(
-          `🧠 [TaskUnderstanding] Inferring CREATE continuation for: "${trimmed}" ->`,
-          inferred
-        );
-        actions.push(inferred);
       }
     }
-
     return {
       actions,
       message: `Compound request: ${actions.length} actions identified`,
@@ -363,16 +664,18 @@ export class TaskUnderstanding {
 
   // 🚀 NEW: Split compound request into individual parts
   private static splitCompoundRequest(input: string): string[] {
-    // Split on various connectors, preserving the original text
+    // This is the key fix. We are now more flexible with our regex to handle commas and other punctuation
     const splitPatterns = [
-      / and /gi,
-      / then /gi,
-      / also /gi,
-      / plus /gi,
-      / after that /gi,
-      / next /gi,
-      / & /gi,
-      /,/g,
+      /\s+and\s+/gi,
+      /\s*,\s*and\s*/gi,
+      /\s*,\s*then\s*/gi,
+      /\s*,\s*/gi,
+      /\s+then\s+/gi,
+      /\s+also\s+/gi,
+      /\s+plus\s+/gi,
+      /\s+after that\s+/gi,
+      /\s+next\s+/gi,
+      /\s*&\s*/gi,
     ];
 
     let parts = [input];
@@ -467,76 +770,27 @@ export class TaskUnderstanding {
     console.log(`🔍 [TaskUnderstanding] processSingleAction: "${actionText}"`);
     console.log(`🔍 [TaskUnderstanding] normalized input: "${input}"`);
 
-    // Test ALL patterns first for debugging
-    const deleteResult = this.isDeleteRequest(input);
-    const createResult = this.isCreateRequest(input);
-    console.log(
-      `🧪 [TaskUnderstanding] Classification test results: delete=${deleteResult}, create=${createResult}`
-    );
-
-    // Tie-breaker: if both delete and create match, prefer what the phrase starts with
-    if (deleteResult && createResult) {
-      const startsWithCreate = /^(make|create|generate|add|write|new)\b/i.test(
-        input
-      );
-      const startsWithDelete =
-        /^(delete|remove|clear|drop|erase|trash|wipe|rm|clr|rmv)\b/i.test(
-          input
-        );
-      if (startsWithCreate && !startsWithDelete) {
-        console.log(
-          `⚖️ [TaskUnderstanding] Both matched; preferring CREATE due to sentence start`
-        );
-        return this.handleCreateRequest(input);
-      }
-      if (startsWithDelete && !startsWithCreate) {
-        console.log(
-          `⚖️ [TaskUnderstanding] Both matched; preferring DELETE due to sentence start`
-        );
-        return this.handleDeleteRequest(input);
-      }
-      // If ambiguous, keep original order but ensure explicit delete verb exists
-      if (/\bdelete|remove|clear|drop|erase|trash|wipe\b/i.test(input)) {
-        console.log(
-          `⚖️ [TaskUnderstanding] Both matched; explicit DELETE verb found`
-        );
-        return this.handleDeleteRequest(input);
-      } else {
-        console.log(
-          `⚖️ [TaskUnderstanding] Both matched; treating as CREATE due to lack of explicit DELETE verb`
-        );
-        return this.handleCreateRequest(input);
-      }
+    // Pass the original-cased `actionText` to handlers so they can extract topics correctly
+    if (this.isDeleteRequest(input)) {
+      return this.handleDeleteRequest(actionText);
     }
-
-    // Try each handler in order
-    if (deleteResult) {
-      console.log(`🗑️ [TaskUnderstanding] ✅ Classified as DELETE request`);
-      return this.handleDeleteRequest(input);
-    }
-    if (createResult) {
-      console.log(`➕ [TaskUnderstanding] ✅ Classified as CREATE request`);
-      return this.handleCreateRequest(input);
+    if (this.isCreateRequest(input)) {
+      return this.handleCreateRequest(actionText);
     }
     if (this.isNavigateRequest(input)) {
-      console.log(`🧭 [TaskUnderstanding] Classified as NAVIGATE request`);
-      return this.handleNavigateRequest(input);
+      return this.handleNavigateRequest(actionText);
     }
     if (this.isAnalyzeRequest(input)) {
-      console.log(`🔍 [TaskUnderstanding] Classified as ANALYZE request`);
-      return this.handleAnalyzeRequest(input);
+      return this.handleAnalyzeRequest(actionText);
     }
     if (this.isConvertRequest(input)) {
-      console.log(`🔄 [TaskUnderstanding] Classified as CONVERT request`);
-      return this.handleConvertRequest(input);
+      return this.handleConvertRequest(actionText);
     }
     if (this.isSearchRequest(input)) {
-      console.log(`🔍 [TaskUnderstanding] Classified as SEARCH request`);
-      return this.handleSearchRequest(input);
+      return this.handleSearchRequest(actionText);
     }
     if (this.isUpdateRequest(input)) {
-      console.log(`✏️ [TaskUnderstanding] Classified as UPDATE request`);
-      return this.handleUpdateRequest(input);
+      return this.handleUpdateRequest(actionText);
     }
 
     // If we can't classify it, try to guess
@@ -663,14 +917,42 @@ export class TaskUnderstanding {
       `🧪 [TaskUnderstanding] Testing CREATE patterns for: "${input}"`
     );
 
-    const createWords = ["create", "make", "generate", "add", "new", "build"];
+    const createWords = [
+      "create",
+      "make",
+      "generate",
+      "add",
+      "new",
+      "build",
+      "schedule",
+      "plan",
+    ];
+
+    // Special case: phrases like "one on/about/for <topic>" imply creation of an item
+    const oneOnPattern = /\bone\s+(?:note\s+)?(?:about|on|for)\s+[^,.;]+/i;
 
     // Check for explicit create words
     const hasCreateWord = createWords.some((word) => input.includes(word));
     console.log(`🧪 [TaskUnderstanding] Has create word: ${hasCreateWord}`);
-    if (hasCreateWord) {
+    if (hasCreateWord || oneOnPattern.test(input)) {
       console.log(
         `🧪 [TaskUnderstanding] ✅ RETURNING TRUE for CREATE (explicit word)`
+      );
+      return true;
+    }
+
+    // Check for schedule patterns (time-based activities)
+    const timePattern =
+      /(monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}:\d{2}|\d{1,2}pm|\d{1,2}am|tomorrow|today|next week)/i;
+    const hasTimePattern = timePattern.test(input);
+    console.log(
+      `🧪 [TaskUnderstanding] Time pattern match: ${
+        hasTimePattern ? "YES" : "NO"
+      }`
+    );
+    if (hasTimePattern) {
+      console.log(
+        `🧪 [TaskUnderstanding] ✅ RETURNING TRUE for CREATE (time pattern - likely schedule)`
       );
       return true;
     }
@@ -722,6 +1004,21 @@ export class TaskUnderstanding {
       return true;
     }
 
+    // 🚀 NEW: Check for a simple article + target pattern, like "a note" or "an flashcard"
+    const articlePattern = /\b(?:a|an)\s+(?:note|flashcard|card)/i;
+    const hasArticlePattern = input.match(articlePattern);
+    console.log(
+      `🧪 [TaskUnderstanding] Article pattern match: ${
+        hasArticlePattern ? "YES" : "NO"
+      }`
+    );
+    if (hasArticlePattern) {
+      console.log(
+        `🧪 [TaskUnderstanding] ✅ RETURNING TRUE for CREATE (article pattern)`
+      );
+      return true;
+    }
+
     console.log(`🧪 [TaskUnderstanding] ❌ NOT a CREATE request`);
     return false;
   }
@@ -754,31 +1051,19 @@ export class TaskUnderstanding {
 
   private static handleDeleteRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
-    // Try to extract a topic for scoped deletions (e.g., "about X", "related to X")
+    const lowerInput = input.toLowerCase();
     const topic = this.extractTopicForDelete(input);
 
-    // Check what to delete
-    if (input.includes("all") || input.includes("everything")) {
-      if (this.matchesNotes(input) || this.matchesFlashcards(input)) {
-        // Delete specific types
-        if (this.matchesNotes(input)) {
-          actions.push({
-            type: "delete",
-            target: "notes",
-            priority: "high",
-            data: topic ? { topic } : undefined,
-          });
-        }
-        if (this.matchesFlashcards(input)) {
-          actions.push({
-            type: "delete",
-            target: "flashcards",
-            priority: "high",
-            data: topic ? { topic } : undefined,
-          });
-        }
+    if (lowerInput.includes("all") || lowerInput.includes("everything")) {
+      if (this.matchesNotes(lowerInput)) {
+        actions.push({ type: "delete", target: "notes", priority: "high" });
+      } else if (this.matchesFlashcards(lowerInput)) {
+        actions.push({
+          type: "delete",
+          target: "flashcards",
+          priority: "high",
+        });
       } else {
-        // Delete everything
         actions.push({
           type: "delete",
           target: "all",
@@ -787,21 +1072,20 @@ export class TaskUnderstanding {
         });
       }
     } else {
-      // Delete specific items
-      if (this.matchesNotes(input)) {
+      if (this.matchesNotes(lowerInput)) {
         actions.push({
           type: "delete",
           target: "notes",
           priority: "medium",
-          data: topic ? { topic } : undefined,
+          data: { topic },
         });
       }
-      if (this.matchesFlashcards(input)) {
+      if (this.matchesFlashcards(lowerInput)) {
         actions.push({
           type: "delete",
           target: "flashcards",
           priority: "medium",
-          data: topic ? { topic } : undefined,
+          data: { topic },
         });
       }
     }
@@ -815,120 +1099,118 @@ export class TaskUnderstanding {
 
   private static handleCreateRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
+    const lowerInput = input.toLowerCase();
 
-    // Parse multiple tasks from input like "10 flashcards of react and 1 note for car"
-    const taskSegments = this.parseMultipleTasks(input);
+    // Detect schedule creation (time-based activities)
+    const timePattern =
+      /(monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}:\d{2}|\d{1,2}pm|\d{1,2}am|tomorrow|today|next week)/i;
+    const hasTimePattern = timePattern.test(input);
 
-    for (const segment of taskSegments) {
-      console.log(`🔍 [TaskUnderstanding] Processing segment: "${segment}"`);
-
-      // Check what to create in this segment (handle typos)
-      if (segment.match(/note/i)) {
-        const hasCount = this.hasExplicitCountInSegment(segment);
-        const topic = this.extractTopicFromSegment(segment);
-        console.log(
-          `📝 [TaskUnderstanding] Notes - topic: "${topic}", hasCount: ${hasCount}`
-        );
-
-        const data: any = { topic };
-        if (hasCount) {
-          const count = this.extractCountFromSegment(segment);
-          data.count = count;
-          console.log(`📝 [TaskUnderstanding] Notes - count: ${count}`);
-        }
-
-        actions.push({
-          type: "create",
-          target: "notes",
-          data,
-          priority: "high",
-        });
+    // If it has time but no explicit "schedule" word, it's likely a schedule request
+    if (
+      hasTimePattern &&
+      !this.matchesFlashcards(lowerInput) &&
+      !this.matchesNotes(lowerInput)
+    ) {
+      const dt = chrono.parseDate(input);
+      const task = input.replace(timePattern, "").trim(); // Remove time part to get task
+      const data: any = { task: task || "Study Session" };
+      if (dt) {
+        const iso = dt.toISOString();
+        const [d, t] = iso.split("T");
+        data.date = d;
+        data.time = t?.split(".")[0];
       }
-
-      if (segment.match(/(?:flashcard|card|flash)/i)) {
-        const count = this.extractCountFromSegment(segment);
-        const topic = this.extractTopicFromSegment(segment);
-        console.log(
-          `🎯 [TaskUnderstanding] Flashcards - topic: "${topic}", count: ${count}`
-        );
-
-        actions.push({
-          type: "create",
-          target: "flashcards",
-          data: { topic, count },
-          priority: "high",
-        });
-      }
-
-      if (segment.includes("schedule") || segment.includes("reminder")) {
-        actions.push({
-          type: "create",
-          target: "schedule",
-          data: { task: this.extractTopicFromSegment(segment) },
-          priority: "medium",
-        });
-      }
-    }
-
-    // Special handling for "notes and flashcards" or "flashcards and notes" patterns
-    // If the input contains both but we didn't get both actions, add the missing one
-    const hasNotesKeyword = /\bnotes?\b/i.test(input);
-    const hasFlashcardsKeyword = /\b(?:flashcards?|cards?|flash)\b/i.test(
-      input
-    );
-    const hasNotesAction = actions.some((a) => a.target === "notes");
-    const hasFlashcardsAction = actions.some((a) => a.target === "flashcards");
-
-    if (hasNotesKeyword && !hasNotesAction) {
-      console.log(`📝 [TaskUnderstanding] Adding missing notes action`);
       actions.push({
         type: "create",
-        target: "notes",
-        data: { topic: "general" },
+        target: "schedule",
+        data,
         priority: "high",
       });
     }
 
-    if (hasFlashcardsKeyword && !hasFlashcardsAction) {
-      console.log(`🎯 [TaskUnderstanding] Adding missing flashcards action`);
+    // If user uses pattern like "one on/about/for <topic>", create notes even if 'note' isn't explicitly present
+    const oneOnPattern = /\bone\s+(?:note\s+)?(?:about|on|for)\s+[^,.;]+/i;
+    if (oneOnPattern.test(lowerInput)) {
+      const topics = this.extractMultipleNoteTopics(input);
+      const list = topics.length ? topics : [this.extractTopic(input)];
+      for (const t of list) {
+        if (!t) continue;
+        actions.push({
+          type: "create",
+          target: "notes",
+          data: { topic: t },
+          priority: "high",
+        });
+      }
+    }
+
+    if (this.matchesNotes(lowerInput)) {
+      // Try to detect enumerations like:
+      // "make separate note one on spiderman one on batman"
+      // "make two notes: one about physics and one about chemistry"
+      const topics = this.extractMultipleNoteTopics(input);
+
+      if (topics.length > 1) {
+        for (const t of topics) {
+          actions.push({
+            type: "create",
+            target: "notes",
+            data: { topic: t },
+            priority: "high",
+          });
+        }
+      } else {
+        const topic = topics[0] ?? this.extractTopic(input);
+        actions.push({
+          type: "create",
+          target: "notes",
+          data: { topic },
+          priority: "high",
+        });
+      }
+    }
+
+    if (this.matchesFlashcards(lowerInput)) {
+      const count = this.extractCount(input);
+      const topic = this.extractTopic(input);
+      // parse any natural date/time, attach if present
+      const dt = chrono.parseDate(input);
+      const data: any = { topic, count };
+      if (dt) {
+        const iso = dt.toISOString();
+        const [d, t] = iso.split("T");
+        data.date = d;
+        data.time = t?.split(".")[0];
+      }
       actions.push({
         type: "create",
         target: "flashcards",
-        data: { topic: "general", count: 5 },
+        data,
         priority: "high",
       });
     }
 
-    // Fallback to old behavior if no segments were parsed
-    if (actions.length === 0) {
-      // Check what to create (old logic)
-      if (input.includes("note")) {
-        actions.push({
-          type: "create",
-          target: "notes",
-          data: { topic: this.extractTopic(input) },
-          priority: "high",
-        });
+    if (
+      lowerInput.includes("schedule") ||
+      lowerInput.includes("reminder") ||
+      lowerInput.includes("calendar") ||
+      lowerInput.includes("plan to")
+    ) {
+      const dt = chrono.parseDate(input);
+      const data: any = { task: this.extractTopic(input) };
+      if (dt) {
+        const iso = dt.toISOString();
+        const [d, t] = iso.split("T");
+        data.date = d;
+        data.time = t?.split(".")[0];
       }
-
-      if (input.includes("flashcard") || input.includes("card")) {
-        const count = this.extractCount(input);
-        actions.push({
-          type: "create",
-          target: "flashcards",
-          data: { topic: this.extractTopic(input), count },
-          priority: "high",
-        });
-      }
-
-      if (input.includes("schedule") || input.includes("reminder")) {
-        actions.push({
-          type: "create",
-          target: "schedule",
-          data: { task: this.extractTopic(input) },
-          priority: "medium",
-        });
-      }
+      actions.push({
+        type: "create",
+        target: "schedule",
+        data,
+        priority: "medium",
+      });
     }
 
     return {
@@ -938,14 +1220,60 @@ export class TaskUnderstanding {
     };
   }
 
+  // Extract multiple topics for note creation from phrases like
+  // "one on A one on B" or "one about A and one about B"
+  private static extractMultipleNoteTopics(input: string): string[] {
+    const s = input; // keep original casing for nicer topics
+    const topics: string[] = [];
+
+    // Pattern 1: repeated "one on/about/for <topic>" segments
+    const reRepeated =
+      /\bone\s+(?:note\s+)?(?:about|on|for)\s+(.+?)(?=(?:\s+one\s+(?:about|on|for)|\s+and\s+one\s+(?:about|on|for)|\s*,\s*one\s+(?:about|on|for)|\s*$))/gi;
+    let m: RegExpExecArray | null;
+    while ((m = reRepeated.exec(s)) !== null) {
+      const t = m[1].trim();
+      if (t) topics.push(this.cleanTopicToken(t));
+    }
+
+    // Pattern 2: single "on/about/for X and Y" when only one "one" present
+    if (topics.length === 0) {
+      const single = s.match(/\b(?:about|on|for)\s+(.+)$/i);
+      if (single) {
+        const raw = single[1].trim();
+        // Split by common list separators while avoiding splitting inside parentheses
+        const parts = raw
+          .split(/\s*(?:,|\band\b|&|\+|\/)\s*/i)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        if (parts.length > 1) {
+          for (const p of parts) topics.push(this.cleanTopicToken(p));
+        }
+      }
+    }
+
+    // Deduplicate and sanitize
+    const uniq = Array.from(new Set(topics.map((t) => t.toLowerCase())));
+    return uniq;
+  }
+
+  private static cleanTopicToken(t: string): string {
+    return t
+      .replace(/^about\s+/i, "")
+      .replace(/^on\s+/i, "")
+      .replace(/^for\s+/i, "")
+      .replace(/\s+note(s)?$/i, "")
+      .trim();
+  }
+
   private static handleSearchRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
+    const lowerInput = input.toLowerCase();
 
-    if (input.includes("note")) {
+    if (this.matchesNotes(lowerInput)) {
       actions.push({ type: "search", target: "notes", priority: "medium" });
     }
 
-    if (input.includes("flashcard") || input.includes("card")) {
+    if (this.matchesFlashcards(lowerInput)) {
       actions.push({
         type: "search",
         target: "flashcards",
@@ -953,7 +1281,7 @@ export class TaskUnderstanding {
       });
     }
 
-    if (input.includes("schedule") || input.includes("event")) {
+    if (lowerInput.includes("schedule") || lowerInput.includes("event")) {
       actions.push({ type: "search", target: "schedule", priority: "medium" });
     }
 
@@ -966,12 +1294,13 @@ export class TaskUnderstanding {
 
   private static handleUpdateRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
+    const lowerInput = input.toLowerCase();
 
-    if (input.includes("note")) {
+    if (this.matchesNotes(lowerInput)) {
       actions.push({ type: "update", target: "notes", priority: "medium" });
     }
 
-    if (input.includes("flashcard") || input.includes("card")) {
+    if (this.matchesFlashcards(lowerInput)) {
       actions.push({
         type: "update",
         target: "flashcards",
@@ -979,7 +1308,7 @@ export class TaskUnderstanding {
       });
     }
 
-    if (input.includes("schedule") || input.includes("event")) {
+    if (lowerInput.includes("schedule") || lowerInput.includes("event")) {
       actions.push({ type: "update", target: "schedule", priority: "medium" });
     }
 
@@ -1000,7 +1329,6 @@ export class TaskUnderstanding {
       };
     }
 
-    // If it's just a target word, don't default to search, let the compound handler infer the action
     if (
       this.matchesNotes(input) ||
       this.matchesFlashcards(input) ||
@@ -1028,29 +1356,55 @@ export class TaskUnderstanding {
   }
 
   private static extractTopic(input: string): string {
-    // Prefer explicit prepositions, but only within this clause (stop at connectors)
-    const clause = (input || "")
-      .split(/(?:\b(?:and|then|also|plus|next|after that)\b|,)/i)[0]
-      .trim();
-    const aboutMatch = clause.match(
-      /(?:about|on|for|of|related(?:\s+to)?)\s+([^,.;]+)/i
-    );
+    // If the input is just a self-referential phrase, return nothing so the topic can be inherited.
+    if (
+      /^\s*(a|an)?\s*(note|flashcard|card)?\s*(related to|about|on|for)?\s*(it|that|this)\.?\s*$/i.test(
+        input
+      )
+    ) {
+      return "";
+    }
+
+    // Extract topic from input like "create notes about history" -> "history"
+    const aboutMatch = input.match(/(?:about|on|for|of)\s+([^,.;]+)/i);
     if (aboutMatch) return aboutMatch[1].trim();
 
-    // Strip action/target words and count to avoid leaking them into topic
-    const cleaned = clause
+    // For schedule-like inputs, remove time patterns first to get the main topic
+    const timePattern =
+      /(monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}:\d{2}|\d{1,2}pm|\d{1,2}am|tomorrow|today|next week|at\s+\d)/i;
+    let cleanInput = input;
+
+    // Remove time patterns from the end
+    cleanInput = cleanInput.replace(timePattern, "").trim();
+
+    // Remove action words and targets and return the rest.
+    cleanInput = cleanInput
       .replace(
-        /\b(create|make|generate|add|write|delete|remove|clear|drop|erase|trash|wipe|find|search|show|list|get)\b/gi,
+        /(create|make|generate|add|new|build|delete|remove|clear|drop|erase|trash|wipe|schedule|plan)\s*/i,
         ""
       )
-      .replace(/\b(\d+)\b/g, "")
-      .replace(/\b(flashcards?|cards?|notes?|schedule|events?)\b/gi, "")
+      .replace(/(\d+\s*)?(flashcards?|cards?|notes?)/i, "")
+      .replace(
+        /^(one|two|three|four|five|six|seven|eight|nine|ten|some|few|several|many|a|an)\s*/i,
+        ""
+      )
+      .replace(
+        /^(detailed|simple|basic|advanced|quick|short|long|comprehensive|brief|concise|extended|enhanced|summary|practice|study|review)\s*/i,
+        ""
+      )
       .trim();
 
-    if (cleaned) return cleaned;
-    // Fallback: last meaningful token
-    const words = clause.split(/\s+/).filter((w) => w.length > 2);
-    return words[words.length - 1] || "general";
+    // If the remaining topic is just a number word, adjective, or empty, return empty for inheritance
+    if (
+      !cleanInput ||
+      /^(one|two|three|four|five|six|seven|eight|nine|ten|some|few|several|many|a|an|detailed|simple|basic|advanced|quick|short|long|comprehensive|brief|concise|extended|enhanced|summary|practice|study|review)$/i.test(
+        cleanInput
+      )
+    ) {
+      return "";
+    }
+
+    return cleanInput || "general";
   }
 
   private static extractCount(input: string): number {
@@ -1058,138 +1412,6 @@ export class TaskUnderstanding {
     const countMatch = input.match(/(\d+)\s*(?:flashcard|card)/i);
     if (countMatch) return parseInt(countMatch[1]);
     return 5; // default
-  }
-
-  // New methods for handling multiple tasks
-  private static parseMultipleTasks(input: string): string[] {
-    // Split input by "and" to handle multiple tasks
-    // Examples:
-    // "10 flashcards of react and 1 note for car" -> ["10 flashcards of react", "1 note for car"]
-    // "create notes about math and make 5 cards" -> ["create notes about math", "make 5 cards"]
-
-    const segments = input.split(/\s+and\s+/i);
-
-    // If we only have one segment, try splitting by comma as well
-    if (segments.length === 1) {
-      const commaSegments = input.split(/\s*,\s*/);
-      if (commaSegments.length > 1) {
-        return commaSegments;
-      }
-    }
-
-    return segments;
-  }
-
-  private static extractTopicFromSegment(segment: string): string {
-    // Extract topic from a segment like "10 flashcards of react" -> "react"
-    // or "1 note for car" -> "car" or "12 flashcard off react" -> "react"
-
-    // Try "of", "about", "for", "on", "off" patterns (enhanced for typos)
-    const patterns = [
-      // Handle "related" patterns without/with "to": capture the phrase after it
-      /related(?:\s+to)?\s+([^,.;]+)/i,
-      /(?:of|about|for|on|off)\s+([^,.;]+)/i,
-      /(?:flashcard|card|note)(?:s?)\s+(?:of|about|for|on|off)\s+([^,.;]+)/i,
-      // Handle pattern like "12 flashcard off react"
-      /\d+\s+(?:flashcard|card|note)(?:s?)\s+(?:of|about|for|on|off)\s+([^,.;]+)/i,
-    ];
-
-    for (const pattern of patterns) {
-      const match = segment.match(pattern);
-      if (match) return match[1].trim();
-    }
-
-    // Try pattern without preposition: "flashcard react" -> "react"
-    // Prefer words after artifact; if it contains 'related', skip the 'related' token
-    const directMatch = segment.match(
-      /(?:flashcard|card|note)(?:s?)\s+([^,.;]+)/i
-    );
-    if (directMatch) {
-      const raw = directMatch[1].trim();
-      const rel = raw.match(/^related\s+(.+)/i);
-      return (rel ? rel[1] : raw).trim();
-    }
-
-    // Fallback: take last meaningful word
-    const words = segment
-      .split(/\s+/)
-      .filter(
-        (w) =>
-          w.length > 2 &&
-          !/^\d+$/.test(w) &&
-          !/(flashcard|card|note|make|create|add)/i.test(w)
-      );
-    return words[words.length - 1] || "general";
-  }
-
-  // Heuristic: does this segment look like a continuation of a create command?
-  private static looksLikeCreateContinuation(segment: string): boolean {
-    const s = segment.toLowerCase();
-    // has an explicit count or a number word
-    const hasCount =
-      /(^|\s)\d+(\s|$)/.test(s) ||
-      /(one|two|three|four|five|six|seven|eight|nine|ten)/i.test(s);
-    // has a topic cue without explicit delete words
-    const hasTopicCue = /(related|about|on|of|for)/i.test(s);
-    const hasDeleteCue =
-      /(delete|remove|clear|drop|erase|trash|wipe|rm|clr|rmv)/i.test(s);
-    // Also accept if it mentions an artifact implicitly
-    const hasArtifact = /(flash|card|note|flashcard)/i.test(s);
-    return !hasDeleteCue && (hasCount || hasTopicCue || hasArtifact);
-  }
-
-  private static extractCountFromSegment(segment: string): number {
-    // Extract count from segment like "10 flashcards of react" -> 10 or "12 flashcard off react" -> 12
-    const countMatch = segment.match(/(\d+)\s*(?:flashcard|card|flash|note)/i);
-    if (countMatch) return parseInt(countMatch[1]);
-
-    // Look for standalone numbers at the beginning
-    const standaloneMatch = segment.match(/^(\d+)\s/);
-    if (standaloneMatch) return parseInt(standaloneMatch[1]);
-
-    // If no specific count found, check for number words
-    const numberWords: { [key: string]: number } = {
-      one: 1,
-      two: 2,
-      three: 3,
-      four: 4,
-      five: 5,
-      six: 6,
-      seven: 7,
-      eight: 8,
-      nine: 9,
-      ten: 10,
-      eleven: 11,
-      twelve: 12,
-      fifteen: 15,
-      twenty: 20,
-    };
-
-    for (const [word, num] of Object.entries(numberWords)) {
-      if (segment.toLowerCase().includes(word)) {
-        return num;
-      }
-    }
-
-    return 5; // default
-  }
-
-  private static hasExplicitCountInSegment(segment: string): boolean {
-    // True only if the user actually specified a number or number word alongside an artifact keyword
-    if (/(\d+)\s*(?:flashcard|card|flash|note)/i.test(segment)) return true;
-    const numberWords = [
-      "one",
-      "two",
-      "three",
-      "four",
-      "five",
-      "six",
-      "seven",
-      "eight",
-      "nine",
-      "ten",
-    ];
-    return numberWords.some((w) => new RegExp(`\\b${w}\\b`, "i").test(segment));
   }
 
   // Helpers for typo-tolerant matching of targets
@@ -1254,7 +1476,7 @@ export class TaskUnderstanding {
       "switch to",
       "visit",
     ];
-    return navWords.some((phrase) => input.includes(phrase));
+    return navWords.some((phrase) => input.toLowerCase().includes(phrase));
   }
 
   // Analysis request detection
@@ -1268,52 +1490,52 @@ export class TaskUnderstanding {
       "describe",
       "examine",
     ];
-    return analyzeWords.some((phrase) => input.includes(phrase));
+    return analyzeWords.some((phrase) => input.toLowerCase().includes(phrase));
   }
 
   // Convert request detection (like notes to flashcards)
   private static isConvertRequest(input: string): boolean {
-    // Recognize phrasing such as:
-    // - "convert notes to flashcards"
-    // - "make flashcards from notes"
-    // - "create from notes to flashcards"
-    if (
-      /(convert\s+\w+\s+(to|into)\s+\w+)|(make|create|generate).*from\s+\w+\s+(to|into)\s+\w+/i.test(
-        input
-      )
-    ) {
-      return this.matchesNotes(input) || this.matchesFlashcards(input);
-    }
-    return false;
+    const lowerInput = input.toLowerCase();
+    return (
+      (lowerInput.includes("from") || lowerInput.includes("convert")) &&
+      (this.matchesNotes(lowerInput) || this.matchesFlashcards(lowerInput)) &&
+      (lowerInput.includes("make") ||
+        lowerInput.includes("create") ||
+        lowerInput.includes("generate"))
+    );
   }
 
   // Handle navigation requests
   private static handleNavigateRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
+    const lowerInput = input.toLowerCase();
 
     // Detect what page/section to navigate to
-    if (input.includes("dashboard") || input.includes("home")) {
+    if (lowerInput.includes("dashboard") || lowerInput.includes("home")) {
       actions.push({
         type: "navigate",
         target: "page",
         data: { page: "dashboard" },
         priority: "high",
       });
-    } else if (input.includes("flashcard") || input.includes("card")) {
+    } else if (this.matchesFlashcards(lowerInput)) {
       actions.push({
         type: "navigate",
         target: "page",
         data: { page: "flashcards" },
         priority: "high",
       });
-    } else if (input.includes("note")) {
+    } else if (this.matchesNotes(lowerInput)) {
       actions.push({
         type: "navigate",
         target: "page",
         data: { page: "notes" },
         priority: "high",
       });
-    } else if (input.includes("schedule") || input.includes("calendar")) {
+    } else if (
+      lowerInput.includes("schedule") ||
+      lowerInput.includes("calendar")
+    ) {
       actions.push({
         type: "navigate",
         target: "page",
@@ -1332,14 +1554,15 @@ export class TaskUnderstanding {
   // Handle analysis requests
   private static handleAnalyzeRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
+    const lowerInput = input.toLowerCase();
 
-    if (this.matchesNotes(input)) {
+    if (this.matchesNotes(lowerInput)) {
       actions.push({ type: "analyze", target: "notes", priority: "high" });
     }
-    if (this.matchesFlashcards(input)) {
+    if (this.matchesFlashcards(lowerInput)) {
       actions.push({ type: "analyze", target: "flashcards", priority: "high" });
     }
-    if (input.includes("schedule") || input.includes("calendar")) {
+    if (lowerInput.includes("schedule") || lowerInput.includes("calendar")) {
       actions.push({ type: "analyze", target: "schedule", priority: "high" });
     }
 
@@ -1358,8 +1581,9 @@ export class TaskUnderstanding {
   // Handle convert requests (notes to flashcards, etc.)
   private static handleConvertRequest(input: string): TaskRequest {
     const actions: TaskAction[] = [];
+    const lowerInput = input.toLowerCase();
 
-    if (this.matchesNotes(input) && this.matchesFlashcards(input)) {
+    if (this.matchesNotes(lowerInput) && this.matchesFlashcards(lowerInput)) {
       actions.push({
         type: "convert",
         target: "content",
