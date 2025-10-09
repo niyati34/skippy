@@ -5,13 +5,21 @@
  */
 
 interface GeminiResponse {
-  candidates: Array<{
-    content: {
-      parts: Array<{
-        text: string;
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
       }>;
     };
+    finishReason?: string;
   }>;
+  promptFeedback?: {
+    blockReason?: string;
+    safetyRatings?: Array<{
+      category: string;
+      probability: string;
+    }>;
+  };
 }
 
 interface GeminiRequest {
@@ -46,7 +54,7 @@ async function callGemini(
     options.model ||
     import.meta.env.VITE_GEMINI_MODEL ||
     process.env.GEMINI_MODEL ||
-    "gemini-1.5-flash";
+    "gemini-2.5-flash"; // Updated to latest available flash model
   const baseUrl =
     import.meta.env.VITE_GEMINI_API_BASE ||
     process.env.GEMINI_API_BASE ||
@@ -79,7 +87,7 @@ async function callGemini(
       maxOutputTokens: options.maxTokens || 2048,
       topK: 40,
       topP: 0.95,
-      // Hint Gemini to return structured JSON only when requested
+      // responseMimeType is supported in v1beta API for structured JSON responses
       ...(options.responseMimeType
         ? { responseMimeType: options.responseMimeType }
         : {}),
@@ -108,11 +116,36 @@ async function callGemini(
 
     const data: GeminiResponse = await response.json();
 
-    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      throw new Error("Invalid Gemini API response format");
+    // Debug: Log the full response structure
+    console.log("🔍 [GEMINI DEBUG] Response structure:", JSON.stringify(data, null, 2).slice(0, 500));
+
+    // Check for safety blocks
+    if (data.promptFeedback?.blockReason) {
+      console.error("🚨 [GEMINI] Content blocked:", data.promptFeedback.blockReason);
+      throw new Error(`Gemini blocked the request: ${data.promptFeedback.blockReason}`);
     }
 
-    const result = data.candidates[0].content.parts[0].text;
+    // Check for valid response
+    if (!data.candidates || data.candidates.length === 0) {
+      console.error("🚨 [GEMINI] No candidates in response:", data);
+      throw new Error("Gemini returned no candidates - possibly blocked or empty response");
+    }
+
+    const candidate = data.candidates[0];
+    
+    // Check finish reason
+    if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+      console.warn("⚠️ [GEMINI] Unexpected finish reason:", candidate.finishReason);
+    }
+
+    // Extract text
+    if (!candidate.content?.parts?.[0]?.text) {
+      console.error("🚨 [GEMINI] Invalid response structure:", data);
+      console.error("🚨 [GEMINI] Candidate:", candidate);
+      throw new Error("Invalid Gemini API response format - no text in response");
+    }
+
+    const result = candidate.content.parts[0].text;
     console.log("✅ [GEMINI] Response received, length:", result.length);
     // Log a safe preview of the raw Gemini answer for debugging
     try {
@@ -350,7 +383,7 @@ Return JSON only:`;
         { role: "user", content: userPrompt },
       ],
       {
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.1,
         maxTokens: 4096,
         responseMimeType: "application/json",
@@ -483,9 +516,9 @@ Return exactly 1-3 high-quality notes.`;
         { role: "user", content: userPrompt },
       ],
       {
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.3,
-        maxTokens: 2000,
+        maxTokens: 8192, // Increased from 2000 to allow complete JSON responses
         responseMimeType: "application/json",
       }
     );
@@ -589,7 +622,7 @@ Return only the content, no formatting.`;
         { role: "user", content: userPrompt },
       ],
       {
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.7,
         maxTokens: 1500,
       }
@@ -636,9 +669,9 @@ Return exactly 1-5 schedule items as JSON array.`;
         { role: "user", content: userPrompt },
       ],
       {
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.1,
-        maxTokens: 1000,
+        maxTokens: 4096, // Increased from 1000 to allow complete schedule JSON
         responseMimeType: "application/json",
       }
     );
@@ -704,7 +737,7 @@ Return analysis as JSON object.`;
         { role: "user", content: userPrompt },
       ],
       {
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.1,
         maxTokens: 500,
         responseMimeType: "application/json",
@@ -801,9 +834,9 @@ ${content.substring(0, 2000)}`;
         { role: "user", content: userPrompt },
       ],
       {
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         temperature: 0.3,
-        maxTokens: 1500,
+        maxTokens: 6144, // Increased from 1500 to allow complete flashcard JSON
         responseMimeType: "application/json",
       }
     );
@@ -915,3 +948,4 @@ ${content.substring(0, 2000)}`;
 }
 
 export { callGemini };
+

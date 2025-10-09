@@ -1340,7 +1340,7 @@ IF NO VALID TIME-SENSITIVE EVENTS FOUND, RETURN []`,
             { role: "user", content: messages[1].content },
           ],
           {
-            model: "gemini-1.5-flash",
+            model: "gemini-2.5-flash",
             temperature: 0.1,
             maxTokens: 2048,
             responseMimeType: "application/json",
@@ -1898,3 +1898,4 @@ export async function processUploadedFile(
     };
   }
 }
+
