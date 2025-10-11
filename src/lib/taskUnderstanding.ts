@@ -349,7 +349,7 @@ Now parse this input and return ONLY the JSON array:`;
     try {
       const response = await callGemini(messages, {
         temperature: 0.1,
-        maxTokens: 500,
+        maxTokens: 2048, // Increased from 500 to handle complex compound requests
         responseMimeType: "application/json",
       });
 
@@ -958,8 +958,9 @@ Now parse this input and return ONLY the JSON array:`;
     }
 
     // Check for implicit creation patterns
-    // Pattern: "N flashcards/cards/notes" suggests creation (handle typos like "flashcarddd")
-    const numberPattern = /\d+\s*(?:flashcard|card|note|flash)/i;
+    // Pattern: "N flashcards/cards/notes" suggests creation (handle typos like "flashcarddd", "flasghcard")
+    // Enhanced pattern to be more typo-tolerant using fuzzy matching
+    const numberPattern = /\d+\s*(?:fla[a-z]*card|card|note|flash)/i;
     const hasNumberPattern = input.match(numberPattern);
     console.log(
       `🧪 [TaskUnderstanding] Number pattern match: ${
@@ -967,7 +968,7 @@ Now parse this input and return ONLY the JSON array:`;
       }`
     );
     console.log(
-      `🧪 [TaskUnderstanding] Testing pattern /\\d+\\s*(?:flashcard|card|note|flash)/i against: "${input}"`
+      `🧪 [TaskUnderstanding] Testing pattern /\\d+\\s*(?:fla[a-z]*card|card|note|flash)/i against: "${input}"`
     );
 
     if (hasNumberPattern) {
@@ -991,7 +992,7 @@ Now parse this input and return ONLY the JSON array:`;
       "ten",
     ];
     const hasNumberWord = numberWords.some((num) => input.includes(num));
-    const hasCardPattern = input.match(/(?:flashcard|card|note|flash)/i);
+    const hasCardPattern = input.match(/(?:fla[a-z]*card|card|note|flash)/i); // Enhanced typo tolerance
     console.log(
       `🧪 [TaskUnderstanding] Has number word: ${hasNumberWord}, has card pattern: ${
         hasCardPattern ? "YES" : "NO"
