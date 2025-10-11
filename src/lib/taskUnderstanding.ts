@@ -196,17 +196,47 @@ export class TaskUnderstanding {
   }
 
   /**
-   * Process standard requests (existing logic preserved)
+   * Process standard requests - LLM-FIRST APPROACH for perfect understanding
    */
   private static async processStandardRequest(
     userInput: string
   ): Promise<TaskRequest> {
-    const input = userInput.toLowerCase().trim();
+    console.log(`🧠 [TaskUnderstanding] Processing with LLM-first approach`);
 
-    // 🚀 FIRST: Check for compound commands (multiple actions in one request)
-    if (this.isCompoundRequest(input)) {
-      return await this.handleCompoundRequest(userInput); // Pass original case for proper parsing
+    // 🚀 ALWAYS USE LLM FIRST - it understands better than regex
+    // Try 3 times with increasing token limits before falling back
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`🤖 [TaskUnderstanding] LLM attempt ${attempt}/3`);
+        
+        const llmResult = await this.parseWithLLM(userInput, attempt);
+        
+        if (llmResult && llmResult.actions.length > 0) {
+          console.log(`✅ [TaskUnderstanding] LLM succeeded on attempt ${attempt}:`, llmResult);
+          return llmResult;
+        }
+      } catch (error) {
+        console.warn(`⚠️ [TaskUnderstanding] LLM attempt ${attempt} failed:`, error);
+        
+        // On last attempt, log the failure
+        if (attempt === 3) {
+          console.error(`❌ [TaskUnderstanding] All LLM attempts exhausted`);
+        }
+      }
     }
+
+    // ONLY use regex as absolute last resort
+    console.warn(`⚠️ [TaskUnderstanding] Falling back to regex (LLM failed)`);
+    return this.processWithRegexFallback(userInput);
+  }
+
+  /**
+   * Regex fallback - only used when LLM completely fails
+   */
+  private static async processWithRegexFallback(
+    userInput: string
+  ): Promise<TaskRequest> {
+    const input = userInput.toLowerCase().trim();
 
     // Handle navigate requests
     if (this.isNavigateRequest(input)) {
@@ -245,6 +275,121 @@ export class TaskUnderstanding {
 
     // Fallback - try to understand what user wants
     return this.guessIntent(input);
+  }
+
+  /**
+   * 🚀 NEW: Parse ANY request with LLM - handles ALL cases perfectly
+   */
+  private static async parseWithLLM(
+    userInput: string,
+    attempt: number
+  ): Promise<TaskRequest> {
+    // Adaptive token limits: start low, increase on retries
+    let tokenLimit = 2048;
+    if (attempt === 2) tokenLimit = 4096;
+    if (attempt === 3) tokenLimit = 8192;
+
+    const prompt = `You are an expert task parser for a study assistant app. Parse the user's request into structured actions.
+
+AVAILABLE ACTIONS:
+- create: Make new content (notes, flashcards, schedule)
+- delete: Remove content
+- search: Find/show content
+- convert: Transform one type to another (e.g., notes → flashcards)
+- update: Modify existing content
+- schedule: Create study schedule
+
+AVAILABLE TARGETS:
+- notes: Study notes
+- flashcards: Q&A flashcards
+- schedule: Study timetable
+- all: All content types
+
+CRITICAL RULES:
+1. Handle ANY phrasing naturally (like ChatGPT does)
+2. Fix typos automatically: "flashcaed" → "flashcard", "flasghcard" → "flashcard", "nots" → "notes"
+3. Extract counts when mentioned: "5 flashcards" → count: 5
+4. Extract topics: "about AI" → topic: "AI"
+5. For compound requests (multiple actions), return ALL actions in the array
+6. Use plural targets: "flashcards" not "flashcard", "notes" not "note"
+7. Infer missing details from context
+8. ONLY use "convert" when explicitly converting FROM something (e.g., "from my notes")
+9. Return ONLY compact JSON - no explanations, no code fences, no extra text
+
+USER INPUT: "${userInput}"
+
+Examples of correct parsing:
+
+Input: "make 5 flashcards about physics"
+Output: [{"action":"create","target":"flashcards","count":5,"topic":"physics"}]
+
+Input: "make 5 flashcaed for ninja then 2 flashcaed for daredavil and 3 flasghcard fpor hospital"
+Output: [{"action":"create","target":"flashcards","count":5,"topic":"ninja"},{"action":"create","target":"flashcards","count":2,"topic":"daredevil"},{"action":"create","target":"flashcards","count":3,"topic":"hospital"}]
+
+Input: "delete all old notes"
+Output: [{"action":"delete","target":"notes","topic":"all"}]
+
+Input: "show me physics flashcards"
+Output: [{"action":"search","target":"flashcards","topic":"physics"}]
+
+Input: "convert my AI notes to flashcards"
+Output: [{"action":"convert","target":"content","from":"notes","to":"flashcards","topic":"AI"}]
+
+Input: "gimme some study material on quantum physics"
+Output: [{"action":"create","target":"notes","topic":"quantum physics"}]
+
+Input: "I need help with calculus"
+Output: [{"action":"create","target":"notes","topic":"calculus"}]
+
+Input: "prepare me for biology exam"
+Output: [{"action":"create","target":"flashcards","topic":"biology exam"}]
+
+Now parse the user input and return ONLY the JSON array (no other text):`;
+
+    try {
+      const response = await callGemini([{ role: "user", content: prompt }], {
+        temperature: 0.2, // Low temp for structured output
+        maxTokens: tokenLimit,
+        responseMimeType: "application/json",
+      });
+
+      console.log(
+        `🤖 [TaskUnderstanding] LLM response (attempt ${attempt}, ${tokenLimit} tokens):`,
+        response
+      );
+
+      // Parse the JSON response
+      const parsed = JSON.parse(response);
+
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error("LLM returned empty or invalid array");
+      }
+
+      // Convert to TaskAction format
+      const actions: TaskAction[] = [];
+      for (const task of parsed) {
+        const action = this.convertStructuredTaskToAction(task, userInput);
+        if (action) {
+          actions.push(action);
+        }
+      }
+
+      if (actions.length === 0) {
+        throw new Error("No valid actions extracted from LLM response");
+      }
+
+      return {
+        actions,
+        message: `Understood: ${actions.length} action(s)`,
+        confidence: 0.95,
+      };
+    } catch (error) {
+      console.error(
+        `❌ [TaskUnderstanding] LLM parsing error (attempt ${attempt}):`,
+        error
+      );
+      throw error;
+    }
   }
 
   // 🚀 NEW: Detect compound requests with multiple actions
@@ -311,45 +456,40 @@ export class TaskUnderstanding {
 
   // 🚀 NEW: Parse compound commands using LLM for better understanding
   private static async parseCompoundWithLLM(userInput: string): Promise<any[]> {
-    const systemPrompt = `You are a task parser for a study buddy app. Extract ALL study tasks from user input.
+    // Use high token limit from the start - compound requests need space
+    const tokenLimit = 4096;
 
-VALID ACTIONS: create, delete, schedule, update, search, convert
-VALID TARGETS: notes, flashcards, schedule
+    const prompt = `You are an expert task parser. Parse ALL tasks from this compound request.
 
-Rules:
-1. Extract each task as a separate object
-2. Handle pronouns like "it" by inferring the topic from context
-3. For schedule tasks, extract time/date information
-4. For create tasks with counts (like "5 flashcards"), include the count
-5. ONLY use "convert" action when explicitly mentioned "from notes" or "from my notes"
-6. For phrases like "make 5 flashcards about X" or "create flashcards related to Y", use action "create"
-7. Always use plural target names: "notes", "flashcards", "schedule" (never "note" or "flashcard")
-8. Only output a valid JSON array - no explanations
+USER INPUT: "${userInput}"
+
+RULES:
+1. Extract EVERY task mentioned - don't miss any!
+2. Handle typos: "flashcaed"→"flashcard", "flasghcard"→"flashcard", "fpor"→"for"
+3. Extract counts: "5 flashcards" → count: 5
+4. Extract topics for each task
+5. Use plural targets: "flashcards", "notes", "schedule"
+6. For "create X about Y", use action:"create"
+7. For "convert from notes", use action:"convert"
+8. Return ONLY compact JSON array - no text
 
 Examples:
-Input: "delete all flashcards and create 5 about physics"
-Output: [{"action":"delete","target":"flashcards","topic":"all"},{"action":"create","target":"flashcards","count":5,"topic":"physics"}]
 
-Input: "make 5 flashcards related to onion and 5 related to tomato"
-Output: [{"action":"create","target":"flashcards","count":5,"topic":"onion"},{"action":"create","target":"flashcards","count":5,"topic":"tomato"}]
+Input: "make 5 flashcard for ninja then 2 flashcaed for daredavil and 3 flasghcard fpor hospital"
+Output: [{"action":"create","target":"flashcards","count":5,"topic":"ninja"},{"action":"create","target":"flashcards","count":2,"topic":"daredevil"},{"action":"create","target":"flashcards","count":3,"topic":"hospital"}]
 
-Input: "schedule physics review Friday 6pm and create 3 flashcards about it"
-Output: [{"action":"schedule","target":"schedule","topic":"physics review","time":"Friday 6pm"},{"action":"create","target":"flashcards","count":3,"topic":"physics review"}]
+Input: "delete all notes and create 10 flashcards about AI"
+Output: [{"action":"delete","target":"notes","topic":"all"},{"action":"create","target":"flashcards","count":10,"topic":"AI"}]
 
-Input: "make 5 flashcards from notes of batman"
-Output: [{"action":"convert","target":"content","from":"notes","to":"flashcards","count":5,"topic":"batman"}]
+Input: "show physics flashcards then make 5 more about chemistry"
+Output: [{"action":"search","target":"flashcards","topic":"physics"},{"action":"create","target":"flashcards","count":5,"topic":"chemistry"}]
 
-Now parse this input and return ONLY the JSON array:`;
-
-    const messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userInput },
-    ];
+Now return ONLY the JSON array:`;
 
     try {
-      const response = await callGemini(messages, {
-        temperature: 0.1,
-        maxTokens: 2048, // Increased from 500 to handle complex compound requests
+      const response = await callGemini([{ role: "user", content: prompt }], {
+        temperature: 0.1, // Very low for structured output
+        maxTokens: tokenLimit,
         responseMimeType: "application/json",
       });
 
