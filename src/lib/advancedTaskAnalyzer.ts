@@ -246,18 +246,42 @@ Return a JSON object with your analysis:`;
       { role: "user", content: userInput },
     ];
 
-    try {
-      const response = await callGemini(messages, {
-        temperature: 0.3,
-        maxTokens: 1000,
-        responseMimeType: "application/json",
-      });
+    // Retry with increasing token limits if MAX_TOKENS is hit
+    let tokenLimit = 4096; // Start high for complex requests
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`🔄 [AdvancedTaskAnalyzer] Analysis attempt ${attempt}/3 with ${tokenLimit} tokens`);
+        
+        const response = await callGemini(messages, {
+          temperature: 0.3,
+          maxTokens: tokenLimit,
+          responseMimeType: "application/json",
+        });
 
-      return JSON.parse(response);
-    } catch (error) {
-      console.error("Analysis failed:", error);
-      return this.createBasicAnalysis(userInput);
+        const parsed = JSON.parse(response);
+        console.log(`✅ [AdvancedTaskAnalyzer] Analysis succeeded on attempt ${attempt}`);
+        return parsed;
+      } catch (error: any) {
+        console.error(`⚠️ [AdvancedTaskAnalyzer] Analysis attempt ${attempt} failed:`, error);
+        
+        // If MAX_TOKENS, retry with more tokens
+        if (error.message?.includes('MAX_TOKENS') || error.message?.includes('no text in response')) {
+          if (attempt < 3) {
+            tokenLimit = tokenLimit * 2; // Double the limit
+            console.log(`🔄 [AdvancedTaskAnalyzer] Retrying with ${tokenLimit} tokens...`);
+            continue;
+          }
+        }
+        
+        // On final attempt or other errors, return basic analysis
+        if (attempt === 3) {
+          console.error("❌ [AdvancedTaskAnalyzer] All analysis attempts failed, using basic analysis");
+          return this.createBasicAnalysis(userInput);
+        }
+      }
     }
+    
+    return this.createBasicAnalysis(userInput);
   }
 
   /**
@@ -294,19 +318,26 @@ Return a JSON array of actions:`;
       { role: "user", content: JSON.stringify({ input: userInput, analysis }) },
     ];
 
-    try {
-      const response = await callGemini(messages, {
-        temperature: 0.2,
-        maxTokens: 1500,
-        responseMimeType: "application/json",
-      });
+    // Retry with increasing token limits if MAX_TOKENS is hit
+    let tokenLimit = 4096; // Start high for decomposition
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`🔄 [AdvancedTaskAnalyzer] Decomposition attempt ${attempt}/3 with ${tokenLimit} tokens`);
+        
+        const response = await callGemini(messages, {
+          temperature: 0.2,
+          maxTokens: tokenLimit,
+          responseMimeType: "application/json",
+        });
 
-      const rawActions = JSON.parse(response);
-      let actions = rawActions.map((action: any, index: number) =>
-        this.validateAndEnhanceAction(action, index)
-      );
+        const rawActions = JSON.parse(response);
+        let actions = rawActions.map((action: any, index: number) =>
+          this.validateAndEnhanceAction(action, index)
+        );
 
-      // Heuristic post-processing: elevate roadmap intents
+        console.log(`✅ [AdvancedTaskAnalyzer] Decomposition succeeded on attempt ${attempt}, got ${actions.length} actions`);
+
+        // Heuristic post-processing: elevate roadmap intents
       const lowerInput = userInput.toLowerCase();
       const isRoadmapIntent =
         /visual\s+roadmap|learning\s+path|study\s+plan|roadmap\s+for/.test(
@@ -363,10 +394,27 @@ Return a JSON array of actions:`;
         }
       }
       return actions;
-    } catch (error) {
-      console.error("Decomposition failed:", error);
-      return this.createBasicActions(userInput);
+      } catch (error: any) {
+        console.error(`⚠️ [AdvancedTaskAnalyzer] Decomposition attempt ${attempt} failed:`, error);
+        
+        // If MAX_TOKENS, retry with more tokens
+        if (error.message?.includes('MAX_TOKENS') || error.message?.includes('no text in response')) {
+          if (attempt < 3) {
+            tokenLimit = tokenLimit * 2; // Double the limit
+            console.log(`🔄 [AdvancedTaskAnalyzer] Retrying decomposition with ${tokenLimit} tokens...`);
+            continue;
+          }
+        }
+        
+        // On final attempt or other errors, return basic actions
+        if (attempt === 3) {
+          console.error("❌ [AdvancedTaskAnalyzer] All decomposition attempts failed, using basic actions");
+          return this.createBasicActions(userInput);
+        }
+      }
     }
+    
+    return this.createBasicActions(userInput);
   }
 
   /**

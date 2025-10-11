@@ -117,32 +117,47 @@ async function callGemini(
     const data: GeminiResponse = await response.json();
 
     // Debug: Log the full response structure
-    console.log("🔍 [GEMINI DEBUG] Response structure:", JSON.stringify(data, null, 2).slice(0, 500));
+    console.log(
+      "🔍 [GEMINI DEBUG] Response structure:",
+      JSON.stringify(data, null, 2).slice(0, 500)
+    );
 
     // Check for safety blocks
     if (data.promptFeedback?.blockReason) {
-      console.error("🚨 [GEMINI] Content blocked:", data.promptFeedback.blockReason);
-      throw new Error(`Gemini blocked the request: ${data.promptFeedback.blockReason}`);
+      console.error(
+        "🚨 [GEMINI] Content blocked:",
+        data.promptFeedback.blockReason
+      );
+      throw new Error(
+        `Gemini blocked the request: ${data.promptFeedback.blockReason}`
+      );
     }
 
     // Check for valid response
     if (!data.candidates || data.candidates.length === 0) {
       console.error("🚨 [GEMINI] No candidates in response:", data);
-      throw new Error("Gemini returned no candidates - possibly blocked or empty response");
+      throw new Error(
+        "Gemini returned no candidates - possibly blocked or empty response"
+      );
     }
 
     const candidate = data.candidates[0];
-    
+
     // Check finish reason
-    if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-      console.warn("⚠️ [GEMINI] Unexpected finish reason:", candidate.finishReason);
+    if (candidate.finishReason && candidate.finishReason !== "STOP") {
+      console.warn(
+        "⚠️ [GEMINI] Unexpected finish reason:",
+        candidate.finishReason
+      );
     }
 
     // Extract text
     if (!candidate.content?.parts?.[0]?.text) {
       console.error("🚨 [GEMINI] Invalid response structure:", data);
       console.error("🚨 [GEMINI] Candidate:", candidate);
-      throw new Error("Invalid Gemini API response format - no text in response");
+      throw new Error(
+        "Invalid Gemini API response format - no text in response"
+      );
     }
 
     const result = candidate.content.parts[0].text;
@@ -489,14 +504,17 @@ export async function generateNotesWithGemini(
   const systemPrompt = `
 You are an expert academic note-taking specialist. Create comprehensive, well-structured study notes.
 
-OUTPUT ONLY JSON: Return a JSON array with no other text.
-SCHEMA: {"title": "Study Notes: [Topic]", "content": "Structured markdown content", "category": "Academic", "tags": ["structured", "academic"]}
+CRITICAL: Return ONLY a valid, minified JSON array. No markdown, no explanations, no code fences.
+
+SCHEMA: [{"title": "Study Notes: [Topic]", "content": "Structured markdown content", "category": "Academic", "tags": ["structured", "academic"]}]
 
 Create 1-3 comprehensive notes that cover the topic thoroughly with:
 - Clear definitions and explanations
 - Key concepts and principles
 - Important details and examples
 - Proper markdown formatting with headers, bold text, and bullet points
+
+IMPORTANT: Ensure your JSON is valid and complete. Do not truncate the content field mid-sentence.
 `;
 
   const userPrompt = `Create comprehensive study notes about: ${content}
@@ -507,7 +525,7 @@ Focus on:
 - Proper academic structure
 - Use markdown formatting with headers, bold text, and bullet points
 
-Return exactly 1-3 high-quality notes.`;
+Return ONLY a valid JSON array with 1-3 high-quality notes. No other text.`;
 
   try {
     const response = await callGeminiWithRetry(
@@ -518,7 +536,7 @@ Return exactly 1-3 high-quality notes.`;
       {
         model: "gemini-2.5-flash",
         temperature: 0.3,
-        maxTokens: 8192, // Increased from 2000 to allow complete JSON responses
+        maxTokens: 12288, // Increased to 12K to allow complete JSON responses
         responseMimeType: "application/json",
       }
     );
@@ -528,22 +546,41 @@ Return exactly 1-3 high-quality notes.`;
       console.log("📝 [GEMINI NOTES RAW]\n" + response.slice(0, 4000));
     } catch {}
 
-    // Robust JSON extraction
+    // Clean up the response before parsing
+    let cleanedResponse = response.trim();
+    
+    // Remove common artifacts
+    cleanedResponse = cleanedResponse
+      .replace(/```json\n?|```/g, '') // Remove code fences
+      .replace(/^[^[\{]*/, '') // Remove leading text before JSON
+      .replace(/[^\}\]]*$/, ''); // Remove trailing text after JSON
+    
+    // Fix common JSON issues
+    cleanedResponse = cleanedResponse
+      .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+      .replace(/\n/g, '\\n') // Escape newlines in content
+      .replace(/\\n/g, '\\n'); // Ensure proper escaping
+
+    // Robust JSON extraction with cleanup
     const tryParsers: Array<() => any[]> = [
-      // 1) Direct parse
+      // 1) Direct parse of cleaned response
+      () => {
+        const parsed = JSON.parse(cleanedResponse);
+        return Array.isArray(parsed) ? parsed : [];
+      },
+      // 2) Try original response
       () => {
         const parsed = JSON.parse(response);
         return Array.isArray(parsed) ? parsed : [];
       },
-      // 2) Strip common code fences and parse
+      // 3) Regex match first complete array
       () => {
-        const stripped = response.replace(/```json\n?|```/g, "");
-        const parsed = JSON.parse(stripped);
-        return Array.isArray(parsed) ? parsed : [];
+        const m = cleanedResponse.match(/\[[\s\S]*\]/);
+        return m ? (JSON.parse(m[0]) as any[]) : [];
       },
-      // 3) Regex match first array
+      // 4) Last resort: extract up to first complete object
       () => {
-        const m = response.match(/\[[\s\S]*\]/);
+        const m = cleanedResponse.match(/\[\s*\{[\s\S]*?\}\s*\]/);
         return m ? (JSON.parse(m[0]) as any[]) : [];
       },
     ];
@@ -568,7 +605,7 @@ Return exactly 1-3 high-quality notes.`;
     }
 
     // Fallback: create a basic note
-    console.log("⚠️ [GEMINI] All parsers failed, creating fallback note");
+    console.warn("⚠️ [GEMINI] All parsers failed, creating fallback note");
     return [
       {
         title: `Study Notes: ${source}`,
@@ -795,17 +832,20 @@ export async function generateFlashcardsWithGemini(
   const systemPrompt = `
 Create educational flashcards from the provided content. Focus on key concepts, definitions, and important information.
 
-OUTPUT ONLY JSON: Return a JSON array with no other text.
-SCHEMA: {"question": "What is...", "answer": "Definition or explanation", "category": "${
+CRITICAL: Return ONLY a valid, minified JSON array. No markdown, no explanations, no code fences.
+
+SCHEMA: [{"question": "What is...", "answer": "Definition or explanation", "category": "${
     opts.category || "General"
-  }"}
+  }"}]
 
 ${
   desired > 0
-    ? `Return exactly ${desired} flashcards. Do not include any extra commentary.`
+    ? `Return exactly ${desired} flashcards.`
     : `Generate 8-16 high-quality flashcards that help students learn the material.`
 }
 ${difficultyHint}
+
+IMPORTANT: Ensure your JSON is valid and complete. Each flashcard must have question, answer, and category fields.
 `;
 
   const topic = opts.category || "General";
@@ -836,7 +876,7 @@ ${content.substring(0, 2000)}`;
       {
         model: "gemini-2.5-flash",
         temperature: 0.3,
-        maxTokens: 6144, // Increased from 1500 to allow complete flashcard JSON
+        maxTokens: 8192, // Increased to 8K for larger flashcard sets
         responseMimeType: "application/json",
       }
     );
@@ -846,17 +886,29 @@ ${content.substring(0, 2000)}`;
       console.log("📝 [GEMINI FLASHCARDS RAW]\n" + response.slice(0, 4000));
     } catch {}
 
-    // Robust JSON extraction
+    // Clean up the response before parsing
+    let cleanedResponse = response.trim();
+    
+    // Remove common artifacts
+    cleanedResponse = cleanedResponse
+      .replace(/```json\n?|```/g, '') // Remove code fences
+      .replace(/^[^[\{]*/, '') // Remove leading text before JSON
+      .replace(/[^\}\]]*$/, ''); // Remove trailing text after JSON
+    
+    // Fix common JSON issues
+    cleanedResponse = cleanedResponse
+      .replace(/,(\s*[}\]])/g, '$1'); // Remove trailing commas
+
+    // Robust JSON extraction with cleanup
     const tryParsers: Array<() => any[]> = [
-      // 1) Direct parse
+      // 1) Direct parse of cleaned response
       () => {
-        const parsed = JSON.parse(response);
+        const parsed = JSON.parse(cleanedResponse);
         return Array.isArray(parsed) ? parsed : [];
       },
-      // 2) Strip common code fences and parse
+      // 2) Try original response
       () => {
-        const stripped = response.replace(/```json\n?|```/g, "");
-        const parsed = JSON.parse(stripped);
+        const parsed = JSON.parse(response);
         return Array.isArray(parsed) ? parsed : [];
       },
       // 3) Regex match first array
@@ -948,4 +1000,3 @@ ${content.substring(0, 2000)}`;
 }
 
 export { callGemini };
-
